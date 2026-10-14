@@ -1,0 +1,10 @@
+# robots.txt — منصة خدمات الموظف والمقيم في السعودية
+# https://ksatools.github.io/
+
+User-agent: *
+Allow: /
+
+# لا شيء محجوب حالياً — كل الصفحات عامة وقابلة للفهرسة.
+# إن أردت منع فهرسة صفحة معيّنة أضف:  Disallow: /example.html
+
+Sitemap: https://ksatools.github.io/sitemap.xml

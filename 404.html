@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!-- صفحة 404 — منصة خدمات الموظف والمقيم في السعودية
+     ملاحظة: روابط هذه الصفحة مطلقة (/) لأن GitHub Pages يخدمها من أي مسار غير موجود. -->
+<html lang="ar" dir="rtl" id="html-root" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>الصفحة غير موجودة (404) | Page Not Found</title>
+  <meta name="robots" content="noindex, follow" />
+  <meta name="theme-color" content="#0b3b24" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #0f5132;
+      --primary-dark: #0b3b24;
+      --primary-light: #198754;
+      --primary-text: #0f5132;
+      --primary-gradient: linear-gradient(135deg, #0b3b24 0%, #146c43 100%);
+      --accent: #d97706;
+      --accent-deep: #92400e;
+      --accent-soft: #fef3c7;
+      --gold: #fde68a;
+      --dark: #0f172a;
+      --slate: #334155;
+      --muted: #475569;
+      --bg: #f1f5f9;
+      --bg-gradient: linear-gradient(180deg, #eaf0f6 0%, #f8fafc 45%, #f1f5f9 100%);
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --radius: 14px;
+      --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+    }
+    html[data-theme="dark"] {
+      --dark: #e2e8f0;
+      --slate: #cbd5e1;
+      --muted: #94a3b8;
+      --bg: #0b1220;
+      --bg-gradient: radial-gradient(900px 420px at 50% -8%, rgba(25,135,84,0.20), transparent 62%),
+                     linear-gradient(180deg, #0a111d 0%, #0b1220 40%, #0e1728 100%);
+      --card: #111c2e;
+      --border: #24344d;
+      --primary-text: #5fd08a;
+      --primary-gradient: linear-gradient(135deg, #08281a 0%, #0f5132 100%);
+      --accent: #fbbf24;
+      --accent-deep: #fde68a;
+      --accent-soft: #2a2113;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+      background-color: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--dark);
+      line-height: 1.7;
+    }
+    header {
+      background: var(--primary-gradient);
+      color: #fff; text-align: center;
+      padding: 18px 16px; border-bottom: 4px solid var(--accent);
+      box-shadow: 0 6px 22px rgba(11, 59, 36, 0.22);
+    }
+    header .badge {
+      display: inline-block; background: rgba(255,255,255,0.15); color: var(--gold);
+      padding: 5px 14px; border-radius: 999px; font-size: 0.85rem; font-weight: 700;
+    }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--primary-light);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: clamp(24px, 5vw, 46px);
+      max-width: 620px; width: 100%; text-align: center;
+    }
+    .code {
+      font-size: clamp(4rem, 18vw, 7rem); font-weight: 900; line-height: 1;
+      background: linear-gradient(135deg, var(--primary-light), var(--accent));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      margin-bottom: 6px;
+    }
+    h1 { color: var(--primary-text); font-size: clamp(1.1rem, 4vw, 1.4rem); margin-bottom: 10px; }
+    p { color: var(--muted); font-size: 0.95rem; margin-bottom: 8px; }
+    .en { direction: ltr; text-align: center; color: var(--slate); font-size: 0.88rem; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 22px; }
+    .btn {
+      text-decoration: none; font-weight: 800; padding: 12px 22px; border-radius: 10px;
+      display: inline-flex; align-items: center; gap: 8px; transition: transform .18s, filter .2s;
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+    .btn-primary {
+      background-image: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+      color: #fff; box-shadow: 0 4px 12px rgba(25,135,84,0.28);
+    }
+    .btn-ghost { background: var(--card); color: var(--primary-text); border: 1px solid var(--border); }
+    footer { text-align: center; padding: 18px; color: var(--muted); font-size: 0.8rem; }
+    footer a { color: var(--primary-text); font-weight: 700; text-decoration: none; }
+    #theme-btn {
+      position: fixed; inset-inline-end: 14px; inset-block-start: 14px;
+      background: #fff; color: var(--primary); border: 2px solid var(--gold);
+      min-width: 44px; min-height: 44px; border-radius: 999px; cursor: pointer;
+      font-size: 1.1rem; box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    }
+  </style>
+</head>
+<body>
+  <button id="theme-btn" aria-label="تبديل المظهر">🌙</button>
+
+  <header>
+    <span class="badge">منصة خدمات الموظف والمقيم في السعودية</span>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="code">404</div>
+      <h1>عذراً، الصفحة المطلوبة غير موجودة</h1>
+      <p>قد يكون الرابط قديماً أو مكتوباً بشكل غير صحيح. يمكنك العودة إلى الصفحة الرئيسة والاستفادة من الأدوات المجانية.</p>
+      <p class="en">Sorry, the page you are looking for was not found.<br />It may have moved or the link is incorrect.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/">🏠 العودة للصفحة الرئيسة</a>
+        <a class="btn btn-ghost" href="/#eos-tool">حاسبة نهاية الخدمة</a>
+        <a class="btn btn-ghost" href="/#salary-tool">حاسبة الراتب</a>
+        <a class="btn btn-ghost" href="/privacy.html">سياسة الخصوصية</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    © 2026 منصة خدمات الموظف والمقيم في السعودية — <a href="/">ksatools.github.io</a>
+  </footer>
+
+  <script>
+    (function () {
+      var root = document.getElementById('html-root');
+      var btn = document.getElementById('theme-btn');
+      var saved = localStorage.getItem('seh_theme')
+        || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      function apply(theme) {
+        root.dataset.theme = theme;
+        btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+        localStorage.setItem('seh_theme', theme);
+      }
+      apply(saved);
+      btn.addEventListener('click', function () {
+        apply(root.dataset.theme === 'dark' ? 'light' : 'dark');
+      });
+    })();
+  </script>
+</body>
+</html>

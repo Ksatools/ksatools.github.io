@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<!-- ============================================================
+  سياسة الخصوصية — منصة خدمات الموظف والمقيم في السعودية
+  Privacy Policy — Saudi Employee & Expat Services Hub
+  • صفحة ثابتة (static) تعمل على GitHub Pages بدون أي خادم.
+  • الرابط من الصفحة الرئيسة رابط نسبي: privacy.html
+  • تدعم اللغتين (ar/en) والوضعين (light/dark) وتتشارك التفضيلات
+    مع الصفحة الرئيسة عبر مفاتيح localStorage نفسها.
+============================================================ -->
+<html lang="ar" dir="rtl" id="html-root" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>سياسة الخصوصية | Privacy Policy</title>
+  <meta name="description" content="سياسة الخصوصية لمنصة خدمات الموظف والمقيم في السعودية: كيف نتعامل مع بياناتك، الإعلانات وملفات تعريف الارتباط، والتخزين المحلي." />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#0b3b24" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png" />
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
+  <link rel="canonical" href="https://ksatools.github.io/privacy.html" />
+  <link rel="alternate" hreflang="ar" href="https://ksatools.github.io/privacy.html?lang=ar" />
+  <link rel="alternate" hreflang="en" href="https://ksatools.github.io/privacy.html?lang=en" />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="منصة خدمات الموظف والمقيم في السعودية" />
+  <meta property="og:url" content="https://ksatools.github.io/privacy.html" />
+  <meta property="og:title" content="سياسة الخصوصية | منصة خدمات الموظف والمقيم في السعودية" />
+  <meta property="og:description" content="كيف نتعامل مع بياناتك: المعالجة داخل المتصفح فقط، الإعلانات وملفات تعريف الارتباط، والتخزين المحلي." />
+  <meta property="og:image" content="https://ksatools.github.io/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="ar_SA" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="سياسة الخصوصية | منصة خدمات الموظف والمقيم في السعودية" />
+  <meta name="twitter:image" content="https://ksatools.github.io/og-image.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #0f5132;
+      --primary-dark: #0b3b24;
+      --primary-light: #198754;
+      --primary-soft: #e8f5e9;
+      --primary-text: #0f5132;
+      --primary-gradient: linear-gradient(135deg, #0b3b24 0%, #146c43 100%);
+      --accent: #d97706;
+      --accent-deep: #92400e;
+      --accent-soft: #fef3c7;
+      --gold: #fde68a;
+      --dark: #0f172a;
+      --slate: #334155;
+      --muted: #475569;
+      --bg: #f1f5f9;
+      --bg-gradient: linear-gradient(180deg, #eaf0f6 0%, #f8fafc 45%, #f1f5f9 100%);
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --input-bg: #f8fafc;
+      --header-text: #e2e8f0;
+      --radius: 14px;
+      --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+      --shadow-accent: 0 6px 16px rgba(15, 81, 50, 0.22);
+    }
+    html[data-theme="dark"] {
+      --dark: #e2e8f0;
+      --slate: #cbd5e1;
+      --muted: #94a3b8;
+      --bg: #0b1220;
+      --bg-gradient:
+        radial-gradient(950px 460px at 50% -10%, rgba(25, 135, 84, 0.22), transparent 62%),
+        radial-gradient(700px 400px at 100% 110%, rgba(217, 119, 6, 0.10), transparent 65%),
+        linear-gradient(180deg, #0a111d 0%, #0b1220 40%, #0e1728 100%);
+      --card: #111c2e;
+      --border: #24344d;
+      --border-strong: #334155;
+      --input-bg: #0d1626;
+      --primary-soft: #16321f;
+      --primary-text: #5fd08a;
+      --primary-gradient: linear-gradient(135deg, #08281a 0%, #0f5132 100%);
+      --accent-soft: #2a2113;
+      --accent: #fbbf24;
+      --accent-deep: #fde68a;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      --shadow-accent: 0 6px 16px rgba(0, 0, 0, 0.5);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Cairo', 'Inter', 'Segoe UI', Tahoma, sans-serif;
+      background-color: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--dark);
+      line-height: 1.75;
+    }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+    header {
+      background: var(--primary-gradient);
+      color: #fff;
+      padding: clamp(16px, 3vw, 26px) 16px clamp(16px, 2.5vw, 22px);
+      text-align: center;
+      border-bottom: 4px solid var(--accent);
+    }
+    .top-bar {
+      max-width: 900px;
+      margin: 0 auto 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .header-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      color: var(--gold);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: clamp(0.75rem, 2vw, 0.85rem);
+      font-weight: 700;
+    }
+    .top-actions { display: flex; gap: 8px; align-items: center; }
+    .lang-switch-btn, .theme-toggle-btn {
+      background: #ffffff;
+      color: var(--primary);
+      border: 2px solid var(--gold);
+      padding: 6px 14px;
+      min-height: 40px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    .lang-switch-btn:hover, .theme-toggle-btn:hover { background: var(--gold); color: var(--primary-dark); }
+    header h1 { font-size: clamp(1.3rem, 4vw, 1.85rem); margin-bottom: 8px; font-weight: 900; line-height: 1.35; }
+    header p { font-size: clamp(0.85rem, 2.2vw, 0.96rem); color: var(--header-text); max-width: 760px; margin: 0 auto; }
+
+    main {
+      max-width: 900px;
+      margin: 22px auto 32px;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: clamp(18px, 3.5vw, 30px);
+      box-shadow: var(--shadow);
+    }
+    .updated {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      color: var(--primary-text);
+      font-size: clamp(1.02rem, 2.6vw, 1.2rem);
+      margin: 22px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--primary-soft);
+    }
+    .card h2:first-of-type { margin-top: 0; }
+    .card p, .card li { font-size: clamp(0.86rem, 2vw, 0.95rem); color: var(--slate); }
+    .card ul { margin: 6px 0 6px 0; padding-inline-start: 22px; }
+    .card li { margin-bottom: 4px; }
+    .card strong { color: var(--dark); }
+    .card a { color: var(--primary-text); font-weight: 700; }
+    .note {
+      background: var(--primary-soft);
+      border: 1px solid var(--primary-light);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      color: var(--primary-text);
+      margin: 14px 0;
+    }
+    .ad-slot {
+      max-width: 900px;
+      width: calc(100% - 32px);
+      margin: 18px auto;
+      min-height: 120px;
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 18px 12px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.84rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .ad-slot .ad-label {
+      position: absolute;
+      top: 6px;
+      inset-inline-start: 10px;
+      font-size: 0.68rem;
+      color: var(--muted);
+      opacity: 0.8;
+      letter-spacing: 0.5px;
+    }
+    .back-home {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background-image: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      padding: 11px 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      box-shadow: var(--shadow-accent);
+      transition: filter 0.2s, transform 0.18s;
+    }
+    .back-home:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+    footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+    }
+    footer a { color: var(--primary-text); font-weight: 700; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ==================== تحسين الوضع الليلي (Dark Mode) ==================== */
+    /* رفع البطاقات عن الخلفية بخط إضاءة علوي رقيق + ظل أعمق */
+    html[data-theme="dark"] .card,
+    html[data-theme="dark"] .ad-slot {
+      border-color: var(--border);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 26px rgba(0, 0, 0, 0.42);
+    }
+    html[data-theme="dark"] footer {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    /* الهيدر: حد ذهبي وظل أعمق ليعكس الهوية في الليلي */
+    html[data-theme="dark"] header {
+      border-bottom-color: var(--gold);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+    /* فاصل العناوين أوضح (كان يذوب في البطاقة) */
+    html[data-theme="dark"] .card h2 {
+      border-bottom-color: rgba(95, 208, 138, 0.28);
+    }
+    /* شارة "آخر تحديث" محدّدة بإطار كهرماني رقيق */
+    html[data-theme="dark"] .updated {
+      border: 1px solid rgba(251, 191, 36, 0.32);
+    }
+    /* صناديق الملاحظات */
+    html[data-theme="dark"] .note {
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    /* حلقة تركيز خضراء واضحة في الليلي */
+    html[data-theme="dark"] :focus-visible {
+      outline-color: var(--primary-text);
+    }
+
+    @media (max-width: 540px) {
+      main, .ad-slot { padding-inline: 12px; }
+      .ad-slot { width: calc(100% - 24px); }
+      .top-bar { flex-direction: column; justify-content: center; gap: 8px; }
+    }
+    @media print {
+      header, footer, .ad-slot, .back-home { display: none !important; }
+      body { background: #fff; }
+      .card { box-shadow: none; border: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="top-bar">
+      <div class="header-badge" data-i18n="badge">الخصوصية والشفافية</div>
+      <div class="top-actions">
+        <button class="theme-toggle-btn" id="theme-btn" aria-label="تبديل المظهر">🌙</button>
+        <button class="lang-switch-btn" id="lang-btn">🌐 English</button>
+      </div>
+    </div>
+    <h1 data-i18n="title">سياسة الخصوصية</h1>
+    <p data-i18n="subtitle">نوضّح هنا ما نجمعه (لا شيء تقريباً) وكيف نحمي بياناتك — كل حساباتك تبقى داخل متصفحك.</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <span class="updated" data-i18n="updated">آخر تحديث: يوليو 2026</span>
+
+      <h2 data-i18n="h1">1. مقدمة</h2>
+      <p data-i18n="p1">مرحباً بك في «منصة خدمات الموظف والمقيم في السعودية». تحترم هذه السياسة خصوصيتك وتوضح كيفية تعاملنا مع المعلومات عند استخدام أدواتنا المجانية (حاسبات نهاية الخدمة والراتب، صانع الخطابات، ومنسق السيرة الذاتية). باستخدامك الموقع فإنك توافق على الممارسات الموضحة أدناه.</p>
+
+      <h2 data-i18n="h2">2. المعلومات التي نجمعها</h2>
+      <p data-i18n="p2">لا نطلب تسجيلاً ولا نرسل بياناتك إلى أي خادم. جميع البيانات التي تُدخلها (الرواتب، التواريخ، النصوص، بيانات السيرة الذاتية) تُعالَج بالكامل داخل متصفحك ولا تغادر جهازك.</p>
+      <ul>
+        <li data-i18n="li2a">لا نجمّع أسماء أو بريداً إلكترونياً أو أرقام هوية أو إقامة.</li>
+        <li data-i18n="li2b">لا توجد حسابات مستخدمين ولا كلمات مرور.</li>
+        <li data-i18n="li2c">لا نبيع أي بيانات ولا نشاركها مع أطراف ثالثة لأغراض تجارية.</li>
+      </ul>
+
+      <h2 data-i18n="h3">3. التخزين المحلي في متصفحك</h2>
+      <p data-i18n="p3">لتحسين تجربتك، نحفظ بعض التفضيلات داخل متصفحك فقط (Local Storage)، ويمكنك مسحها في أي وقت من إعدادات المتصفح:</p>
+      <ul>
+        <li><strong>seh_lang</strong> — <span data-i18n="li3a">اللغة المختارة (عربي/إنجليزي).</span></li>
+        <li><strong>seh_theme</strong> — <span data-i18n="li3b">المظهر (فاتح/داكن).</span></li>
+        <li><strong>seh_inputs_v2</strong> — <span data-i18n="li3c">قيم الحقول التي أدخلتها لتسهيل العودة إليها لاحقاً.</span></li>
+      </ul>
+
+      <h2 id="ads" data-i18n="h4">4. الإعلانات وملفات تعريف الارتباط (Cookies)</h2>
+      <p data-i18n="p4">ندعم استمرار تقديم الأدوات مجاناً عبر عرض إعلانات من شبكات إعلانية خارجية (مثل Adsterra). قد تستخدم هذه الشبكات وشركاؤها ملفات تعريف الارتباط (Cookies) أو معرّفات جهاز لعرض إعلانات مناسبة وقياس أدائها.</p>
+      <ul>
+        <li data-i18n="li4a">ملفات تعريف الارتباط الخاصة بالطرف الثالث تُدار وفق سياسات تلك الشبكات ولا نتحكم بمحتواها.</li>
+        <li data-i18n="li4b">يمكنك تعطيل أو حذف ملفات تعريف الارتباط من إعدادات متصفحك في أي وقت.</li>
+        <li data-i18n="li4c">تعطيل الإعلانات المخصصة قد لا يمنع ظهور الإعلانات، لكنه يقلل من ملاءمتها لك.</li>
+      </ul>
+      <div class="note" data-i18n="note4">ملاحظة: لا نمرّر أي بيانات تُدخلها في الأدوات (الرواتب أو النصوص) إلى الشبكات الإعلانية.</div>
+
+      <h2 data-i18n="h5">5. التحليلات وأدوات القياس</h2>
+      <p data-i18n="p5">لا نستخدم حالياً أدوات تحليل سلوكية خاصة بنا. إن أضفنا مستقبلاً أي أداة تحليل، فسنحدّث هذه الصفحة ونوضّح نوع البيانات المجمّعة وطريقة إلغاء الاشتراك فيها.</p>
+
+      <h2 data-i18n="h6">6. الروابط والأطراف الخارجية</h2>
+      <p data-i18n="p6">قد يحتوي الموقع على روابط لمواقع خارجية. لسنا مسؤولين عن ممارسات الخصوصية لتلك المواقع، وننصح بمراجعة سياساتها الخاصة.</p>
+
+      <h2 data-i18n="h7">7. أمان البيانات</h2>
+      <p data-i18n="p7">بما أن المعالجة تتم داخل متصفحك، فإن أمان بياناتك يعتمد على أمان جهازك ومتصفحك. ننصح باستخدام متصفح محدّث وعدم مشاركة جهازك مع الآخرين.</p>
+
+      <h2 data-i18n="h8">8. خصوصية الأطفال</h2>
+      <p data-i18n="p8">الأدوات موجّهة للموظفين وأصحاب العمل البالغين، ولا نجمع عن قصد أي بيانات من الأطفال دون سن 13 عاماً.</p>
+
+      <h2 data-i18n="h9">9. حقوقك والتحكم ببياناتك</h2>
+      <p data-i18n="p9">لأننا لا نحتفظ ببيانات على خوادمنا، يمكنك «حذف» كل ما خزّناه محلياً بمسح بيانات الموقع من متصفحك (Clear site data).</p>
+
+      <h2 data-i18n="h10">10. التعديلات على هذه السياسة</h2>
+      <p data-i18n="p10">قد نحدّث هذه السياسة من وقت لآخر، وسيظهر تاريخ آخر تحديث في أعلى الصفحة. استمرارك في استخدام الموقع بعد التحديث يعني موافقتك على النسخة المعدّلة.</p>
+
+      <h2 data-i18n="h11">11. التواصل معنا</h2>
+      <p data-i18n="p11">لأي استفسار حول الخصوصية، يمكنك التواصل عبر البريد الإلكتروني للموقع. سنعمل على الرد في أقرب وقت ممكن.</p>
+
+      <a class="back-home" href="index.html">🏠 <span data-i18n="backHome">العودة إلى الصفحة الرئيسة</span></a>
+    </div>
+  </main>
+
+  <!-- ====== Adsterra: Native Banner (يمكن إزالته إن لم ترغب بإعلانات على هذه الصفحة) ====== -->
+  <div class="ad-slot ad-native" id="ad-bottom">
+    <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
+    <script async="async" data-cfasync="false" src="https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"></script>
+    <div id="container-7af3b8325dba6708da88eed5e517ec89"></div>
+  </div>
+
+  <footer>
+    <p><span data-i18n="footerText">© 2026 منصة خدمات الموظف والمقيم في السعودية — جميع الحقوق محفوظة</span></p>
+    <p style="margin-top:8px;">
+      <a href="index.html" data-i18n="footerHome">الصفحة الرئيسة</a> •
+      <a href="privacy.html" data-i18n="footerPrivacy">سياسة الخصوصية</a>
+    </p>
+  </footer>
+
+  <script>
+  'use strict';
+  const i18n = {
+    ar: {
+      docTitle: 'سياسة الخصوصية | منصة خدمات الموظف والمقيم في السعودية',
+      metaDesc: 'سياسة الخصوصية لمنصة خدمات الموظف والمقيم في السعودية: كيف نتعامل مع بياناتك، الإعلانات وملفات تعريف الارتباط، والتخزين المحلي.',
+      langBtn: '🌐 English',
+      badge: 'الخصوصية والشفافية',
+      title: 'سياسة الخصوصية',
+      subtitle: 'نوضّح هنا ما نجمعه (لا شيء تقريباً) وكيف نحمي بياناتك — كل حساباتك تبقى داخل متصفحك.',
+      updated: 'آخر تحديث: يوليو 2026',
+      h1: '1. مقدمة',
+      p1: 'مرحباً بك في «منصة خدمات الموظف والمقيم في السعودية». تحترم هذه السياسة خصوصيتك وتوضح كيفية تعاملنا مع المعلومات عند استخدام أدواتنا المجانية (حاسبات نهاية الخدمة والراتب، صانع الخطابات، ومنسق السيرة الذاتية). باستخدامك الموقع فإنك توافق على الممارسات الموضحة أدناه.',
+      h2: '2. المعلومات التي نجمعها',
+      p2: 'لا نطلب تسجيلاً ولا نرسل بياناتك إلى أي خادم. جميع البيانات التي تُدخلها (الرواتب، التواريخ، النصوص، بيانات السيرة الذاتية) تُعالَج بالكامل داخل متصفحك ولا تغادر جهازك.',
+      li2a: 'لا نجمّع أسماء أو بريداً إلكترونياً أو أرقام هوية أو إقامة.',
+      li2b: 'لا توجد حسابات مستخدمين ولا كلمات مرور.',
+      li2c: 'لا نبيع أي بيانات ولا نشاركها مع أطراف ثالثة لأغراض تجارية.',
+      h3: '3. التخزين المحلي في متصفحك',
+      p3: 'لتحسين تجربتك، نحفظ بعض التفضيلات داخل متصفحك فقط (Local Storage)، ويمكنك مسحها في أي وقت من إعدادات المتصفح:',
+      li3a: 'اللغة المختارة (عربي/إنجليزي).',
+      li3b: 'المظهر (فاتح/داكن).',
+      li3c: 'قيم الحقول التي أدخلتها لتسهيل العودة إليها لاحقاً.',
+      h4: '4. الإعلانات وملفات تعريف الارتباط (Cookies)',
+      p4: 'ندعم استمرار تقديم الأدوات مجاناً عبر عرض إعلانات من شبكات إعلانية خارجية (مثل Adsterra). قد تستخدم هذه الشبكات وشركاؤها ملفات تعريف الارتباط (Cookies) أو معرّفات جهاز لعرض إعلانات مناسبة وقياس أدائها.',
+      li4a: 'ملفات تعريف الارتباط الخاصة بالطرف الثالث تُدار وفق سياسات تلك الشبكات ولا نتحكم بمحتواها.',
+      li4b: 'يمكنك تعطيل أو حذف ملفات تعريف الارتباط من إعدادات متصفحك في أي وقت.',
+      li4c: 'تعطيل الإعلانات المخصصة قد لا يمنع ظهور الإعلانات، لكنه يقلل من ملاءمتها لك.',
+      note4: 'ملاحظة: لا نمرّر أي بيانات تُدخلها في الأدوات (الرواتب أو النصوص) إلى الشبكات الإعلانية.',
+      h5: '5. التحليلات وأدوات القياس',
+      p5: 'لا نستخدم حالياً أدوات تحليل سلوكية خاصة بنا. إن أضفنا مستقبلاً أي أداة تحليل، فسنحدّث هذه الصفحة ونوضّح نوع البيانات المجمّعة وطريقة إلغاء الاشتراك فيها.',
+      h6: '6. الروابط والأطراف الخارجية',
+      p6: 'قد يحتوي الموقع على روابط لمواقع خارجية. لسنا مسؤولين عن ممارسات الخصوصية لتلك المواقع، وننصح بمراجعة سياساتها الخاصة.',
+      h7: '7. أمان البيانات',
+      p7: 'بما أن المعالجة تتم داخل متصفحك، فإن أمان بياناتك يعتمد على أمان جهازك ومتصفحك. ننصح باستخدام متصفح محدّث وعدم مشاركة جهازك مع الآخرين.',
+      h8: '8. خصوصية الأطفال',
+      p8: 'الأدوات موجّهة للموظفين وأصحاب العمل البالغين، ولا نجمع عن قصد أي بيانات من الأطفال دون سن 13 عاماً.',
+      h9: '9. حقوقك والتحكم ببياناتك',
+      p9: 'لأننا لا نحتفظ ببيانات على خوادمنا، يمكنك «حذف» كل ما خزّناه محلياً بمسح بيانات الموقع من متصفحك (Clear site data).',
+      h10: '10. التعديلات على هذه السياسة',
+      p10: 'قد نحدّث هذه السياسة من وقت لآخر، وسيظهر تاريخ آخر تحديث في أعلى الصفحة. استمرارك في استخدام الموقع بعد التحديث يعني موافقتك على النسخة المعدّلة.',
+      h11: '11. التواصل معنا',
+      p11: 'لأي استفسار حول الخصوصية، يمكنك التواصل عبر البريد الإلكتروني للموقع. سنعمل على الرد في أقرب وقت ممكن.',
+      backHome: 'العودة إلى الصفحة الرئيسة',
+      adLabel: 'إعلان | Advertisement',
+      footerText: '© 2026 منصة خدمات الموظف والمقيم في السعودية — جميع الحقوق محفوظة',
+      footerHome: 'الصفحة الرئيسة',
+      footerPrivacy: 'سياسة الخصوصية'
+    },
+    en: {
+      docTitle: 'Privacy Policy | Saudi Employee & Expat Services Hub',
+      metaDesc: 'Privacy Policy for the Saudi Employee & Expat Services Hub: how we handle your data, ads & cookies, and local storage.',
+      langBtn: '🌐 العربية',
+      badge: 'Privacy & Transparency',
+      title: 'Privacy Policy',
+      subtitle: 'Here we explain what we collect (almost nothing) and how we protect your data — all your calculations stay in your browser.',
+      updated: 'Last updated: July 2026',
+      h1: '1. Introduction',
+      p1: 'Welcome to the Saudi Employee & Expat Services Hub. This policy respects your privacy and explains how we handle information when you use our free tools (End of Service and salary calculators, letter generator, and resume builder). By using the site you agree to the practices described below.',
+      h2: '2. Information We Collect',
+      p2: 'We require no registration and send no data to any server. Everything you enter (salaries, dates, text, resume details) is processed entirely in your browser and never leaves your device.',
+      li2a: 'We do not collect names, emails, national ID or Iqama numbers.',
+      li2b: 'There are no user accounts or passwords.',
+      li2c: 'We do not sell or share any data with third parties for commercial purposes.',
+      h3: '3. Local Storage in Your Browser',
+      p3: 'To improve your experience we store a few preferences only inside your browser (Local Storage). You can clear them anytime from your browser settings:',
+      li3a: 'Your chosen language (Arabic/English).',
+      li3b: 'Your theme (light/dark).',
+      li3c: 'The field values you entered so you can return to them later.',
+      h4: '4. Advertising & Cookies',
+      p4: 'We keep the tools free by displaying ads from external ad networks (e.g. Adsterra). These networks and their partners may use cookies or device identifiers to serve relevant ads and measure their performance.',
+      li4a: 'Third-party cookies are governed by those networks\u2019 own policies and we do not control their content.',
+      li4b: 'You can disable or delete cookies from your browser settings at any time.',
+      li4c: 'Disabling personalized ads may not stop ads from appearing, but it reduces their relevance to you.',
+      note4: 'Note: we never pass any data you enter in the tools (salaries or text) to ad networks.',
+      h5: '5. Analytics & Measurement',
+      p5: 'We currently use no behavioral analytics of our own. If we add any analytics tool in the future, we will update this page and explain what data is collected and how to opt out.',
+      h6: '6. External Links & Third Parties',
+      p6: 'The site may contain links to external websites. We are not responsible for their privacy practices and recommend reviewing their own policies.',
+      h7: '7. Data Security',
+      p7: 'Since processing happens in your browser, the security of your data depends on your device and browser. We recommend an up-to-date browser and not sharing your device with others.',
+      h8: '8. Children\u2019s Privacy',
+      p8: 'The tools are intended for adult employees and employers, and we do not knowingly collect any data from children under 13.',
+      h9: '9. Your Rights & Control',
+      p9: 'Because we keep no data on our servers, you can \u201Cdelete\u201D everything stored locally by clearing site data in your browser.',
+      h10: '10. Changes to This Policy',
+      p10: 'We may update this policy from time to time; the last-updated date appears at the top. Continuing to use the site after an update means you accept the revised version.',
+      h11: '11. Contact Us',
+      p11: 'For any privacy question, you can reach us via the site email. We will respond as soon as possible.',
+      backHome: 'Back to Home',
+      adLabel: 'إعلان | Advertisement',
+      footerText: '© 2026 Saudi Employee & Expat Services Hub — All rights reserved',
+      footerHome: 'Home',
+      footerPrivacy: 'Privacy Policy'
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const urlLang = new URLSearchParams(location.search).get('lang');
+  let currentLang = (urlLang === 'ar' || urlLang === 'en') ? urlLang
+                  : (localStorage.getItem('seh_lang') || 'ar');
+
+  function applyTheme(theme) {
+    $('html-root').dataset.theme = theme;
+    $('theme-btn').textContent = theme === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('seh_theme', theme);
+  }
+
+  function applyI18n() {
+    const dict = i18n[currentLang];
+    document.documentElement.lang = currentLang;
+    document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+    document.title = dict.docTitle;
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute('content', dict.metaDesc);
+    $('lang-btn').textContent = dict.langBtn;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (dict[key] !== undefined) el.textContent = dict[key];
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('seh_theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(savedTheme);
+    $('theme-btn').addEventListener('click', () =>
+      applyTheme($('html-root').dataset.theme === 'dark' ? 'light' : 'dark'));
+    $('lang-btn').addEventListener('click', () => {
+      currentLang = currentLang === 'ar' ? 'en' : 'ar';
+      localStorage.setItem('seh_lang', currentLang);
+      applyI18n();
+      document.documentElement.scrollTop = 0;
+    });
+    applyI18n();
+  });
+  </script>
+</body>
+</html>
