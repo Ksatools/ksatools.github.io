@@ -1599,12 +1599,13 @@
 
     /* ——— التجاوب ——— */
     @media (min-width: 901px) {
+      /* لا تُقيَّد لوحة السيرة بـsticky/max-height: القيد يقصّ معاينة السيرة
+         ويدفع أزرار النسخ/المشاركة/الطباعة خارج نطاق الوصول.
+         الطباعة تعطّل القيد بنفس الطريقة (انظر docs/DECISIONS.md). */
       .cv-side {
-        position: sticky;
-        top: 12px;
-        max-height: calc(100vh - 24px);
-        overflow-y: auto;
-        overscroll-behavior: contain;
+        position: static;
+        max-height: none;
+        overflow: visible;
       }
     }
     @media (max-width: 900px) {
