@@ -24,7 +24,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
   <title>منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • ATS</title>
-  <meta name="description" content="حاسبة مكافأة نهاية الخدمة وحاسبة الراتب الصافي والتأمينات (GOSI بنظاميه القديم والجديد)، صانع خطابات رسمية عربي/إنجليزي، ومنسق سيرة ذاتية للسوق السعودي — مجاناً وبدون تسجيل." />
   <meta name="theme-color" content="#0b3b24" />
   <!-- الأيقونة (هوية الموقع: أخضر سعودي + ذهبي) -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
@@ -33,8 +32,7 @@
   <link rel="shortcut icon" href="favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
   <link rel="manifest" href="site.webmanifest" />
-  <!-- Canonical + hreflang (روابط مطلقة — عدّلها إذا تغيّر الدومين) -->
-  <link rel="canonical" href="https://ksatools.github.io/" />
+  <!-- hreflang (روابط مطلقة — عدّلها إذا تغيّر الدومين) — الوسم الأساسي canonical مُعرّف في أعلى الرأس -->
   <link rel="alternate" hreflang="ar" href="https://ksatools.github.io/?lang=ar" />
   <link rel="alternate" hreflang="en" href="https://ksatools.github.io/?lang=en" />
   <link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/" />
@@ -1688,21 +1686,7 @@
           </div>
 
           <div class="form-group">
-            <label data-i18n="eosDatesLabel">إدخال تلقائي بالتواريخ (اختياري)</label>
-            <div class="inline-2">
-              <div>
-                <input type="date" id="eos-start" data-persist aria-label="تاريخ بداية الخدمة" />
-                <small class="field-hint" data-i18n="lblStart">تاريخ المباشرة</small>
-              </div>
-              <div>
-                <input type="date" id="eos-end" data-persist aria-label="تاريخ نهاية الخدمة" />
-                <small class="field-hint" data-i18n="lblEnd">تاريخ النهاية</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label data-i18n="eosDurationLabel">أو أدخل المدة يدوياً (سنوات / أشهر / أيام)</label>
+            <label data-i18n="eosDurationLabel">مدة الخدمة (سنوات / أشهر / أيام)</label>
             <div class="inline-inputs">
               <div>
                 <input type="number" id="eos-years" data-persist value="4" min="0" max="50" inputmode="numeric" aria-label="سنوات" />
@@ -2058,7 +2042,7 @@
 
               <div class="cv-subhead" style="margin-top:16px;" data-i18n="cvSubSkills">المهارات</div>
               <div class="form-group">
-                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة , )</label>
+                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة)</label>
                 <input type="text" id="cv-f-skills" data-i18n-ph="cvSkillsPh" placeholder="مثال: ZATCA, Excel متقدم, SAP, منصة قوى" />
                 <div class="cv-tags" id="cv-skills-tags"></div>
               </div>
@@ -2205,7 +2189,7 @@
   const i18n = {
     ar: {
       docTitle: 'منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • سيرة ذاتية',
-      metaDesc: 'حاسبة مكافأة نهاية الخدمة وحاسبة الراتب الصافي والتأمينات (GOSI بنظاميه القديم والجديد)، صانع خطابات رسمية عربي/إنجليزي، ومنسق سيرة ذاتية للسوق السعودي — مجاناً وبدون تسجيل.',
+      metaDesc: 'منصة خدمات الموظف والمقيم في السعودية (KSA Tools): حاسبة مكافأة نهاية الخدمة، حاسبة الراتب والتأمينات 2026، صانع الخطابات الرسمية، وفاحص السيرة الذاتية مجاناً باللغتين العربية والإنجليزية.',
       langBtn: '🌐 English',
       badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
       siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
@@ -2227,9 +2211,7 @@
       eosReason4: 'ترك العمل لقوة قاهرة أو زواج أو ولادة (المادة 87 - 100%)',
       eosReason5: 'فصل بموجب المادة 80 دون مكافأة (0%)',
       eosSalaryLabel: 'إجمالي الأجر الشهري الفعلي (الأساسي + البدلات الثابتة)',
-      eosDatesLabel: 'إدخال تلقائي بالتواريخ (اختياري)',
-      lblStart: 'تاريخ المباشرة', lblEnd: 'تاريخ النهاية',
-      eosDurationLabel: 'أو أدخل المدة يدوياً (سنوات / أشهر / أيام)',
+      eosDurationLabel: 'مدة الخدمة (سنوات / أشهر / أيام)',
       lblYears: 'سنوات', lblMonths: 'أشهر', lblDays: 'أيام',
       eosLeaveLabel: 'رصيد أيام الإجازة السنوية غير المستنفدة',
       eosLeaveBasisLabel: 'أساس احتساب أجر اليوم الواحد للإجازة',
@@ -2432,9 +2414,7 @@
       eosReason4: 'Force Majeure, Marriage, or Childbirth (Art. 87 - 100%)',
       eosReason5: 'Dismissal under Article 80 (0%)',
       eosSalaryLabel: 'Total Last Monthly Wage (Basic + Fixed Allowances)',
-      eosDatesLabel: 'Auto-calculate from dates (optional)',
-      lblStart: 'Start Date', lblEnd: 'End Date',
-      eosDurationLabel: 'Or enter duration manually (Years / Months / Days)',
+      eosDurationLabel: 'Service duration (Years / Months / Days)',
       lblYears: 'Years', lblMonths: 'Months', lblDays: 'Days',
       eosLeaveLabel: 'Unused Annual Leave Balance (Days)',
       eosLeaveBasisLabel: 'Daily wage basis for leave encashment',
@@ -2936,25 +2916,6 @@
   /* ==================== الأداة 1: نهاية الخدمة (بدون نوع العقد) ==================== */
   function localDateStr(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  }
-
-  function diffYMD(start, end) {
-    let y = end.getFullYear() - start.getFullYear();
-    let m = end.getMonth() - start.getMonth();
-    let d = end.getDate() - start.getDate();
-    if (d < 0) { m--; d += new Date(end.getFullYear(), end.getMonth(), 0).getDate(); }
-    if (m < 0) { y--; m += 12; }
-    return { y: Math.max(0, y), m: Math.max(0, m), d: Math.max(0, d) };
-  }
-
-  function fillDurationFromDates() {
-    const s = $('eos-start').value, e = $('eos-end').value;
-    if (!s || !e) return;
-    const start = new Date(s + 'T00:00:00'), end = new Date(e + 'T00:00:00');
-    if (isNaN(start) || isNaN(end) || end < start) return;
-    const { y, m, d } = diffYMD(start, end);
-    $('eos-years').value = y; $('eos-months').value = m; $('eos-days').value = d;
-    calculateEOS(); saveInputs();
   }
 
   function calculateEOS() {
@@ -3774,8 +3735,6 @@ ${body}
 
     bindCalc(['eos-reason', 'eos-salary', 'eos-years', 'eos-months', 'eos-days',
               'eos-leave-days', 'eos-leave-basis'], calculateEOS);
-    $('eos-start').addEventListener('change', fillDurationFromDates);
-    $('eos-end').addEventListener('change', fillDurationFromDates);
     $('eos-calc-btn').addEventListener('click', calculateEOS);
     $('eos-print').addEventListener('click', () => window.print());
     $('eos-share').addEventListener('click', () => openShareSheet(eosSharePayload()));
