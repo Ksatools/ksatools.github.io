@@ -1604,17 +1604,280 @@
       }
     }
 
-    /* ——— الطباعة: السيرة وحدها ——— */
-    @media print {
-      .cv-layout {
-        display: block;
-      }
-      .cv-form,
-      .cv-nav,
-      .cv-quickbar {
-        display: none !important;
-      }
+    /* ==================== مستند السيرة: معاينة أنيقة (ورقة بيضاء) ==================== */
+    .cv-doc {
+      --cvd-ink: #1b2a22;
+      --cvd-muted: #5b6b62;
+      --cvd-accent: #0b3b24;
+      background: #fff;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: clamp(18px, 3vw, 30px);
+      color: var(--cvd-ink);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      min-height: 240px;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      box-shadow: 0 1px 3px rgba(11, 59, 36, 0.07);
     }
+    .cv-doc .cvd-head {
+      text-align: center;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--cvd-accent);
+      margin-bottom: 16px;
+    }
+    .cv-doc .cvd-name {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1.25;
+      color: var(--cvd-accent);
+    }
+    .cv-doc .cvd-role {
+      margin: 5px 0 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--cvd-muted);
+    }
+    .cv-doc .cvd-contact {
+      margin: 9px 0 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--cvd-muted);
+    }
+    .cv-doc .cvd-sep {
+      color: #b9c9bf;
+      padding: 0 3px;
+    }
+    .cv-doc .cvd-sec { margin: 0 0 15px; }
+    .cv-doc .cvd-sec:last-child { margin-bottom: 0; }
+    .cv-doc .cvd-h {
+      margin: 0 0 9px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: var(--cvd-accent);
+      padding-bottom: 4px;
+      border-bottom: 1px solid #dae6de;
+    }
+    .cv-doc .cvd-p { margin: 0; }
+    .cv-doc .cvd-item { margin-bottom: 12px; }
+    .cv-doc .cvd-item:last-child { margin-bottom: 0; }
+    .cv-doc .cvd-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cv-doc .cvd-job {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--cvd-ink);
+    }
+    .cv-doc .cvd-date {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--cvd-muted);
+      white-space: nowrap;
+    }
+    .cv-doc .cvd-org {
+      margin: 2px 0 0;
+      font-size: 0.83rem;
+      font-weight: 600;
+      color: var(--cvd-accent);
+    }
+    .cv-doc .cvd-list {
+      margin: 6px 0 0;
+      padding-inline-start: 19px;
+    }
+    .cv-doc .cvd-list li { margin-bottom: 3px; }
+    .cv-doc .cvd-list li:last-child { margin-bottom: 0; }
+    .cv-doc .cvd-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .cv-doc .cvd-chip {
+      padding: 3px 10px;
+      border: 1px solid #d0e2d8;
+      border-radius: 999px;
+      background: #f3f8f4;
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+    .cv-doc .cv-empty { color: #5f6f66; }
+    .cv-doc .cv-empty strong { color: #33443a; }
+
+    /* ==================== الطباعة: مخرجات احترافية لكل الأدوات ==================== */
+    @media print {
+      html, body {
+        background: #fff !important;
+        background-image: none !important;
+        color: #111 !important;
+      }
+      main {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .tool-section {
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      .grid-2 { grid-template-columns: 1fr !important; }
+
+      /* عنوان الأداة */
+      .section-header { margin-bottom: 10px; }
+      .section-header h2 { color: #0b3b24 !important; font-size: 15pt; }
+      .section-header h2::before { display: none !important; }
+      .section-tag {
+        background: #eef5f0 !important;
+        color: #0b3b24 !important;
+        border: 1px solid #cfe0d6 !important;
+        font-size: 9pt !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .tool-intro {
+        color: #444 !important;
+        font-size: 9.5pt !important;
+        margin-bottom: 12px !important;
+      }
+
+      /* بطاقة النتيجة */
+      .result-card {
+        background: #fff !important;
+        border: 1px solid #cfe0d6 !important;
+        border-inline-start: 4px solid #0b3b24 !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        padding: 14px 16px !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .result-total {
+        background: #f3f8f4 !important;
+        background-image: none !important;
+        border: 1px solid #cfe0d6 !important;
+        border-inline-start: 4px solid #0b3b24 !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+        margin-bottom: 12px !important;
+      }
+      .result-total span.label { color: #33443a !important; font-size: 10pt !important; }
+      .result-total span.value { color: #0b3b24 !important; font-size: 19pt !important; }
+
+      /* جدول التفاصيل */
+      .breakdown-table {
+        font-size: 10.5pt !important;
+        margin-bottom: 12px !important;
+      }
+      .breakdown-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .breakdown-table td {
+        padding: 8px 10px !important;
+        border-bottom: 1px solid #e2ece6 !important;
+        color: #222 !important;
+      }
+      .breakdown-table td:last-child {
+        color: #0b3b24 !important;
+        text-align: end !important;
+        white-space: nowrap !important;
+      }
+
+      .warn-note, .legal-note {
+        background: #f7faf8 !important;
+        border: 1px solid #cfe0d6 !important;
+        color: #33443a !important;
+        border-radius: 6px !important;
+        font-size: 9pt !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* الخطاب: ورقة بيضاء نظيفة */
+      .letter-preview {
+        border: none !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        color: #111 !important;
+        font-size: 11.5pt !important;
+        line-height: 1.9 !important;
+        white-space: pre-wrap !important;
+      }
+
+      /* مستند السيرة */
+      .cv-layout { display: block !important; }
+      .cv-form, .cv-nav, .cv-quickbar, .ats-panel { display: none !important; }
+      .cv-side {
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      .cv-doc {
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #fff !important;
+        color: #111 !important;
+        font-size: 11pt;
+        line-height: 1.5;
+        min-height: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .cv-doc .cvd-head { border-bottom: 2px solid #0b3b24; }
+      .cv-doc .cvd-name { color: #0b3b24 !important; font-size: 20pt !important; }
+      .cv-doc .cvd-role { color: #333 !important; font-size: 11.5pt !important; }
+      .cv-doc .cvd-contact { color: #333 !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-h {
+        color: #0b3b24 !important;
+        font-size: 10.5pt !important;
+        border-bottom: 1px solid #9db3a6 !important;
+      }
+      .cv-doc .cvd-job { color: #111 !important; }
+      .cv-doc .cvd-org { color: #0b3b24 !important; }
+      .cv-doc .cvd-date { color: #444 !important; }
+      .cv-doc .cvd-chip {
+        background: #f2f6f3 !important;
+        border-color: #9db3a6 !important;
+        color: #111 !important;
+      }
+      .cv-doc .cvd-item,
+      .cv-doc .cvd-item-head,
+      .cv-doc .cvd-chip {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* تذييل الصفحة بتوقيع المنصة (يُستثنى من السيرة الذاتية) */
+      .tool-section.active::after {
+        content: "ksatools.github.io";
+        display: block;
+        margin-top: 18px;
+        padding-top: 6px;
+        border-top: 1px solid #d9e5dd;
+        font-size: 8.5pt;
+        color: #6b7a71;
+        text-align: center;
+      }
+      #cv-tool::after { content: none !important; }
+    }
+    @page { margin: 12mm 13mm; }
 
   </style>
 </head>
@@ -2073,7 +2336,8 @@
             <ul class="ats-checks" id="ats-checks"></ul>
           </div>
 
-          <div class="letter-preview" id="cv-output"></div>
+          <div class="cv-doc" id="cv-doc" aria-live="polite"></div>
+          <div class="letter-preview" id="cv-output" hidden></div>
 
           <div class="action-row no-print">
             <button class="btn-primary" id="cv-copy" data-i18n="btnCopy">نسخ النص</button>
@@ -2329,9 +2593,9 @@
       chkEmail: 'بريد إلكتروني واضح', chkPhone: 'رقم جوال صحيح',
       chkName: 'الاسم الكامل (كلمتان فأكثر)', chkTitle: 'المسمى الوظيفي المستهدف',
       chkCity: 'المدينة أو الموقع الجغرافي', chkIqama: 'حالة الإقامة أو الجنسية محددة',
-      chkSummary: 'ملخص مهني (100 حرف فأكثر)', chkExpEntry: 'خبرة بمهام مفصّلة (سطران فأكثر)',
+      chkSummary: 'ملخص مهني مكتوب', chkExpEntry: 'خبرة عملية مُدخلة',
       chkDates: 'تواريخ كل خبرة مكتملة', chkMetrics: 'أرقام وإنجازات قابلة للقياس',
-      chkVerbs: 'أفعال إنجاز قوية (أدرت، حققت، طوّرت…)', chkSkills: '6 مهارات فأكثر',
+      chkVerbs: 'أفعال إنجاز قوية (أدرت، حققت، طوّرت…)', chkSkills: 'مهارات أساسية مُدخلة',
       chkEdu: 'مؤهل علمي', chkLangs: 'اللغات ومستواها',
       cvChars: 'حرفاً',
       cvCountLow: 'أضف تفاصيل أكثر لترفع الجاهزية',
@@ -2532,9 +2796,9 @@
       chkEmail: 'Clear email address', chkPhone: 'Valid mobile number',
       chkName: 'Full name (2+ words)', chkTitle: 'Target job title',
       chkCity: 'City or location', chkIqama: 'Nationality / Iqama status selected',
-      chkSummary: 'Professional summary (100+ chars)', chkExpEntry: 'A job with detailed duties (2+ lines)',
+      chkSummary: 'Professional summary written', chkExpEntry: 'Work experience added',
       chkDates: 'Dates filled for every job', chkMetrics: 'Measurable numbers & achievements',
-      chkVerbs: 'Strong action verbs (led, achieved, improved…)', chkSkills: '6 or more skills',
+      chkVerbs: 'Strong action verbs (led, achieved, improved…)', chkSkills: 'Core skills added',
       chkEdu: 'Education entry', chkLangs: 'Languages & proficiency',
       cvChars: 'characters',
       cvCountLow: 'Add more detail to raise readiness',
@@ -3356,9 +3620,9 @@ ${body}
         !!s.p.title.trim() && s.p.city.trim().length >= 2 &&
         CV_RULES.phone.test(normalizeDigits(s.p.phone)) && CV_RULES.email.test(s.p.email);
     }
-    if (step === '2') return s.summary.trim().length >= 80;
+    if (step === '2') return s.summary.trim().length >= 30;
     if (step === '3') return s.exp.some(e => e.title.trim() && (e.company.trim() || e.city.trim()) && e.from.trim());
-    if (step === '4') return s.edu.some(e => e.degree.trim() || e.school.trim()) || cvSplitTags(s.skills).length >= 4;
+    if (step === '4') return s.edu.some(e => e.degree.trim() || e.school.trim()) || cvSplitTags(s.skills).length >= 3;
     return false;
   }
 
@@ -3428,6 +3692,89 @@ ${body}
     buildCV();
   }
 
+  /* ——— بناء مستند السيرة المُنسّق (HTML) ——— */
+  function cvSecHTML(titleText, body) {
+    return '<section class="cvd-sec"><h2 class="cvd-h">' + cvEsc(titleText) + '</h2>' + body + '</section>';
+  }
+  function cvChipsHTML(arr) {
+    return '<div class="cvd-chips">' +
+      arr.map(x => '<span class="cvd-chip">' + cvEsc(x) + '</span>').join('') + '</div>';
+  }
+  function cvDocHTML(lang, L, s) {
+    const dash = ' – ';
+    const parts = [];
+
+    /* الترويسة: الاسم + المسمى + بيانات التواصل */
+    const name = s.p.name.trim();
+    const role = s.p.title.trim();
+    const contact = [];
+    if (s.p.city.trim()) contact.push(s.p.city.trim());
+    if (s.p.phone.trim()) contact.push(s.p.phone.trim());
+    if (s.p.email.trim()) contact.push(s.p.email.trim());
+    if (CV_STATUS_TEXT[s.p.status]) contact.push(CV_STATUS_TEXT[s.p.status][lang]);
+    if (name || role || contact.length) {
+      let h = '<header class="cvd-head">';
+      if (name) h += '<h1 class="cvd-name">' + cvEsc(name) + '</h1>';
+      if (role) h += '<p class="cvd-role">' + cvEsc(role) + '</p>';
+      if (contact.length) {
+        h += '<p class="cvd-contact">' +
+          contact.map(cvEsc).join('<span class="cvd-sep">•</span>') + '</p>';
+      }
+      parts.push(h + '</header>');
+    }
+
+    /* الملخص المهني */
+    if (s.summary.trim()) {
+      parts.push(cvSecHTML(L.summary,
+        '<p class="cvd-p">' + cvEsc(s.summary.trim().replace(/\s*\n+\s*/g, ' ')) + '</p>'));
+    }
+
+    /* الخبرات العملية */
+    const jobs = s.exp.map(e => {
+      const jobTitle = e.title.trim();
+      const org = [e.company.trim(), e.city.trim()].filter(Boolean).join(' — ');
+      const duties = cvDuties(e.duties);
+      const to = e.now ? L.now : e.to.trim();
+      const years = [e.from.trim(), to].filter(Boolean).join(dash);
+      if (!jobTitle && !org && !duties.length && !years) return '';
+      let h = '<div class="cvd-item"><div class="cvd-item-head">';
+      h += '<h3 class="cvd-job">' + cvEsc(jobTitle || org) + '</h3>';
+      if (years) h += '<span class="cvd-date">' + cvEsc(years) + '</span>';
+      h += '</div>';
+      if (jobTitle && org) h += '<p class="cvd-org">' + cvEsc(org) + '</p>';
+      if (duties.length) {
+        h += '<ul class="cvd-list">' + duties.map(d => '<li>' + cvEsc(d) + '</li>').join('') + '</ul>';
+      }
+      return h + '</div>';
+    }).filter(Boolean);
+    if (jobs.length) parts.push(cvSecHTML(L.exp, jobs.join('')));
+
+    /* المؤهل العلمي */
+    const edus = s.edu.map(e => {
+      const deg = e.degree.trim();
+      const school = e.school.trim();
+      const year = e.year.trim();
+      if (!deg && !school && !year) return '';
+      let h = '<div class="cvd-item"><div class="cvd-item-head">';
+      h += '<h3 class="cvd-job">' + cvEsc(deg || school) + '</h3>';
+      if (year) h += '<span class="cvd-date">' + cvEsc(year) + '</span>';
+      h += '</div>';
+      if (deg && school) h += '<p class="cvd-org">' + cvEsc(school) + '</p>';
+      return h + '</div>';
+    }).filter(Boolean);
+    if (edus.length) parts.push(cvSecHTML(L.edu, edus.join('')));
+
+    /* المهارات والشهادات واللغات */
+    const skills = cvSplitTags(s.skills);
+    const certs = cvSplitTags(s.certs);
+    const langs = cvSplitTags(s.langs);
+    if (skills.length) parts.push(cvSecHTML(L.skills, cvChipsHTML(skills)));
+    if (certs.length) parts.push(cvSecHTML(L.certs, cvChipsHTML(certs)));
+    if (langs.length) parts.push(cvSecHTML(L.langs, cvChipsHTML(langs)));
+
+    return parts.join('');
+  }
+
   /* ==================== بناء السيرة ==================== */
   function buildCV() {
     const lang = cvLang();
@@ -3478,12 +3825,12 @@ ${body}
       { key: 'chkPhone', ok: CV_RULES.phone.test(normalizeDigits(s.p.phone)), pts: 10 },
       { key: 'chkCity', ok: s.p.city.trim().length >= 2, pts: 6 },
       { key: 'chkIqama', ok: !!s.p.status, pts: 4 },
-      { key: 'chkSummary', ok: sumText.length >= 100, pts: 10 },
-      { key: 'chkExpEntry', ok: s.exp.filter(e => e.title.trim() && cvDuties(e.duties).length >= 2).length >= 1, pts: 10 },
+      { key: 'chkSummary', ok: sumText.length >= 30, pts: 10 },
+      { key: 'chkExpEntry', ok: s.exp.some(e => e.title.trim()), pts: 10 },
       { key: 'chkDates', ok: filledExp.length > 0 && filledExp.every(e => e.from.trim() && (e.now || e.to.trim())), pts: 6 },
       { key: 'chkMetrics', ok: CV_RULES.metrics.test(metricsText), pts: 10 },
       { key: 'chkVerbs', ok: CV_RULES.verbs.test(sumText + ' ' + dutiesAll), pts: 6 },
-      { key: 'chkSkills', ok: skills.length >= 6, pts: 6 },
+      { key: 'chkSkills', ok: skills.length >= 3, pts: 6 },
       { key: 'chkEdu', ok: eduBlocks.length >= 1, pts: 3 },
       { key: 'chkLangs', ok: langs.length >= 1, pts: 3 }
     ];
@@ -3516,20 +3863,23 @@ ${body}
 
     const text = blocks.join('\n\n');
     cvHasContent = !!text;
+    /* نص خام (مخفي) — يُستخدم للنسخ والمشاركة فقط */
     const out = $('cv-output');
-    if (out) {
+    if (out) out.textContent = text;
+
+    /* مستند مُنسّق للمعاينة والطباعة */
+    const docEl = $('cv-doc');
+    if (docEl) {
       if (!text) {
-        out.removeAttribute('dir');
-        out.style.textAlign = '';
-        out.innerHTML = '<div class="cv-empty"><span class="cv-empty-ico">📄</span><strong>' +
+        docEl.removeAttribute('dir');
+        docEl.innerHTML = '<div class="cv-empty"><span class="cv-empty-ico">📄</span><strong>' +
           cvEsc(t('cvEmptyTitle')) + '</strong><span>' + cvEsc(t('cvEmptyHint')) + '</span></div>';
       } else {
-        out.textContent = text;
-        out.dir = lang === 'en' ? 'ltr' : 'rtl';
-        out.style.textAlign = lang === 'en' ? 'left' : 'right';
+        docEl.dir = lang === 'en' ? 'ltr' : 'rtl';
+        docEl.innerHTML = cvDocHTML(lang, L, s);
       }
     }
-    updateCountHint('cv-sum-count', sumText.length, 100);
+    updateCountHint('cv-sum-count', sumText.length, 30);
     ['cv-copy', 'cv-share', 'cv-print'].forEach(id => {
       const b = $(id);
       if (b) b.disabled = !cvHasContent;
