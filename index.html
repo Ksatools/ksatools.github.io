@@ -159,6 +159,9 @@
       --paper-fill: #f8fafc;
       --paper-warn: #b45309;
       --paper-accent: #0a6847;
+      /* ——— إطار ورقة السيرة: قيم منفصلة للوضعين (الورقة نفسها تبقى بيضاء) ——— */
+      --cv-frame-border: #cbd5e1;
+      --cv-frame-shadow: 0 1px 3px rgba(15, 23, 42, 0.10), 0 10px 26px rgba(15, 23, 42, 0.07);
       /* ——— التنبيهات ——— */
       --danger: #b91c1c;
       --danger-soft: #fef2f2;
@@ -198,6 +201,9 @@
       --ad-gradient: linear-gradient(135deg, #92400e 0%, #b45309 100%);
       --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
       --shadow-accent: 0 6px 16px rgba(0, 0, 0, 0.5);
+      /* إطار ورقة السيرة في الليلي: حدّ خفيف + ظل يفصلها عن الخلفية الداكنة دون وهج */
+      --cv-frame-border: rgba(255, 255, 255, 0.12);
+      --cv-frame-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
     }
 
     *, *::before, *::after {
@@ -235,7 +241,8 @@
     }
 
     /* ==================== الهيدر المتجاوب ==================== */
-    header {
+    /* القواعد مقصورة على body > header: الوسم <header> يُولَّد أيضاً داخل مستند السيرة (cvd-head) */
+    body > header {
       background-image:
         radial-gradient(120% 140% at 50% -30%, rgba(253, 230, 138, 0.20) 0%, rgba(253, 230, 138, 0) 55%),
         var(--primary-gradient);
@@ -292,13 +299,13 @@
       color: var(--primary-dark);
     }
 
-    header h1 {
+    body > header h1 {
       font-size: clamp(1.3rem, 4vw, 1.85rem);
       margin-bottom: 8px;
       font-weight: 900;
       line-height: 1.35;
     }
-    header p {
+    body > header p {
       font-size: clamp(0.85rem, 2.2vw, 0.96rem);
       color: var(--header-text);
       max-width: 760px;
@@ -618,7 +625,7 @@
     .result-total {
       background-image: linear-gradient(135deg, var(--primary-soft) 0%, var(--input-bg) 100%);
       border: 1px solid var(--border);
-      border-inline-start: 4px solid var(--accent);
+      border-inline-start: 4px solid var(--primary-light);
       padding: 14px 12px;
       border-radius: 10px;
       text-align: center;
@@ -738,7 +745,7 @@
     }
     .ats-checks li.missing::before {
       content: "✗ ";
-      color: var(--danger);
+      color: var(--accent);
     }
 
     /* إشعار Toast */
@@ -954,7 +961,7 @@
       color: var(--muted);
     }
 
-    footer {
+    body > footer {
       text-align: center;
       padding: 20px 16px;
       color: var(--muted);
@@ -962,14 +969,14 @@
       border-top: 1px solid var(--border);
       background: var(--card);
     }
-    footer a {
+    body > footer a {
       color: var(--primary-text);
       text-decoration: none;
       font-weight: 700;
       border-bottom: 1px solid transparent;
       transition: border-color 0.2s;
     }
-    footer a:hover {
+    body > footer a:hover {
       border-bottom-color: currentColor;
     }
     .footer-links {
@@ -993,7 +1000,7 @@
       border-color: var(--border);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 26px rgba(0, 0, 0, 0.42);
     }
-    html[data-theme="dark"] footer {
+    html[data-theme="dark"] body > footer {
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
     /* معاينة الخطاب/السيرة أغمق قليلاً من البطاقة لتفصلها بصرياً */
@@ -1026,7 +1033,7 @@
       box-shadow: 0 0 0 3px rgba(95, 214, 168, 0.22);
     }
     /* الهيدر: وهج ذهبي أقوى ليعكس الهوية في الليلي */
-    html[data-theme="dark"] header {
+    html[data-theme="dark"] body > header {
       border-bottom-color: var(--gold);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
     }
@@ -1051,7 +1058,7 @@
     }
 
     @media (max-width: 540px) {
-      header {
+      body > header {
         padding: 14px 12px 16px;
       }
       .top-bar {
@@ -1094,7 +1101,7 @@
     }
 
     @media print {
-      body > header, .nav-tabs, .ad-slot, .seo-faq, footer, .no-print, .disclaimer-banner, #toast, .share-modal {
+      body > header, body > footer, .nav-tabs, .ad-slot, .seo-faq, .no-print, .disclaimer-banner, #toast, .share-modal {
         display: none !important;
       }
       .grid-2 {
@@ -1323,8 +1330,8 @@
       flex: 0 0 auto;
       padding: 4px 10px;
       border-radius: 999px;
-      background: var(--danger-soft);
-      color: var(--danger);
+      background: var(--accent-soft);
+      color: var(--accent-deep);
       font-size: 0.71rem;
       font-weight: 800;
     }
@@ -1582,7 +1589,7 @@
       color: var(--slate);
     }
     html[data-theme="dark"] .cv-acc-status {
-      background: var(--danger-soft);
+      background: var(--accent-soft);
     }
     html[data-theme="dark"] .cv-add-btn:hover,
     html[data-theme="dark"] .cv-mini-btn:hover,
@@ -1635,7 +1642,8 @@
     /* الألوان ثابتة (الوضع النهاري) ليكون المستند مطابقاً تماماً في المعاينة والطباعة */
     .cv-doc {
       background: var(--paper);
-      border: 1px solid var(--paper-border);
+      background-clip: padding-box;
+      border: 1px solid var(--cv-frame-border);
       border-radius: 8px;
       padding: clamp(18px, 3vw, 32px);
       color: var(--paper-text);
@@ -1644,7 +1652,7 @@
       min-height: 240px;
       overflow-wrap: break-word;
       word-break: break-word;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.10), 0 10px 26px rgba(15, 23, 42, 0.07);
+      box-shadow: var(--cv-frame-shadow);
     }
     .cv-doc .cvd-head {
       text-align: center;
@@ -1663,7 +1671,7 @@
       margin: 5px 0 0;
       font-size: 1rem;
       font-weight: 600;
-      color: var(--paper-sub);
+      color: var(--paper-accent);
     }
     /* بيانات التواصل: صفّ مرن (flex) حتى تُحفظ ترتيب العناصر ولا يعيد المتصفح ترتيبها */
     .cv-doc .cvd-contact {
@@ -1675,7 +1683,7 @@
       margin: 9px 0 0;
       font-size: 0.8rem;
       line-height: 1.7;
-      color: var(--paper-muted);
+      color: var(--paper-sub);
     }
     .cv-doc .cvd-ci { display: inline-block; }
     /* الأرقام والبريد تُعزل باتجاه LTR حتى لا يقلبها النظام (+966 لا تصبح 966+) */
@@ -1698,7 +1706,7 @@
       letter-spacing: 0.3px;
       color: var(--paper-accent);
       padding-bottom: 4px;
-      border-bottom: 1px solid var(--paper-border);
+      border-bottom: 1px solid var(--paper-line);
     }
     .cv-doc .cvd-p { margin: 0; }
     .cv-doc .cvd-plain { margin: 0; font-size: 0.86rem; }
@@ -1904,13 +1912,13 @@
       }
       .cv-doc .cvd-head { border-bottom: 2px solid var(--paper-accent); }
       .cv-doc .cvd-name { color: var(--paper-ink) !important; font-size: 20pt !important; }
-      .cv-doc .cvd-role { color: var(--paper-sub) !important; font-size: 11.5pt !important; }
-      .cv-doc .cvd-contact { color: var(--paper-muted) !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-role { color: var(--paper-accent) !important; font-size: 11.5pt !important; }
+      .cv-doc .cvd-contact { color: var(--paper-sub) !important; font-size: 9.5pt !important; }
       .cv-doc .cvd-sep { color: var(--paper-muted) !important; }
       .cv-doc .cvd-h {
         color: var(--paper-accent) !important;
         font-size: 10.5pt !important;
-        border-bottom: 1px solid var(--paper-border) !important;
+        border-bottom: 1px solid var(--paper-line) !important;
       }
       .cv-doc .cvd-job { color: var(--paper-ink) !important; }
       .cv-doc .cvd-org { color: var(--paper-sub) !important; }
