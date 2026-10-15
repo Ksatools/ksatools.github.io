@@ -1068,7 +1068,7 @@
     }
 
     @media print {
-      header, .nav-tabs, .ad-slot, .seo-faq, footer, .no-print, .disclaimer-banner, #toast, .share-modal {
+      body > header, .nav-tabs, .ad-slot, .seo-faq, footer, .no-print, .disclaimer-banner, #toast, .share-modal {
         display: none !important;
       }
       .grid-2 {
@@ -1500,6 +1500,7 @@
     }
 
     /* ——— حالة فارغة للمعاينة ——— */
+    /* رسالة «لا توجد بيانات» داخل مستند أبيض دائماً — ألوان ثابتة */
     .cv-empty {
       display: flex;
       flex-direction: column;
@@ -1508,14 +1509,14 @@
       gap: 6px;
       min-height: 220px;
       text-align: center;
-      color: var(--muted);
+      color: #64748b;
       font-size: 0.85rem;
     }
     .cv-empty-ico {
       font-size: 2rem;
     }
     .cv-empty strong {
-      color: var(--slate);
+      color: #334155;
       font-size: 0.92rem;
     }
 
@@ -1604,61 +1605,77 @@
       }
     }
 
-    /* ==================== مستند السيرة: معاينة رسمية بهوية المنصة ==================== */
+    /* ==================== مستند السيرة: ورقة رسمية (أبيض دائماً — لا تتأثر بالوضع الليلي) ==================== */
+    /* الألوان ثابتة (الوضع النهاري) ليكون المستند مطابقاً تماماً في المعاينة والطباعة */
     .cv-doc {
-      background: var(--card);
-      border: 1px solid var(--border-strong);
-      border-radius: 10px;
-      padding: clamp(18px, 3vw, 30px);
-      color: var(--dark);
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: clamp(18px, 3vw, 32px);
+      color: #1f2937;
       font-size: 0.9rem;
       line-height: 1.7;
       min-height: 240px;
       overflow-wrap: break-word;
       word-break: break-word;
-      box-shadow: var(--shadow);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.10), 0 10px 26px rgba(15, 23, 42, 0.07);
     }
     .cv-doc .cvd-head {
       text-align: center;
       padding-bottom: 12px;
-      border-bottom: 2px solid var(--primary-light);
+      border-bottom: 2px solid #0f5132;
       margin-bottom: 16px;
     }
     .cv-doc .cvd-name {
       margin: 0;
-      font-size: 1.55rem;
+      font-size: 1.58rem;
       font-weight: 800;
       line-height: 1.25;
-      color: var(--primary-text);
+      color: #0f172a;
     }
     .cv-doc .cvd-role {
       margin: 5px 0 0;
       font-size: 1rem;
       font-weight: 600;
-      color: var(--muted);
+      color: #475569;
     }
+    /* بيانات التواصل: صفّ مرن (flex) حتى تُحفظ ترتيب العناصر ولا يعيد المتصفح ترتيبها */
     .cv-doc .cvd-contact {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 2px 0;
       margin: 9px 0 0;
-      font-size: 0.82rem;
-      line-height: 1.6;
-      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.7;
+      color: #64748b;
+    }
+    .cv-doc .cvd-ci { display: inline-block; }
+    /* الأرقام والبريد تُعزل باتجاه LTR حتى لا يقلبها النظام (+966 لا تصبح 966+) */
+    .cv-doc .cvd-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      white-space: nowrap;
     }
     .cv-doc .cvd-sep {
-      color: var(--border-strong);
-      padding: 0 3px;
+      color: #cbd5e1;
+      padding: 0 7px;
+      user-select: none;
     }
     .cv-doc .cvd-sec { margin: 0 0 15px; }
     .cv-doc .cvd-sec:last-child { margin-bottom: 0; }
     .cv-doc .cvd-h {
       margin: 0 0 9px;
-      font-size: 0.84rem;
+      font-size: 0.86rem;
       font-weight: 800;
       letter-spacing: 0.3px;
-      color: var(--primary-text);
+      color: #0f5132;
       padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid #cbd5e1;
     }
     .cv-doc .cvd-p { margin: 0; }
+    .cv-doc .cvd-plain { margin: 0; font-size: 0.86rem; }
     .cv-doc .cvd-item { margin-bottom: 12px; }
     .cv-doc .cvd-item:last-child { margin-bottom: 0; }
     .cv-doc .cvd-item-head {
@@ -1670,21 +1687,23 @@
     }
     .cv-doc .cvd-job {
       margin: 0;
-      font-size: 0.95rem;
+      font-size: 0.96rem;
       font-weight: 700;
-      color: var(--dark);
+      color: #0f172a;
     }
     .cv-doc .cvd-date {
       font-size: 0.78rem;
       font-weight: 600;
-      color: var(--muted);
+      color: #64748b;
       white-space: nowrap;
+      direction: ltr;
+      unicode-bidi: isolate;
     }
     .cv-doc .cvd-org {
       margin: 2px 0 0;
-      font-size: 0.83rem;
+      font-size: 0.84rem;
       font-weight: 600;
-      color: var(--primary-text);
+      color: #475569;
     }
     .cv-doc .cvd-list {
       margin: 6px 0 0;
@@ -1692,20 +1711,6 @@
     }
     .cv-doc .cvd-list li { margin-bottom: 3px; }
     .cv-doc .cvd-list li:last-child { margin-bottom: 0; }
-    .cv-doc .cvd-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .cv-doc .cvd-chip {
-      padding: 3px 10px;
-      border: 1px solid var(--border-strong);
-      border-radius: 999px;
-      background: var(--primary-soft);
-      color: var(--primary-text);
-      font-size: 0.8rem;
-      line-height: 1.5;
-    }
 
     /* ترويسة رسمية تظهر في الطباعة فقط (لكل الأدوات عدا السيرة) */
     .print-head { display: none; }
@@ -1727,6 +1732,14 @@
         max-width: none !important;
         margin: 0 !important;
         padding: 0 !important;
+      }
+      /* ضمان: لا يُطبع إلا محتوى الأداة نفسه (يمنع أي طبقة إعلانية محقونة) */
+      body > *:not(main),
+      html > *:not(body),
+      body :not(main):not(main *),
+      main > *:not(.print-head):not(.tool-section),
+      iframe {
+        display: none !important;
       }
       .tool-section {
         border: none !important;
@@ -1758,7 +1771,8 @@
         font-size: 9pt;
         color: #475569;
       }
-      body[data-print-tool="cv-tool"] .print-head { display: none !important; }
+      body[data-print-tool="cv-tool"] .print-head,
+      main:has(.tool-section.active#cv-tool) .print-head { display: none !important; }
 
       /* ——— عنوان الأداة ——— */
       .section-header { margin-bottom: 10px; }
@@ -1857,32 +1871,27 @@
         padding: 0 !important;
         margin: 0 !important;
         background: #ffffff !important;
-        color: #0f172a !important;
+        color: #1f2937 !important;
         font-size: 11pt;
         line-height: 1.5;
         min-height: 0;
       }
       .cv-doc .cvd-head { border-bottom: 2px solid #0f5132; }
-      .cv-doc .cvd-name { color: #0f5132 !important; font-size: 20pt !important; }
-      .cv-doc .cvd-role { color: #334155 !important; font-size: 11.5pt !important; }
-      .cv-doc .cvd-contact { color: #334155 !important; font-size: 9.5pt !important; }
-      .cv-doc .cvd-sep { color: #94a3b8 !important; }
+      .cv-doc .cvd-name { color: #0f172a !important; font-size: 20pt !important; }
+      .cv-doc .cvd-role { color: #475569 !important; font-size: 11.5pt !important; }
+      .cv-doc .cvd-contact { color: #64748b !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-sep { color: #cbd5e1 !important; }
       .cv-doc .cvd-h {
         color: #0f5132 !important;
         font-size: 10.5pt !important;
-        border-bottom: 1px solid #94a3b8 !important;
+        border-bottom: 1px solid #cbd5e1 !important;
       }
       .cv-doc .cvd-job { color: #0f172a !important; }
-      .cv-doc .cvd-org { color: #0f5132 !important; }
-      .cv-doc .cvd-date { color: #475569 !important; }
-      .cv-doc .cvd-chip {
-        background: #ffffff !important;
-        border: 1px solid #94a3b8 !important;
-        color: #0f172a !important;
-      }
+      .cv-doc .cvd-org { color: #475569 !important; }
+      .cv-doc .cvd-date { color: #64748b !important; }
+      .cv-doc .cvd-plain { color: #1f2937 !important; }
       .cv-doc .cvd-item,
-      .cv-doc .cvd-item-head,
-      .cv-doc .cvd-chip {
+      .cv-doc .cvd-item-head {
         break-inside: avoid;
         page-break-inside: avoid;
       }
@@ -2334,7 +2343,7 @@
 
               <div class="cv-subhead" style="margin-top:16px;" data-i18n="cvSubSkills">المهارات</div>
               <div class="form-group">
-                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة ' )</label>
+                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة)</label>
                 <input type="text" id="cv-f-skills" data-i18n-ph="cvSkillsPh" placeholder="مثال: ZATCA, Excel متقدم, SAP, منصة قوى" />
                 <div class="cv-tags" id="cv-skills-tags"></div>
               </div>
@@ -2916,22 +2925,24 @@
   }
 
   /* ==================== الطباعة: تجهيز المستند الرسمي قبل الطباعة ==================== */
+  function refreshPrintDate() {
+    const dateEl = $('print-head-date');
+    if (!dateEl) return;
+    const now = new Date();
+    const opts = { year: 'numeric', month: 'long', day: 'numeric' };
+    if (currentLang === 'en') {
+      dateEl.textContent = now.toLocaleDateString('en-GB', opts);
+    } else {
+      const greg = now.toLocaleDateString('ar-SA-u-ca-gregory', opts);
+      const hijri = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', opts);
+      dateEl.textContent = greg + ' — ' + hijri;
+    }
+  }
+
   function printDoc() {
     const active = document.querySelector('.tool-section.active');
     document.body.setAttribute('data-print-tool', active ? active.id : '');
-
-    const dateEl = $('print-head-date');
-    if (dateEl) {
-      const now = new Date();
-      const opts = { year: 'numeric', month: 'long', day: 'numeric' };
-      if (currentLang === 'en') {
-        dateEl.textContent = now.toLocaleDateString('en-GB', opts);
-      } else {
-        const greg = now.toLocaleDateString('ar-SA-u-ca-gregory', opts);
-        const hijri = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', opts);
-        dateEl.textContent = greg + ' — ' + hijri;
-      }
-    }
+    refreshPrintDate();
     window.print();
   }
 
@@ -3190,6 +3201,7 @@
       const key = el.getAttribute('data-i18n-ph');
       if (i18n[currentLang][key] !== undefined) el.placeholder = i18n[currentLang][key];
     });
+    refreshPrintDate();
   }
 
   function toggleLanguage() {
@@ -3747,9 +3759,10 @@ ${body}
   function cvSecHTML(titleText, body) {
     return '<section class="cvd-sec"><h2 class="cvd-h">' + cvEsc(titleText) + '</h2>' + body + '</section>';
   }
-  function cvChipsHTML(arr) {
-    return '<div class="cvd-chips">' +
-      arr.map(x => '<span class="cvd-chip">' + cvEsc(x) + '</span>').join('') + '</div>';
+  /* المهارات/الشهادات/اللغات: نص عادي بفواصل (بلا رقائق ملوّنة) — أوضح في الطباعة وفي أنظمة ATS */
+  function cvPlainHTML(arr) {
+    return '<p class="cvd-plain">' +
+      arr.map(x => '<bdi>' + cvEsc(x) + '</bdi>').join('<span class="cvd-sep">·</span>') + '</p>';
   }
   function cvDocHTML(lang, L, s) {
     const dash = ' – ';
@@ -3758,18 +3771,20 @@ ${body}
     /* الترويسة: الاسم + المسمى + بيانات التواصل */
     const name = s.p.name.trim();
     const role = s.p.title.trim();
+    /* كل عنصر تواصل في حاوية مستقلة مع عزل الاتجاه: يمنع المتصفح من قلب ترتيب الأرقام والبريد */
     const contact = [];
-    if (s.p.city.trim()) contact.push(s.p.city.trim());
-    if (s.p.phone.trim()) contact.push(s.p.phone.trim());
-    if (s.p.email.trim()) contact.push(s.p.email.trim());
-    if (CV_STATUS_TEXT[s.p.status]) contact.push(CV_STATUS_TEXT[s.p.status][lang]);
+    if (s.p.city.trim()) contact.push({ t: s.p.city.trim(), ltr: false });
+    if (s.p.phone.trim()) contact.push({ t: s.p.phone.trim(), ltr: true });
+    if (s.p.email.trim()) contact.push({ t: s.p.email.trim(), ltr: true });
+    if (CV_STATUS_TEXT[s.p.status]) contact.push({ t: CV_STATUS_TEXT[s.p.status][lang], ltr: false });
     if (name || role || contact.length) {
       let h = '<header class="cvd-head">';
       if (name) h += '<h1 class="cvd-name">' + cvEsc(name) + '</h1>';
       if (role) h += '<p class="cvd-role">' + cvEsc(role) + '</p>';
       if (contact.length) {
         h += '<p class="cvd-contact">' +
-          contact.map(cvEsc).join('<span class="cvd-sep">•</span>') + '</p>';
+          contact.map(c => '<span class="cvd-ci' + (c.ltr ? ' cvd-ltr' : '') + '">' + cvEsc(c.t) + '</span>')
+            .join('<span class="cvd-sep">•</span>') + '</p>';
       }
       parts.push(h + '</header>');
     }
@@ -3819,9 +3834,9 @@ ${body}
     const skills = cvSplitTags(s.skills);
     const certs = cvSplitTags(s.certs);
     const langs = cvSplitTags(s.langs);
-    if (skills.length) parts.push(cvSecHTML(L.skills, cvChipsHTML(skills)));
-    if (certs.length) parts.push(cvSecHTML(L.certs, cvChipsHTML(certs)));
-    if (langs.length) parts.push(cvSecHTML(L.langs, cvChipsHTML(langs)));
+    if (skills.length) parts.push(cvSecHTML(L.skills, cvPlainHTML(skills)));
+    if (certs.length) parts.push(cvSecHTML(L.certs, cvPlainHTML(certs)));
+    if (langs.length) parts.push(cvSecHTML(L.langs, cvPlainHTML(langs)));
 
     return parts.join('');
   }
