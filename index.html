@@ -1604,27 +1604,24 @@
       }
     }
 
-    /* ==================== مستند السيرة: معاينة أنيقة (ورقة بيضاء) ==================== */
+    /* ==================== مستند السيرة: معاينة رسمية بهوية المنصة ==================== */
     .cv-doc {
-      --cvd-ink: #1b2a22;
-      --cvd-muted: #5b6b62;
-      --cvd-accent: #0b3b24;
-      background: #fff;
+      background: var(--card);
       border: 1px solid var(--border-strong);
       border-radius: 10px;
       padding: clamp(18px, 3vw, 30px);
-      color: var(--cvd-ink);
+      color: var(--dark);
       font-size: 0.9rem;
       line-height: 1.7;
       min-height: 240px;
       overflow-wrap: break-word;
       word-break: break-word;
-      box-shadow: 0 1px 3px rgba(11, 59, 36, 0.07);
+      box-shadow: var(--shadow);
     }
     .cv-doc .cvd-head {
       text-align: center;
       padding-bottom: 12px;
-      border-bottom: 2px solid var(--cvd-accent);
+      border-bottom: 2px solid var(--primary-light);
       margin-bottom: 16px;
     }
     .cv-doc .cvd-name {
@@ -1632,22 +1629,22 @@
       font-size: 1.55rem;
       font-weight: 800;
       line-height: 1.25;
-      color: var(--cvd-accent);
+      color: var(--primary-text);
     }
     .cv-doc .cvd-role {
       margin: 5px 0 0;
       font-size: 1rem;
       font-weight: 600;
-      color: var(--cvd-muted);
+      color: var(--muted);
     }
     .cv-doc .cvd-contact {
       margin: 9px 0 0;
       font-size: 0.82rem;
       line-height: 1.6;
-      color: var(--cvd-muted);
+      color: var(--muted);
     }
     .cv-doc .cvd-sep {
-      color: #b9c9bf;
+      color: var(--border-strong);
       padding: 0 3px;
     }
     .cv-doc .cvd-sec { margin: 0 0 15px; }
@@ -1657,9 +1654,9 @@
       font-size: 0.84rem;
       font-weight: 800;
       letter-spacing: 0.3px;
-      color: var(--cvd-accent);
+      color: var(--primary-text);
       padding-bottom: 4px;
-      border-bottom: 1px solid #dae6de;
+      border-bottom: 1px solid var(--border);
     }
     .cv-doc .cvd-p { margin: 0; }
     .cv-doc .cvd-item { margin-bottom: 12px; }
@@ -1675,19 +1672,19 @@
       margin: 0;
       font-size: 0.95rem;
       font-weight: 700;
-      color: var(--cvd-ink);
+      color: var(--dark);
     }
     .cv-doc .cvd-date {
       font-size: 0.78rem;
       font-weight: 600;
-      color: var(--cvd-muted);
+      color: var(--muted);
       white-space: nowrap;
     }
     .cv-doc .cvd-org {
       margin: 2px 0 0;
       font-size: 0.83rem;
       font-weight: 600;
-      color: var(--cvd-accent);
+      color: var(--primary-text);
     }
     .cv-doc .cvd-list {
       margin: 6px 0 0;
@@ -1702,21 +1699,29 @@
     }
     .cv-doc .cvd-chip {
       padding: 3px 10px;
-      border: 1px solid #d0e2d8;
+      border: 1px solid var(--border-strong);
       border-radius: 999px;
-      background: #f3f8f4;
+      background: var(--primary-soft);
+      color: var(--primary-text);
       font-size: 0.8rem;
       line-height: 1.5;
     }
-    .cv-doc .cv-empty { color: #5f6f66; }
-    .cv-doc .cv-empty strong { color: #33443a; }
 
-    /* ==================== الطباعة: مخرجات احترافية لكل الأدوات ==================== */
+    /* ترويسة رسمية تظهر في الطباعة فقط (لكل الأدوات عدا السيرة) */
+    .print-head { display: none; }
+
+    /* ==================== الطباعة: مخرجات رسمية احترافية لكل الأدوات ==================== */
+    /* ألوان ثابتة (قيم الوضع النهاري) حتى تطبع بنفس الشكل في الوضعين */
     @media print {
+      html {
+        /* يجبر المتصفح على طباعة الألوان والخلفيات دون الحاجة لتفعيل "رسومات الخلفية" */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
       html, body {
-        background: #fff !important;
+        background: #ffffff !important;
         background-image: none !important;
-        color: #111 !important;
+        color: #0f172a !important;
       }
       main {
         max-width: none !important;
@@ -1728,54 +1733,73 @@
         border-radius: 0 !important;
         box-shadow: none !important;
         padding: 0 !important;
-        background: #fff !important;
+        background: #ffffff !important;
       }
       .grid-2 { grid-template-columns: 1fr !important; }
 
-      /* عنوان الأداة */
+      /* ——— ترويسة رسمية للمستند ——— */
+      .print-head {
+        display: block !important;
+        text-align: center;
+        margin: 0 0 14px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #0f5132;
+      }
+      .print-head strong {
+        display: block;
+        font-size: 13pt;
+        font-weight: 800;
+        color: #0f5132;
+        line-height: 1.4;
+      }
+      .print-head span {
+        display: block;
+        margin-top: 2px;
+        font-size: 9pt;
+        color: #475569;
+      }
+      body[data-print-tool="cv-tool"] .print-head { display: none !important; }
+
+      /* ——— عنوان الأداة ——— */
       .section-header { margin-bottom: 10px; }
-      .section-header h2 { color: #0b3b24 !important; font-size: 15pt; }
+      .section-header h2 { color: #0f5132 !important; font-size: 15pt; }
       .section-header h2::before { display: none !important; }
       .section-tag {
-        background: #eef5f0 !important;
-        color: #0b3b24 !important;
-        border: 1px solid #cfe0d6 !important;
+        background: #e8f5e9 !important;
+        color: #0f5132 !important;
+        border: 1px solid #cbd5e1 !important;
         font-size: 9pt !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
       }
       .tool-intro {
-        color: #444 !important;
+        color: #475569 !important;
         font-size: 9.5pt !important;
         margin-bottom: 12px !important;
       }
 
-      /* بطاقة النتيجة */
+      /* ——— بطاقة النتيجة ——— */
       .result-card {
-        background: #fff !important;
-        border: 1px solid #cfe0d6 !important;
-        border-inline-start: 4px solid #0b3b24 !important;
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-inline-start: 4px solid #0f5132 !important;
         border-radius: 8px !important;
         box-shadow: none !important;
         padding: 14px 16px !important;
         break-inside: avoid;
         page-break-inside: avoid;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
       }
       .result-total {
-        background: #f3f8f4 !important;
+        background: #e8f5e9 !important;
         background-image: none !important;
-        border: 1px solid #cfe0d6 !important;
-        border-inline-start: 4px solid #0b3b24 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-inline-start: 4px solid #0f5132 !important;
         border-radius: 8px !important;
         padding: 12px !important;
         margin-bottom: 12px !important;
       }
-      .result-total span.label { color: #33443a !important; font-size: 10pt !important; }
-      .result-total span.value { color: #0b3b24 !important; font-size: 19pt !important; }
+      .result-total span.label { color: #334155 !important; font-size: 10pt !important; }
+      .result-total span.value { color: #0f5132 !important; font-size: 19pt !important; }
 
-      /* جدول التفاصيل */
+      /* ——— جدول التفاصيل ——— */
       .breakdown-table {
         font-size: 10.5pt !important;
         margin-bottom: 12px !important;
@@ -1786,39 +1810,39 @@
       }
       .breakdown-table td {
         padding: 8px 10px !important;
-        border-bottom: 1px solid #e2ece6 !important;
-        color: #222 !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        color: #0f172a !important;
       }
       .breakdown-table td:last-child {
-        color: #0b3b24 !important;
+        color: #0f5132 !important;
+        font-weight: 700 !important;
         text-align: end !important;
         white-space: nowrap !important;
       }
 
       .warn-note, .legal-note {
-        background: #f7faf8 !important;
-        border: 1px solid #cfe0d6 !important;
-        color: #33443a !important;
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        border-inline-start: 4px solid #d97706 !important;
+        color: #334155 !important;
         border-radius: 6px !important;
         font-size: 9pt !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
       }
 
-      /* الخطاب: ورقة بيضاء نظيفة */
+      /* ——— الخطاب: ورقة رسمية نظيفة ——— */
       .letter-preview {
         border: none !important;
-        background: #fff !important;
+        background: #ffffff !important;
         box-shadow: none !important;
         padding: 0 !important;
         min-height: 0 !important;
-        color: #111 !important;
+        color: #0f172a !important;
         font-size: 11.5pt !important;
         line-height: 1.9 !important;
         white-space: pre-wrap !important;
       }
 
-      /* مستند السيرة */
+      /* ——— السيرة الذاتية: ورقة رسمية متوافقة مع أنظمة التوظيف ——— */
       .cv-layout { display: block !important; }
       .cv-form, .cv-nav, .cv-quickbar, .ats-panel { display: none !important; }
       .cv-side {
@@ -1832,30 +1856,29 @@
         box-shadow: none !important;
         padding: 0 !important;
         margin: 0 !important;
-        background: #fff !important;
-        color: #111 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
         font-size: 11pt;
         line-height: 1.5;
         min-height: 0;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
       }
-      .cv-doc .cvd-head { border-bottom: 2px solid #0b3b24; }
-      .cv-doc .cvd-name { color: #0b3b24 !important; font-size: 20pt !important; }
-      .cv-doc .cvd-role { color: #333 !important; font-size: 11.5pt !important; }
-      .cv-doc .cvd-contact { color: #333 !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-head { border-bottom: 2px solid #0f5132; }
+      .cv-doc .cvd-name { color: #0f5132 !important; font-size: 20pt !important; }
+      .cv-doc .cvd-role { color: #334155 !important; font-size: 11.5pt !important; }
+      .cv-doc .cvd-contact { color: #334155 !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-sep { color: #94a3b8 !important; }
       .cv-doc .cvd-h {
-        color: #0b3b24 !important;
+        color: #0f5132 !important;
         font-size: 10.5pt !important;
-        border-bottom: 1px solid #9db3a6 !important;
+        border-bottom: 1px solid #94a3b8 !important;
       }
-      .cv-doc .cvd-job { color: #111 !important; }
-      .cv-doc .cvd-org { color: #0b3b24 !important; }
-      .cv-doc .cvd-date { color: #444 !important; }
+      .cv-doc .cvd-job { color: #0f172a !important; }
+      .cv-doc .cvd-org { color: #0f5132 !important; }
+      .cv-doc .cvd-date { color: #475569 !important; }
       .cv-doc .cvd-chip {
-        background: #f2f6f3 !important;
-        border-color: #9db3a6 !important;
-        color: #111 !important;
+        background: #ffffff !important;
+        border: 1px solid #94a3b8 !important;
+        color: #0f172a !important;
       }
       .cv-doc .cvd-item,
       .cv-doc .cvd-item-head,
@@ -1864,15 +1887,15 @@
         page-break-inside: avoid;
       }
 
-      /* تذييل الصفحة بتوقيع المنصة (يُستثنى من السيرة الذاتية) */
+      /* ——— تذييل الصفحة بتوقيع المنصة (يُستثنى من السيرة الذاتية) ——— */
       .tool-section.active::after {
         content: "ksatools.github.io";
         display: block;
         margin-top: 18px;
         padding-top: 6px;
-        border-top: 1px solid #d9e5dd;
+        border-top: 1px solid #cbd5e1;
         font-size: 8.5pt;
-        color: #6b7a71;
+        color: #64748b;
         text-align: center;
       }
       #cv-tool::after { content: none !important; }
@@ -1922,6 +1945,12 @@
   </nav>
 
   <main>
+    <!-- ترويسة رسمية تظهر في الطباعة فقط (تُخفى في السيرة الذاتية) -->
+    <div class="print-head" aria-hidden="true">
+      <strong data-i18n="siteTitle">منصة خدمات الموظف والمقيم في السعودية</strong>
+      <span data-i18n="printHeadSub">تقرير استرشادي صادر عن منصة KSA Tools</span>
+      <span id="print-head-date"></span>
+    </div>
     <!-- ==================== الأداة 1: نهاية الخدمة ==================== -->
     <section id="eos-tool" class="tool-section active" role="tabpanel" aria-labelledby="tab-eos">
       <div class="section-header">
@@ -2305,7 +2334,7 @@
 
               <div class="cv-subhead" style="margin-top:16px;" data-i18n="cvSubSkills">المهارات</div>
               <div class="form-group">
-                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة , )</label>
+                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة ' )</label>
                 <input type="text" id="cv-f-skills" data-i18n-ph="cvSkillsPh" placeholder="مثال: ZATCA, Excel متقدم, SAP, منصة قوى" />
                 <div class="cv-tags" id="cv-skills-tags"></div>
               </div>
@@ -2457,6 +2486,7 @@
       langBtn: '🌐 English',
       badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
       siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
+      printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
       siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
       adLabel: 'إعلان | Advertisement',
       adTopTitle: 'مساحة إعلانية علوية (Banner 728x90 / Native)',
@@ -2660,6 +2690,7 @@
       langBtn: '🌐 العربية',
       badge: 'Free Smart Tools • Compliant with Saudi Labor Law',
       siteTitle: 'Saudi Employee & Expat Services Hub',
+      printHeadSub: 'Indicative report issued by KSA Tools',
       siteSubtitle: 'Calculate End of Service gratuity and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic & English — all data stays in your browser',
       adLabel: 'إعلان | Advertisement',
       adTopTitle: 'Top ad unit (Banner 728x90 / Native)',
@@ -2882,6 +2913,26 @@
     el.classList.add('show');
     clearTimeout(el._timer);
     el._timer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  /* ==================== الطباعة: تجهيز المستند الرسمي قبل الطباعة ==================== */
+  function printDoc() {
+    const active = document.querySelector('.tool-section.active');
+    document.body.setAttribute('data-print-tool', active ? active.id : '');
+
+    const dateEl = $('print-head-date');
+    if (dateEl) {
+      const now = new Date();
+      const opts = { year: 'numeric', month: 'long', day: 'numeric' };
+      if (currentLang === 'en') {
+        dateEl.textContent = now.toLocaleDateString('en-GB', opts);
+      } else {
+        const greg = now.toLocaleDateString('ar-SA-u-ca-gregory', opts);
+        const hijri = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', opts);
+        dateEl.textContent = greg + ' — ' + hijri;
+      }
+    }
+    window.print();
   }
 
   function copyText(text, msgKey) {
@@ -4086,12 +4137,12 @@ ${body}
     bindCalc(['eos-reason', 'eos-salary', 'eos-years', 'eos-months', 'eos-days',
               'eos-leave-days', 'eos-leave-basis'], calculateEOS);
     $('eos-calc-btn').addEventListener('click', calculateEOS);
-    $('eos-print').addEventListener('click', () => window.print());
+    $('eos-print').addEventListener('click', printDoc);
     $('eos-share').addEventListener('click', () => openShareSheet(eosSharePayload()));
 
     bindCalc(['sal-category', 'sal-basic', 'sal-housing', 'sal-transport', 'sal-obligations'], calculateSalary);
     $('sal-calc-btn').addEventListener('click', calculateSalary);
-    $('sal-print').addEventListener('click', () => window.print());
+    $('sal-print').addEventListener('click', printDoc);
     $('sal-share').addEventListener('click', () => openShareSheet(salSharePayload()));
 
     bindCalc(['let-type', 'let-doc-lang', 'let-recipient', 'let-name', 'let-id',
@@ -4099,7 +4150,7 @@ ${body}
     $('let-copy').addEventListener('click', () => copyText($('letter-output').textContent));
     $('let-share').addEventListener('click', () =>
       openShareSheet(textSharePayload('shareLetTitle', 'letter-tool', $('letter-output'))));
-    $('let-print').addEventListener('click', () => window.print());
+    $('let-print').addEventListener('click', printDoc);
 
     cvInit();
     $('cv-copy').addEventListener('click', () => {
@@ -4110,7 +4161,7 @@ ${body}
       if (!cvHasContent) { showToast(t('cvEmptyWarn')); return; }
       openShareSheet(textSharePayload('shareCvTitle', 'cv-tool', $('cv-output')));
     });
-    $('cv-print').addEventListener('click', () => window.print());
+    $('cv-print').addEventListener('click', printDoc);
 
     calculateEOS(); calculateSalary(); generateLetter();
   });
