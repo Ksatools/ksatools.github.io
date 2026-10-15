@@ -81,7 +81,7 @@
           {
             "@type": "Question",
             "name": "كيف تُحسب مكافأة نهاية الخدمة في السعودية؟",
-            "acceptedAnswer": { "@type": "Answer", "text": "تُحسب بنصف راتب شهري عن كل سنة من أول 5 سنوات، وراتب شهر كامل عن كل سنة تليها. وعند الاستقالة يستحق الموظف الثلث لمن عمل من سنتين إلى خمس، والثلثين من خمس إلى عشر، وكامل المكافأة بعد عشر سنوات." }
+            "acceptedAnswer": { "@type": "Answer", "text": "تُحسب المكافأة على أساس آخر أجر: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. عند الاستقالة يستحق العامل ثلث المكافأة بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، وثلثيها إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات، وكاملها عند عشر سنوات فأكثر." }
           },
           {
             "@type": "Question",
@@ -97,7 +97,7 @@
           {
             "@type": "Question",
             "name": "How is Saudi End of Service Benefit (EOSB) calculated?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Half a month wage for each of the first 5 years and one full month wage for each subsequent year. Upon resignation: one-third for 2-5 years, two-thirds for 5-10 years, and 100% for 10+ years." }
+            "acceptedAnswer": { "@type": "Answer", "text": "The award is based on the last wage: half a month’s wage for each of the first five years, one month’s wage for each subsequent year, with fractions of a year prorated. Upon resignation, the worker receives one-third after continuous service of two to five years inclusive, two-thirds if service exceeds five years but is under ten years, and the full award at ten years or more." }
           },
           {
             "@type": "Question",
@@ -2000,24 +2000,29 @@
         <h2 data-i18n="eosHeading">حاسبة مكافأة نهاية الخدمة ومستحقات الإجازات</h2>
         <span class="section-tag" data-i18n="eosTag">المواد 84 و85 و87 من نظام العمل السعودي</span>
       </div>
-      <p class="tool-intro" data-i18n="eosIntro">أدخل بياناتك لحساب مكافأة نهاية الخدمة وفق المادة 84 (نصف راتب عن كل سنة من أول 5 سنوات وراتب كامل عما بعدها)، مع تطبيق نسب الاستحقاق عند الاستقالة وفق المادة 85، وتعويض رصيد الإجازات غير المستنفدة.</p>
+      <p class="tool-intro" data-i18n="eosIntro">أدخل آخر أجر معتمد ومدة الخدمة لحساب مكافأة نهاية الخدمة وفق المادة 84، ونسب الاستحقاق عند الاستقالة وفق المادة 85، إضافة إلى تعويض رصيد الإجازات غير المستنفدة. تحقق من سبب انتهاء العلاقة والشروط النظامية قبل الاعتماد على النتيجة.</p>
 
       <div class="grid-2">
         <div class="no-print">
           <div class="form-group">
             <label for="eos-reason" data-i18n="eosReasonLabel">سبب انتهاء العلاقة العمالية</label>
             <select id="eos-reason" data-persist>
-              <option value="expiry" data-i18n="eosReason1">انتهاء مدة العقد أو اتفاق الطرفين (استحقاق كامل 100%)</option>
-              <option value="termination" data-i18n="eosReason2">إنهاء العقد من قِبل صاحب العمل (استحقاق كامل 100%)</option>
-              <option value="resignation" data-i18n="eosReason3">استقالة الموظف (تُطبق نسب المادة 85)</option>
-              <option value="force" data-i18n="eosReason4">ترك العمل لقوة قاهرة أو زواج أو ولادة (المادة 87 - 100%)</option>
-              <option value="art80" data-i18n="eosReason5">فصل بموجب المادة 80 دون مكافأة (0%)</option>
+              <option value="expiry" data-i18n="eosReason1">انتهاء مدة العقد أو اتفاق الطرفين المستوفي للشروط (استحقاق كامل)</option>
+              <option value="termination" data-i18n="eosReason2">إنهاء العقد من قِبل صاحب العمل (استحقاق كامل للمكافأة وفق الأصل العام)</option>
+              <option value="resignation" data-i18n="eosReason3">استقالة العامل (تُطبق نسب المادة 85)</option>
+              <option value="force" data-i18n="eosReason4">ترك العمل بسبب قوة قاهرة خارجة عن إرادة العامل (المادة 87)</option>
+              <option value="marriage" data-i18n="eosReason6">العاملة: إنهاء العقد خلال 6 أشهر من عقد الزواج (المادة 87)</option>
+              <option value="childbirth" data-i18n="eosReason7">العاملة: إنهاء العقد خلال 3 أشهر من الوضع/الولادة (المادة 87)</option>
+              <option value="art81" data-i18n="eosReason8">ترك العمل وفق المادة 81 مع تحقق إحدى حالاتها (الحقوق النظامية)</option>
+              <option value="art80" data-i18n="eosReason5">إنهاء وفق المادة 80 بعد تحقق شروطها النظامية (لا مكافأة)</option>
             </select>
+            <small class="field-hint" data-i18n="eosReasonHint">المادة 87: القوة القاهرة يجب أن تكون خارجة عن إرادة العامل. خيارا الزواج والوضع خاصان بالعاملة وضمن المدد النظامية. لا تختر المادة 81 أو 80 إلا إذا انطبقت شروطها فعلًا.</small>
           </div>
 
           <div class="form-group">
-            <label for="eos-salary" data-i18n="eosSalaryLabel">إجمالي الأجر الشهري الفعلي (الأساسي + البدلات الثابتة)</label>
+            <label for="eos-salary" data-i18n="eosSalaryLabel">آخر أجر شهري فعلي معتمد لحساب مكافأة نهاية الخدمة</label>
             <input type="number" id="eos-salary" data-persist value="6500" min="0" step="100" inputmode="decimal" />
+            <small class="field-hint" data-i18n="eosSalaryHint">استخدم آخر أجر معتمد للمكافأة. قد تُستبعد العمولات أو النسب المتغيرة وفق اتفاق مستوفٍ للمادة 86؛ لا تعتمد على الأساسي والبدلات الثابتة وحدهما دون مراجعة حالتك.</small>
           </div>
 
           <div class="form-group">
@@ -2442,7 +2447,7 @@
       <h3 data-i18n="faqHeading">الأسئلة الشائعة | Frequently Asked Questions</h3>
       <div class="faq-item">
         <h4 data-i18n="faqQ1">كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?</h4>
-        <p data-i18n="faqA1">بنصف راتب شهري عن كل سنة من أول 5 سنوات وراتب كامل عما بعدها. وعند الاستقالة يستحق الموظف الثلث (سنتان–خمس)، والثلثين (خمس–عشر)، وكامل المكافأة (أكثر من عشر سنوات).</p>
+        <p data-i18n="faqA1">بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.</p>
       </div>
       <div class="faq-item">
         <h4 data-i18n="faqQ2">ما نسبة استقطاع التأمينات للسعودي في 2026؟ / What is the 2026 Saudi GOSI rate?</h4>
@@ -2553,14 +2558,22 @@
       t4Num: 'الأداة 4', t4Title: 'منسق السيرة الذاتية',
       eosHeading: 'حاسبة مكافأة نهاية الخدمة ومستحقات الإجازات',
       eosTag: 'المواد 84 و85 و87 من نظام العمل السعودي',
-      eosIntro: 'أدخل بياناتك لحساب المكافأة وفق المادة 84 (نصف راتب عن كل سنة من أول 5 سنوات وراتب كامل عما بعدها)، مع تطبيق نسب الاستحقاق عند الاستقالة وفق المادة 85، وتعويض رصيد الإجازات.',
+      eosIntro: 'أدخل آخر أجر معتمد ومدة الخدمة لحساب مكافأة نهاية الخدمة وفق المادة 84، ونسب الاستحقاق عند الاستقالة وفق المادة 85، إضافة إلى تعويض رصيد الإجازات غير المستنفدة. تحقق من سبب انتهاء العلاقة والشروط النظامية قبل الاعتماد على النتيجة.',
       eosReasonLabel: 'سبب انتهاء العلاقة العمالية',
-      eosReason1: 'انتهاء مدة العقد أو اتفاق الطرفين (استحقاق كامل 100%)',
-      eosReason2: 'إنهاء العقد من قِبل صاحب العمل (استحقاق كامل 100%)',
-      eosReason3: 'استقالة الموظف (تُطبق نسب المادة 85)',
-      eosReason4: 'ترك العمل لقوة قاهرة أو زواج أو ولادة (المادة 87 - 100%)',
-      eosReason5: 'فصل بموجب المادة 80 دون مكافأة (0%)',
-      eosSalaryLabel: 'إجمالي الأجر الشهري الفعلي (الأساسي + البدلات الثابتة)',
+      eosReason1: 'انتهاء مدة العقد أو اتفاق الطرفين المستوفي للشروط (استحقاق كامل)',
+      eosReason2: 'إنهاء العقد من قِبل صاحب العمل (استحقاق كامل للمكافأة وفق الأصل العام)',
+      eosReason3: 'استقالة العامل (تُطبق نسب المادة 85)',
+      eosReason4: 'ترك العمل بسبب قوة قاهرة خارجة عن إرادة العامل (المادة 87)',
+      eosReason5: 'إنهاء وفق المادة 80 بعد تحقق شروطها النظامية (لا مكافأة)',
+      eosReason6: 'العاملة: إنهاء العقد خلال 6 أشهر من عقد الزواج (المادة 87)',
+      eosReason7: 'العاملة: إنهاء العقد خلال 3 أشهر من الوضع/الولادة (المادة 87)',
+      eosReason8: 'ترك العمل وفق المادة 81 مع تحقق إحدى حالاتها (الحقوق النظامية)',
+      eosReasonHint: 'المادة 87: القوة القاهرة يجب أن تكون خارجة عن إرادة العامل. خيارا الزواج والوضع خاصان بالعاملة وضمن المدد النظامية. لا تختر المادة 81 أو 80 إلا إذا انطبقت شروطها فعلًا.',
+      eosSalaryLabel: 'آخر أجر شهري فعلي معتمد لحساب مكافأة نهاية الخدمة',
+      eosSalaryHint: 'استخدم آخر أجر معتمد للمكافأة. قد تُستبعد العمولات أو النسب المتغيرة وفق اتفاق مستوفٍ للمادة 86؛ لا تعتمد على الأساسي والبدلات الثابتة وحدهما دون مراجعة حالتك.',
+      eosBasicRequired: 'أدخل الراتب الأساسي الفعلي لحساب تعويض الإجازات بهذا الأساس.',
+      eosBasicTooHigh: 'الراتب الأساسي المدخل أكبر من آخر أجر المستخدم للمكافأة. راجع القيم المدخلة.',
+      eosSalaryRequired: 'أدخل آخر أجر شهري موجب لحساب المكافأة.',
       eosDurationLabel: 'مدة الخدمة (سنوات / أشهر / أيام)',
       lblYears: 'سنوات', lblMonths: 'أشهر', lblDays: 'أيام',
       eosLeaveLabel: 'رصيد أيام الإجازة السنوية غير المستنفدة',
@@ -2638,7 +2651,7 @@
       disclaimer: '⚖️ إخلاء مسؤولية: جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.',
       faqHeading: 'الأسئلة الشائعة | Frequently Asked Questions',
       faqQ1: 'كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?',
-      faqA1: 'بنصف راتب شهري عن كل سنة من أول 5 سنوات وراتب كامل عما بعدها. وعند الاستقالة يستحق الموظف الثلث (سنتان–خمس)، والثلثين (خمس–عشر)، وكامل المكافأة (أكثر من عشر سنوات).',
+      faqA1: 'بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.',
       faqQ2: 'ما نسبة استقطاع التأمينات للسعودي في 2026؟ / What is the 2026 Saudi GOSI rate?',
       faqA2: '9.75% للنظام القديم (أول تسجيل قبل 3 يوليو 2024)، و10.75% للنظام الجديد ابتداءً من يوليو 2026، على الأساسي + السكن بسقف 45,000 ر.س. المقيم غير السعودي: 0%.',
       footerText: '© 2026 منصة خدمات الموظف والمقيم في السعودية — أدوات مجانية ثنائية اللغة',
@@ -2758,14 +2771,22 @@
       t4Num: 'Tool 4', t4Title: 'Resume Builder',
       eosHeading: 'Saudi End of Service (EOSB) & Leave Settlement Calculator',
       eosTag: 'Labor Law Articles 84, 85 & 87',
-      eosIntro: 'Enter your details to compute gratuity under Article 84 (half a month per year for the first 5 years, one full month thereafter), Article 85 resignation tiers, and unused leave encashment.',
+      eosIntro: 'Enter the last applicable wage and service duration to estimate EOSB under Article 84, resignation tiers under Article 85, and unused leave encashment. Confirm the employment-ending reason and applicable legal conditions before relying on the estimate.',
       eosReasonLabel: 'Reason for End of Employment',
-      eosReason1: 'Contract Expiry or Mutual Agreement (100% Full)',
-      eosReason2: 'Termination by Employer (100% Full)',
-      eosReason3: 'Employee Resignation (Article 85 Tiers)',
-      eosReason4: 'Force Majeure, Marriage, or Childbirth (Art. 87 - 100%)',
-      eosReason5: 'Dismissal under Article 80 (0%)',
-      eosSalaryLabel: 'Total Last Monthly Wage (Basic + Fixed Allowances)',
+      eosReason1: 'Contract expiry or qualifying mutual agreement (full award under the general rule)',
+      eosReason2: 'Termination by employer (full EOSB under the general rule)',
+      eosReason3: 'Worker resignation (Article 85 tiers)',
+      eosReason4: 'Leaving because of force majeure beyond the worker’s control (Article 87)',
+      eosReason5: 'Termination under Article 80, only if its legal conditions are met (no EOSB)',
+      eosReason6: 'Female worker: ending the contract within 6 months of marriage (Article 87)',
+      eosReason7: 'Female worker: ending the contract within 3 months of childbirth (Article 87)',
+      eosReason8: 'Leaving under Article 81, if one of its legal cases applies (statutory rights retained)',
+      eosReasonHint: 'Under Article 87, force majeure must be beyond the worker’s control. The marriage and childbirth options apply to female workers within the statutory periods. Select Articles 80 or 81 only if their legal conditions actually apply.',
+      eosSalaryLabel: 'Last actual monthly wage used to calculate EOSB',
+      eosSalaryHint: 'Use the last wage applicable to the award. Commissions or variable percentages may be excluded under a qualifying agreement pursuant to Article 86; do not assume basic salary and fixed allowances alone always suffice.',
+      eosBasicRequired: 'Enter the actual basic salary to calculate leave pay using this basis.',
+      eosBasicTooHigh: 'The entered basic salary is higher than the last wage used for EOSB. Please review the values.',
+      eosSalaryRequired: 'Enter a positive last monthly wage to calculate the award.',
       eosDurationLabel: 'Service duration (Years / Months / Days)',
       lblYears: 'Years', lblMonths: 'Months', lblDays: 'Days',
       eosLeaveLabel: 'Unused Annual Leave Balance (Days)',
@@ -2843,7 +2864,7 @@
       disclaimer: '⚖️ Disclaimer: All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. None of your data is sent to any server — all processing happens in your browser.',
       faqHeading: 'Frequently Asked Questions',
       faqQ1: 'How is Saudi End of Service Benefit (EOSB) calculated?',
-      faqA1: 'Half a month per year for the first 5 years and one full month per year thereafter. Upon resignation: one-third (2-5 yrs), two-thirds (5-10 yrs), and full entitlement (10+ yrs).',
+      faqA1: 'Half a month’s wage for each of the first five years, one month’s wage for each subsequent year, and a pro-rata amount for a fraction of a year. Upon resignation: one-third after continuous service of two to five years inclusive; two-thirds if service exceeds five years but is under ten; and the full award at ten years or more.',
       faqQ2: 'What is the 2026 GOSI rate for Saudis?',
       faqA2: '9.75% legacy (first registered before 3 July 2024) and 10.75% new system from July 2026, on basic + housing capped at SAR 45,000. Expats: 0%.',
       footerText: '© 2026 Saudi Employee & Expat Services Hub — Free Bilingual Tools',
@@ -3299,7 +3320,7 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  function calculateEOS() {
+  function calculateEOS(showErrors = false) {
     const reason = $('eos-reason').value;
     const salary = numVal('eos-salary');
     const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
@@ -3307,36 +3328,78 @@
     const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
     const leaveDays = numVal('eos-leave-days');
     const leaveBasis = $('eos-leave-basis').value;
+    const basicField = $('eos-basic').value.trim();
 
+    $('eos-basic-group').hidden = leaveBasis !== 'basic';
+
+    // This is an estimate from the entered service duration. Dates can produce
+    // a slightly different day fraction where calendar/leap-year details matter.
     const totalYears = years + (months / 12) + (days / 365);
 
-    let first5 = 0, after5 = 0;
-    if (totalYears <= 5) first5 = totalYears * (salary / 2);
-    else { first5 = 5 * (salary / 2); after5 = (totalYears - 5) * salary; }
+    // Article 84: half-month wage for the first five years and one-month wage thereafter.
+    const first5 = Math.min(totalYears, 5) * (salary / 2);
+    const after5 = Math.max(0, totalYears - 5) * salary;
     const full = first5 + after5;
 
-    let ratio = 1, ratioLabel = t('rFull');
-    if (reason === 'art80') { ratio = 0; ratioLabel = t('rNone'); }
-    else if (reason === 'resignation') {
-      if (totalYears < 2) { ratio = 0; ratioLabel = t('rUnder2'); }
-      else if (totalYears < 5) { ratio = 1 / 3; ratioLabel = t('rThird'); }
-      else if (totalYears < 10) { ratio = 2 / 3; ratioLabel = t('rTwoThirds'); }
-      else { ratio = 1; ratioLabel = t('rFull10'); }
+    let ratio = 1;
+    let ratioLabel = t('rFull');
+    if (reason === 'art80') {
+      ratio = 0;
+      ratioLabel = t('rNone');
+    } else if (reason === 'resignation') {
+      // Article 85: one-third for 2 to 5 years inclusive; two-thirds only
+      // when continuous service exceeds 5 years and is less than 10 years.
+      if (totalYears < 2) {
+        ratio = 0;
+        ratioLabel = t('rUnder2');
+      } else if (totalYears <= 5) {
+        ratio = 1 / 3;
+        ratioLabel = t('rThird');
+      } else if (totalYears < 10) {
+        ratio = 2 / 3;
+        ratioLabel = t('rTwoThirds');
+      } else {
+        ratio = 1;
+        ratioLabel = t('rFull10');
+      }
     }
 
     const netGratuity = full * ratio;
-    const basicField = $('eos-basic').value.trim();
-const basicSalary = basicField === '' ? salary * 0.75 : Math.min(numVal('eos-basic'), salary);
-const leaveWage = leaveBasis === 'basic' ? basicSalary : salary;
-$('eos-basic-group').hidden = leaveBasis !== 'basic';
-    const leavePay = (leaveWage / 30) * leaveDays;
-    const total = netGratuity + leavePay;
-
     $('eos-duration-out').textContent = totalYears.toFixed(2) + t('durYear');
     $('eos-first5-out').textContent = formatSAR(first5);
     $('eos-after5-out').textContent = formatSAR(after5);
     $('eos-ratio-out').textContent = ratioLabel;
     $('eos-net-gratuity').textContent = formatSAR(netGratuity);
+
+    // Never guess basic salary (the old version assumed 75% of total wage).
+    // If the user elects a basic-only leave-pay basis, require the real value.
+    if (salary <= 0) {
+      $('eos-leave-out').textContent = '—';
+      $('eos-total-val').textContent = '—';
+      if (showErrors) showToast(t('eosSalaryRequired'));
+      return;
+    }
+
+    let leaveWage = salary;
+    if (leaveBasis === 'basic') {
+      if (basicField === '') {
+        $('eos-leave-out').textContent = t('eosBasicRequired');
+        $('eos-total-val').textContent = '—';
+        if (showErrors) showToast(t('eosBasicRequired'));
+        return;
+      }
+      const basicSalary = numVal('eos-basic');
+      if (basicSalary > salary) {
+        $('eos-leave-out').textContent = t('eosBasicTooHigh');
+        $('eos-total-val').textContent = '—';
+        if (showErrors) showToast(t('eosBasicTooHigh'));
+        return;
+      }
+      leaveWage = basicSalary;
+    }
+
+    const leavePay = (leaveWage / 30) * leaveDays;
+    const total = netGratuity + leavePay;
     $('eos-leave-out').textContent = formatSAR(leavePay);
     $('eos-total-val').textContent = formatSAR(total);
   }
@@ -4208,7 +4271,7 @@ ${body}
 
     bindCalc(['eos-reason', 'eos-salary', 'eos-years', 'eos-months', 'eos-days',
               'eos-leave-days', 'eos-leave-basis', 'eos-basic'], calculateEOS);
-    $('eos-calc-btn').addEventListener('click', calculateEOS);
+    $('eos-calc-btn').addEventListener('click', () => calculateEOS(true));
     $('eos-print').addEventListener('click', printDoc);
     $('eos-share').addEventListener('click', () => openShareSheet(eosSharePayload()));
 
