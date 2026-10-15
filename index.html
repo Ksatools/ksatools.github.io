@@ -1950,7 +1950,7 @@
       </div>
     </div>
     <h1 data-i18n="siteTitle">منصة خدمات الموظف والمقيم في السعودية</h1>
-    <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — كل بياناتك تُعالج في متصفحك فقط</p>
+    <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — </p>
   </header>
 
   <!-- ====== Adsterra: Banner 728x90 / Native — الصق الكود داخل هذا الحاوي ====== -->
@@ -2043,7 +2043,10 @@
             </select>
             <small class="field-hint" data-i18n="eosBasisHint">راجع عقدك أو اسأل الموارد البشرية لمعرفة الأساس المعتمد في منشأتك</small>
           </div>
-
+          <div class="form-group" id="eos-basic-group" hidden>
+            <label for="eos-basic" data-i18n="eosBasicLabel">الراتب الأساسي الشهري (يُستخدم لحساب أجر الإجازة)</label>
+            <input type="number" id="eos-basic" data-persist min="0" step="100" inputmode="decimal" />
+          </div>
           <button class="btn-primary" id="eos-calc-btn" data-i18n="eosCalcBtn">احسب المستحقات النهائية الآن</button>
         </div>
 
@@ -2369,7 +2372,7 @@
 
               <div class="cv-subhead" style="margin-top:16px;" data-i18n="cvSubSkills">المهارات</div>
               <div class="form-group">
-                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة)</label>
+                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصـ,لة)</label>
                 <input type="text" id="cv-f-skills" data-i18n-ph="cvSkillsPh" placeholder="مثال: ZATCA, Excel متقدم, SAP, منصة قوى" />
                 <div class="cv-tags" id="cv-skills-tags"></div>
               </div>
@@ -2532,7 +2535,7 @@
       badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
       siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
       printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
-      siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
+      siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — ',
       adLabel: 'إعلان | Advertisement',
       adTopTitle: 'مساحة إعلانية علوية (Banner 728x90 / Native)',
       adBotTitle: 'مساحة إعلانية سفلية (Native Banner)',
@@ -2557,6 +2560,7 @@
       eosBasisFull: 'الأجر الكامل (الأساسي + البدلات الثابتة)',
       eosBasisBasic: 'الأساسي فقط',
       eosBasisHint: 'راجع عقدك أو اسأل الموارد البشرية لمعرفة الأساس المعتمد في منشأتك',
+            eosBasicLabel: 'الراتب الأساسي الشهري (يُستخدم لحساب أجر الإجازة)',
       eosCalcBtn: 'احسب المستحقات النهائية الآن',
       eosTotalLabel: 'إجمالي التصفية النهائية المستحقة (نهاية الخدمة + الإجازات)',
       eosRow1: 'إجمالي مدة الخدمة بالسنوات',
@@ -2761,6 +2765,7 @@
       eosBasisFull: 'Full wage (basic + fixed allowances)',
       eosBasisBasic: 'Basic salary only',
       eosBasisHint: 'Check with your HR for the applicable calculation basis in your company',
+            eosBasicLabel: 'Monthly basic salary (used for leave pay)',
       eosCalcBtn: 'Calculate Final Settlement Now',
       eosTotalLabel: 'Total Final Settlement (EOSB + Leave Encashment)',
       eosRow1: 'Total Service Duration (Years)',
@@ -3080,7 +3085,7 @@
     const leaveDays = numVal('eos-leave-days');
     const link = buildShareLink('eos-tool', {
       tool: 'eos', s: salary, y: years, m: months, d: days,
-      ld: leaveDays, lb: leaveBasis, r: reasonSel.value
+      ld: leaveDays, lb: leaveBasis, bs: $('eos-basic').value,
     });
     const text = [
       t('shareEosTitle'),
@@ -3165,6 +3170,7 @@
       setInt('eos-months', num('m', 11));
       setInt('eos-days', num('d', 30));
       setInt('eos-leave-days', num('ld', 365));
+            set('eos-basic', num('bs', 10000000));
       if (hasOption($('eos-leave-basis'), p.get('lb'))) $('eos-leave-basis').value = p.get('lb');
       if (hasOption($('eos-reason'), p.get('r'))) $('eos-reason').value = p.get('r');
       switchTool('eos-tool', false);
@@ -3311,7 +3317,10 @@
     }
 
     const netGratuity = full * ratio;
-    const leaveWage = leaveBasis === 'basic' ? salary * 0.75 : salary;
+    const basicField = $('eos-basic').value.trim();
+const basicSalary = basicField === '' ? salary * 0.75 : Math.min(numVal('eos-basic'), salary);
+const leaveWage = leaveBasis === 'basic' ? basicSalary : salary;
+$('eos-basic-group').hidden = leaveBasis !== 'basic';
     const leavePay = (leaveWage / 30) * leaveDays;
     const total = netGratuity + leavePay;
 
@@ -4190,7 +4199,7 @@ ${body}
     });
 
     bindCalc(['eos-reason', 'eos-salary', 'eos-years', 'eos-months', 'eos-days',
-              'eos-leave-days', 'eos-leave-basis'], calculateEOS);
+              'eos-leave-days', 'eos-leave-basis', 'eos-basic'], calculateEOS);
     $('eos-calc-btn').addEventListener('click', calculateEOS);
     $('eos-print').addEventListener('click', printDoc);
     $('eos-share').addEventListener('click', () => openShareSheet(eosSharePayload()));
