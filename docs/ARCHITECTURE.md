@@ -192,7 +192,12 @@
 | `gemini_generate_json(prompt, *, api_key, model, timeout=90, retries=2)` | استدعاء Gemini REST، يعيد JSON منظَّم. النموذج الافتراضي `gemini-3.8-flash` (موثق رسمياً). |
 | `validate_article(data, *, topic, lang, published_at)` | بوابة الجودة: يرفض HTML/JS في الحقول، يطالب بـ`meta_description`/`excerpt`/`sections`/`faq`/`official_sources`، يطيل النص لمتطلبات عدد الكلمات، يبني `slug` (معرف-اللغة)، يحسب `word_count`، يعيد كائن مقال كامل. |
 | `duplicate_check(article, existing_records)` | يمنع تكرار الرابط أو العنوان (طبيعي بعد تطبيع المسافات). |
-| `check_sources(sources, *, timeout=20)` | HEAD لكل مصدر رسمي، يقبل `2xx`/`3xx` فقط، نطاقان مسموحان: `gosi.gov.sa` و`hrsd.gov.sa` (و`qiwa.sa`). |
+| `check_sources(sources, *, timeout=None)` | فحص شبكي للمصادر الرسمية: `GET` مع ترويسات طلب عادية (`SOURCE_REQUEST_HEADERS` = `User-Agent`/`Accept`/`Accept-Language`)، ويقبل `200` + جسم أكبر من `SOURCE_MIN_BYTES` فقط (رفض `403`/`404` فشلٌ لا يُتجاوز). يرجع قائمة مشاكل نصّية (فارغة = نجاح). |
+| `is_allowed_source_url(url)` | بوابة ساكنة: `https` فقط، والنطاق `*.gov.sa` + `qiwa.sa` فقط (لا توسيع). `is_blocked_source_host` يحجب `mol.gov.sa` **وكل نطاقاته الفرعية**، ويُستعمل `parts.hostname` فلا تنطلي بيانات المستخدم/المنفذ أو لاحقة مضلّلة. |
+| `probe_source(url, *, timeout=None) -> (ok, code, note)` | فحص مصدر واحد وتصنيف الفشل: `ok` · `dns` · `timeout` · `network` · `http_<status>` · `empty` (رسائل عربية واضحة بلا كشف أسرار). |
+| `probe_sources(sources, *, timeout=None) -> list` | يفحص كل مصدر مرة واحدة ويرجع نتائج منظّمة `[{title,url,ok,code,note}]` — تُستعمل في `run_once` لسجل واضح بلا طلب مزدوج. |
+| `normalize_source_url(url)` | تطبيع رابط المصدر: حذف المسافات، ترميز المسارات العربية UTF-8 (`%`)، وإسقاط `#fragment` — كي تنجح الروابط العربية في الطلب والنشر. |
+| `official_sources_for(topic)` | المصادر الرسمية المفضّلة لموضوع من `OFFICIAL_SOURCE_LIBRARY`: مصدر أساسي ثم بديل رسمي لنفس الجهة؛ تُضمَّن في `build_prompt` لمنع اختراع روابط (مثل `mol.gov.sa`). |
 | `render_article_html(article, *, published: bool)` | **قالب ثابت + تهريب** (`esc`) — **لا HTML خام من النموذج**. المنشور: `index,follow`، canonical، hreflang متبادل، JSON-LD، Social Bar + Native Banner مرة واحدة. المسودة: `noindex,nofollow`، لا canonical. |
 | `write_article_files(article, *, published: bool) -> Path` | يكتب `articles/{lang}/{slug}.html` (ذرّي). |
 | `merge_articles(existing, new_records)` | يدمج السجلات المنشورة، يحتفظ بأول `published_at`، يحتفظ بأحدث `updated_at`. |
@@ -238,3 +243,22 @@
 - **بعد:** `cvSharePayload()` تُرجع نصاً مُصمّماً للمشاركة: `t('shareCvPrivacy')` + درجة ATS + التغذية الراجعة + وسم العلامة + رابط العلامة التجارية. لا بيانات شخصية.
 - `#cv-share` يستدعي `cvSharePayload()` بدلاً من `textSharePayload()`.
 - التحقق: `tests/smoke_test.py` يملأ السيرة بـ`cv-demo`، يفتح المشاركة، يتحقق `leaked=[]` ودرجة ATS موجودة.
+
+### 8.5 سياسة المصادر الرسمية والتحقّق الشبكي (بعد تشغيل Groq #7 — 2026-10-16)
+
+**المشكلة المرصودة:** الدورة #7 ولّدت المقالين بنجاح، لكن النموذج استشهد بـ`mol.gov.sa` (الاسم السابق لوزارة العمل) وهو نطاق لا يُترجَم عبر DNS (NXDOMAIN)، فرفض `check_sources` المقالين ورفعهما مسودتين غير متحقَّق منهما — بلا نشر (السلوك الآمن صحيح، لكن الجذر يجب إصلاحه).
+
+**الإصلاح (بلا تجاوز أي بوابة):**
+1. **منع النطاق الميت من البوابة الساكنة**: `BLOCKED_SOURCE_HOSTS = {"mol.gov.sa", "www.mol.gov.sa"}`، و`is_blocked_source_host(host)` يحجب النطاق **وكل نطاقاته الفرعية** (`portal.mol.gov.sa`) كي لا يمرّ نطاق ميت بدعوى لاحقة `.gov.sa`؛ فالمقال الذي يستشهد به يُرفض في `validate_article` بلا أي طلب شبكة. يستخدم `is_allowed_source_url` كذلك `parts.hostname` (يحذف المنفذ/بيانات المستخدم) فلا تنطلي حيل مثل `https://www.hrsd.gov.sa@evil.com/` أو `https://www.hrsd.gov.sa.evil.com/`.
+2. **روابط رسمية معتمدة في البرومبت**: `OFFICIAL_SOURCE_LIBRARY` (hrsd.gov.sa، gosi.gov.sa، qiwa.sa) و`official_sources_for(topic)` تكتب قائمة صريحة بأسماء الجهات والروابط، وتحظر النطاق المنتهي — فلا يحتاج النموذج لتخمين رابط.
+3. **بديل رسمي لكل موضوع**: لكل موضوع مصدر أساسي وبدائل معتمدة لنفس الجهة (`TOPIC_SOURCE_KEYS`)، فيبقى مصدر ثانٍ سليم متاح إذا فقد الأول.
+4. **تصنيف فشل واضح**: `probe_source` يميّز `dns` · `timeout` · `network` · `http_<status>` · `empty`، ورسالة عربية واضحة لكل حالة بلا كشف أسرار، والسجل يطبع كل مصدر بـ`[OK]`/`[FAIL]`.
+5. **ترويسات طلب عادية**: `SOURCE_REQUEST_HEADERS` (`User-Agent` + `Accept` + `Accept-Language`) لأن `hrsd.gov.sa` يردّ `403` بلا هذه الترويسات و`200` معها (تحقّق فعلي) — طلب HTTP عادي لا تجاوز، ورفض `403`/`404` يبقى فشلاً.
+6. **تطبيع الروابط العربية**: `normalize_source_url` يرمّز المسار العربي `UTF-8` ويُسقط الـfragment كي يعمل الرابط في الطلب وفي صفحة المقال.
+7. **الفحص يشمل النسختين**: `run_once` يفحص **اتّحاد** مصادر `ar`+`en` بلا تكرار وبتنفيذ واحد لكل رابط.
+
+**الثابت (لم يتغيّر):** تعذّر التحقّق من أي مصدر ⇒ `draft_unverified` فقط، ولا يُلمس `articles.json`/`sitemap.xml`، و`PUBLISH_MODE=draft` يبقى الافتراضي. `--skip-source-check` يبقى للاستخدام اليدوي فقط ويُسجَّل `[WARN]`.
+
+**تحقّق فعلي عبر الشبكة (بلا مزوّدي AI):** `probe_source` على المصادر المعتمدة السبع ⇒ `ok` (200 · 4KB–478KB). `www.mol.gov.sa` و`portal.mol.gov.sa` ⇒ `dns` (والاثنان مرفوضان أيضاً ساكنياً). الروابط المرشّحة: `/علاقات-العمل` ⇒ `ok` (200)؛ `/ministry-services/services/end-service-benefit-calculator?s=09` ⇒ `http_404`؛ `prod.hrsd.gov.sa/...` ⇒ `dns` (المضيف لا يُترجَم). واعتُمد البديل الرسمي `/media-center/media/leendofservice` ⇒ `ok`.
+
+**حدود البوابة:** `*.gov.sa` + `qiwa.sa` فقط — لا يُقبل نطاق لمجرد أنّ اسمه يبدو حكومياً، ولا يُضاف استثناء فردي.

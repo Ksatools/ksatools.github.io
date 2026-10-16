@@ -3,21 +3,31 @@
 """
 auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائية اللغة + أرشفة + منشورات تسويقية.
 
-مكتبات Python القياسية فقط (بلا حزم خارجية)، والاتصال بـ Gemini عبر HTTP مباشرة.
+مكتبات Python القياسية فقط (بلا حزم خارجية)، والاتصال بمزوّد المحتوى عبر HTTP مباشرة
+(Groq هو الافتراضي — خطة مجانية — وGemini اختياري بتحديد صريح).
 
 التشغيل:
     python auto_marketing.py --selftest          # اختبارات داخلية بلا شبكة ولا API
     python auto_marketing.py --dry-run           # دورة كاملة بمحتوى تجريبي بلا كتابة
     python auto_marketing.py --verify            # فحص ملفات الموقع/الأرشفة فقط
-    python auto_marketing.py                     # دورة واحدة (الافتراضي: draft)
+    python auto_marketing.py                     # دورة واحدة (الافتراضي: draft + groq)
+    python auto_marketing.py --provider gemini   # اختيار صريح للمزوّد (بلا انتقال تلقائي)
     PUBLISH_MODE=auto python auto_marketing.py   # نشر تلقائي بعد اجتياز كل البوابات
 
 متغيّرات البيئة (لا تُطبع قيمها في السجل أبداً):
-    GEMINI_API_KEY, GEMINI_MODEL (افتراضي: gemini-3.8-flash),
+    AI_PROVIDER (groq|gemini، الافتراضي groq),
+    GROQ_API_KEY, GROQ_MODEL (افتراضي: openai/gpt-oss-20b),
+    GEMINI_API_KEY, GEMINI_MODEL (افتراضي: gemini-3.8-flash، اختياري — يُستعمل مع AI_PROVIDER=gemini فقط),
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
     PUBLISH_MODE (draft|auto، الافتراضي draft),
     SOCIAL_LANGUAGE (ar|en|both، الافتراضي both),
     DRAFT_DIR (مسار المسودات، الافتراضي drafts/)
+
+مزوّدو المحتوى:
+    Groq هو الافتراضي (‎/v1/chat/completions مع response_format=json_object)، وGemini خيار
+    صريح. لا يوجد انتقال تلقائي بين المزوّدين: فشل المزوّد المحدَّد يُنهي الدورة بفشل واضح
+    ولا يُرسل أي طلب إلى المزوّد الآخر. مخرجات المزوّد تمرّ على البوابات نفسها بلا استثناء
+    (validate_article + duplicate_check + فحص المصادر الرسمية قبل النشر).
 
 حالة التسويق (marketing_state.json):
     ملف محلي (مُتجاهَل في Git) يحفظ تقدّم المواضيع. في GitHub Actions يُحفظ عبر Cache،
@@ -37,13 +47,16 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     1 = خطأ داخلي غير متوقّع، أو فشل في --selftest / --verify.
     2 = فشل توليد المحتوى: لم تنتج الدورة أي نسخة صالحة (EXIT_GENERATION_FAILED)
         — لا مسودات ولا نشر، ويُحفظ `attempts` فقط.
-    3 = فشل الإعداد: GEMINI_API_KEY غير مضبوط (EXIT_CONFIG_FAILED)
-        — لا محاولة تُستهلك، ولا ملف يُكتب، ولا نداء شبكة.
+    3 = فشل الإعداد: مفتاح المزوّد المحدَّد غير مضبوط (EXIT_CONFIG_FAILED)
+        — GROQ_API_KEY لمزوّد groq أو GEMINI_API_KEY لمزوّد gemini.
+        لا محاولة تُستهلك، ولا ملف يُكتب، ولا نداء شبكة.
 
-الإعادة عند أخطاء Gemini المؤقّتة:
-    يُعاد الطلب عند 408/425/429/500/502/503/504 بحدّ أقصى GEMINI_MAX_TRIES = 4
-    محاولات لكل نسخة لغوية، بتراجع تصاعدي 2/4/8s (سقف 30s) وباحترام Retry-After
-    كرقم ثوانٍ فقط. الإعادة ليست محاولة موضوع جديدة ولا تزيد MAX_ATTEMPTS.
+الإعادة عند أخطاء المزوّد المؤقّتة:
+    يُعاد الطلب عند 408/425/500/502/503/504 وعند 429 المؤقّت (تجاوز معدّل) بحدّ أقصى
+    GEMINI_MAX_TRIES = 4 محاولات لكل نسخة لغوية، بتراجع تصاعدي 2/4/8s (سقف 30s) وباحترام
+    Retry-After كرقم ثوانٍ فقط. ولا يُعاد إطلاقاً عند 401/403 (مصادقة)، أو نموذج غير متاح،
+    أو 429 يشير إلى حصة يومية/فوترة (تكراره بلا فائدة). الإعادة ليست محاولة موضوع
+    جديدة ولا تزيد MAX_ATTEMPTS.
 """
 
 from __future__ import annotations
@@ -55,6 +68,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
 import time
@@ -115,9 +129,88 @@ TOOL_LABEL = {
     "cv": ("منسّق السيرة الذاتية وفاحص ATS", "Resume Builder & ATS Checker"),
 }
 
-# النطاقات المسموح بها للمصادر الرسمية
+# النطاقات المسموح بها للمصادر الرسمية (لا توسيع: كل نطاق ليس `.gov.sa` أو قوى مرفوض)
 ALLOWED_SOURCE_SUFFIXES = (".gov.sa",)
 ALLOWED_SOURCE_HOSTS = {"qiwa.sa", "www.qiwa.sa"}
+# نطاقات منتهية/مهجورة تُرفض صراحةً فلا يمرّ مصدر ميت من البوابة الساكنة.
+# `mol.gov.sa` هو الاسم السابق لوزارة العمل، وتحققنا عملياً أنه لا يُترجَم عبر DNS
+# (NXDOMAIN) — البديل الرسمي الحالي هو `hrsd.gov.sa`.
+BLOCKED_SOURCE_HOSTS = {"mol.gov.sa", "www.mol.gov.sa"}
+
+# فحص المصادر عبر الشبكة: بعض المواقع الرسمية (مثل `hrsd.gov.sa`) ترفض الطلبات بلا
+# ترويسات طلب عادية فتُعيد 403، وتُعيد 200 معها — لذا نرسل ترويسات قياسية.
+SOURCE_CHECK_TIMEOUT = 20
+SOURCE_MIN_BYTES = 200
+# ترويسة `User-Agent` معرَّفة هنا (قبل `SOURCE_REQUEST_HEADERS`) لتُستعمل في فحص المصادر
+# وفي بقية الطلبات دون تكرار.
+UA = "KSA-Tools-Bot/1.0 (+https://ksatools.github.io/)"
+SOURCE_REQUEST_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ar,en;q=0.8",
+}
+# مكتبة المصادر الرسمية المعتمدة: الرابط الأساسي + بديل رسمي لنفس الجهة عند تعذّر الأول.
+OFFICIAL_SOURCE_LIBRARY = {
+    "hrsd_home": (
+        "وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/"),
+    "hrsd_labor_relations": (
+        "علاقات العمل — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/علاقات-العمل"),
+    "hrsd_labor_law": (
+        "نظام العمل — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/knowledge-centre/نظام-العمل"),
+    "hrsd_eosb": (
+        "نهاية الخدمة — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/media-center/media/leendofservice"),
+    "hrsd_services": (
+        "دليل خدمات وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/ministry-services/services"),
+    "gosi_home": (
+        "المؤسسة العامة للتأمينات الاجتماعية",
+        "https://www.gosi.gov.sa/"),
+    "qiwa_eosb": (
+        "منصة قوى — احتساب مكافأة نهاية الخدمة",
+        "https://qiwa.sa/ar/employees/manage-your-current-job/how-calculate-your-end-service-benefits"),
+}
+# لكل موضوع: مصدر أساسي أولاً ثم بديل رسمي معتمد لنفس الجهة (عند تعذّر الأول).
+DEFAULT_SOURCE_KEYS = ("hrsd_labor_law", "hrsd_home", "gosi_home")
+TOPIC_SOURCE_KEYS = {
+    "eosb-basics": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "eosb-resignation": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "eosb-full-entitlement": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "labor-art84": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art85": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art81": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art80": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "rights-contract-end": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "rights-employer-termination": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "annual-leave-balance": ("hrsd_labor_law", "hrsd_services", "hrsd_home"),
+    "daily-monthly-wage": ("hrsd_labor_law", "hrsd_home", "hrsd_services"),
+    "wage-definition": ("hrsd_labor_law", "hrsd_home", "hrsd_services"),
+    "basic-vs-actual-wage": ("hrsd_labor_law", "hrsd_home", "gosi_home"),
+    "payslip-reading": ("hrsd_labor_law", "gosi_home", "hrsd_home"),
+    "net-salary-calculation": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "final-settlement": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "contract-end-vs-resignation": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "notice-period": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "employee-exit-checklist": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "gosi-overview": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "gosi-deduction-basis": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "gosi-new-registrant": ("gosi_home", "hrsd_services", "hrsd_home"),
+}
+
+
+def official_sources_for(topic) -> list:
+    """المصادر الرسمية المفضّلة لموضوع: الأساسي أولاً ثم بدائله الرسمية."""
+    tid = topic.get("id") if isinstance(topic, dict) else ""
+    keys = TOPIC_SOURCE_KEYS.get(tid) or DEFAULT_SOURCE_KEYS
+    out = []
+    for key in keys:
+        entry = OFFICIAL_SOURCE_LIBRARY.get(key)
+        if entry:
+            out.append({"title": entry[0], "url": entry[1]})
+    return out
 
 MIN_WORDS = {"ar": 250, "en": 250}
 MIN_SECTIONS = 3
@@ -125,7 +218,7 @@ MAX_SECTIONS = 12
 MIN_TOTAL_CHARS = 1200
 MAX_ATTEMPTS = 3
 
-# سياسة إعادة المحاولة عند استدعاء Gemini: أخطاء مؤقّتة فقط.
+# سياسة إعادة المحاولة عند استدعاء مزوّد المحتوى (Groq/Gemini): أخطاء مؤقّتة فقط.
 #   408/425 = انتهاء مهلة أو طلب مبكّر، 429 = تجاوز المعدّل، 5xx = خلل مؤقّت عند المزوّد.
 #   503 (UNAVAILABLE) هو الأكثر وقوعاً: «النموذج يواجه طلباً مرتفعاً حالياً».
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
@@ -137,13 +230,37 @@ GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 
 GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار بين محاولتين
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
 EXIT_GENERATION_FAILED = 2
-# رمز خروج مميّز لفشل الإعداد (غياب GEMINI_API_KEY مثلاً): لا توليد ولا نشر ولا استهلاك محاولات.
+# رمز خروج مميّز لفشل الإعداد (غياب مفتاح المزوّد): لا توليد ولا نشر ولا استهلاك محاولات.
 EXIT_CONFIG_FAILED = 3
+
+# ---------------------------------------------------------------------------------
+# مزوّدو المحتوى: Groq هو الافتراضي (خطة مجانية)، وGemini خيار صريح.
+# لا انتقال تلقائي بين المزوّدين عند الفشل (منعاً لطلبات غير مقصودة للمزوّد الآخر).
+AI_PROVIDERS = ("groq", "gemini")
+DEFAULT_PROVIDER = "groq"
+
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+DEFAULT_MODEL = "gemini-3.8-flash"        # افتراضي Gemini (توافق خلفي مع الاسم القديم)
+
+PROVIDER_KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+PROVIDER_MODEL_ENV = {"groq": "GROQ_MODEL", "gemini": "GEMINI_MODEL"}
+PROVIDER_DEFAULT_MODEL = {"groq": DEFAULT_GROQ_MODEL, "gemini": DEFAULT_MODEL}
+
+# رسائل تدلّ على أن النموذج غير متاح: العِلاج تغيير النموذج لا إعادة الطلب.
+MODEL_STOP_HINTS = (
+    "model_not_found", "model does not exist", "model not found",
+    "decommissioned", "no longer supported", "unknown model", "invalid model",
+)
+# رسائل تدلّ على حصة يومية أو مشكلة فوترة: تكرار الطلب بلا فائدة (خلاف تجاوز المعدّل اللحظي).
+QUOTA_STOP_HINTS = (
+    "requests per day", "per day", "daily limit", "daily quota",
+    "insufficient_quota", "exceeded your current quota", "check your plan",
+    "billing", "payment required",
+)
 
 # نقطة استبدال للاختبارات: نصمت الانتظار الحقيقي في الاختبار الذاتي.
 SLEEP = time.sleep
-
-UA = "KSA-Tools-Bot/1.0 (+https://ksatools.github.io/)"
 
 DISCLAIMER_AR = (
     "هذا المحتوى إرشادي وتعليمي عام، ولا يُعدّ استشارة قانونية. "
@@ -166,11 +283,11 @@ def log(msg) -> None:
 
 
 def redact(text) -> str:
-    """إخفاء أي سرّ قد يظهر داخل رسالة خطأ."""
+    """إخفاء أي سرّ قد يظهر داخل رسالة خطأ (مفاتيح كل المزوّدين + تلغرام)."""
     if not text:
         return ""
     out = str(text)
-    for var in ("GEMINI_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for var in ("GEMINI_API_KEY", "GROQ_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
         val = os.environ.get(var, "")
         if val and len(val) >= 6:
             out = out.replace(val, "***")
@@ -520,24 +637,59 @@ def backoff_delay(attempt, *, retry_after=None, base=GEMINI_BACKOFF_BASE,
     return float(delay)
 
 
-def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
-    """يرسل الطلب إلى Gemini ويعيد (status, raw, tries_used).
+def classify_failure(status, raw) -> tuple:
+    """يصنّف استجابة فشل من مزوّد المحتوى إلى (retryable, code, note).
 
-    يُعاد الطلب على الأخطاء المؤقّتة فقط (خطأ شبكة أو رمز في RETRYABLE_STATUS)
-    بانتظار تصاعدي وحدّ أعلى صريح `tries`. الأخطاء غير المؤقّتة (400/401/403/404/422…)
-    تُعاد إلى المستدعي فوراً بلا إعادة، وخطأ الشبكة بعد استنفاد المحاولات يُرفع.
+    - auth  : 401/403 (مفتاح ناقص/غير صالح/بلا صلاحية) — لا يُعاد.
+    - model : 404 أو رسالة تدلّ على نموذج غير متاح — لا يُعاد (العِلاج تغيير النموذج).
+    - quota : 429 مع دلالة حصة يومية أو فوترة — لا يُعاد (تكراره بلا فائدة).
+    - rate_limit : 429 مؤقّت — يُعاد مع احترام Retry-After.
+    - transient  : 408/425/5xx — يُعاد بتراجع تصاعدي.
+    - other : أي رمز آخر — لا يُعاد.
+    """
+    text = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else (
+        "" if raw is None else str(raw))
+    low = text.lower()
+    if status in (401, 403):
+        return False, "auth", "خطأ مصادقة/صلاحية — لا يُعاد الطلب"
+    if status == 404 or any(h in low for h in MODEL_STOP_HINTS):
+        return False, "model", "النموذج غير متاح — لا يُعاد الطلب"
+    if status == 429:
+        if any(h in low for h in QUOTA_STOP_HINTS):
+            return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
+        return True, "rate_limit", "تجاوز معدّل مؤقّت"
+    if status in RETRYABLE_STATUS:
+        return True, "transient", "خطأ مؤقّت"
+    return False, "other", "خطأ غير قابل لإعادة المحاولة"
+
+
+def format_failure(status, raw, tries_used, tries) -> str:
+    """رسالة فشل موحّدة (بلا أسرار): الرمز + مقتطف الاستجابة + التصنيف وعدد المحاولات."""
+    retryable, _code, note = classify_failure(status, raw)
+    if retryable and tries_used >= tries:
+        note = "خطأ مؤقّت — استُنفدت المحاولات"
+    snippet = redact(raw.decode("utf-8", "replace")[:300]) if isinstance(raw, (bytes, bytearray)) else ""
+    return f"http_{status}: {snippet} [{note} — محاولات {tries_used}/{tries}]"
+
+
+def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_MAX_TRIES,
+                     sleep=None):
+    """يرسل طلب POST إلى مزوّد المحتوى ويعيد (status, raw, tries_used).
+
+    إعادة المحاولة محدودة للأخطاء المؤقّتة فقط (خطأ شبكة أو رمز يُصنَّف مؤقّتاً)،
+    ولا تحدث إطلاقاً عند 401/403 أو نموذج غير متاح أو حصة يومية/فوترة، ويُحترم
+    Retry-After عند 429. `retries=0` في http_request_full يمنع تضاعف المحاولات.
     """
     sleep = SLEEP if sleep is None else sleep
     tries = max(1, int(tries))
     last_exc = None
     for attempt in range(tries):
         try:
-            status, headers, raw, _ = http_request_full(
+            status, resp_headers, raw, _ = http_request_full(
                 url,
                 method="POST",
                 data=body,
-                headers={"Content-Type": "application/json; charset=utf-8",
-                         "x-goog-api-key": api_key},
+                headers=headers,
                 timeout=timeout,
                 retries=0,
             )
@@ -546,24 +698,42 @@ def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sl
             if attempt + 1 >= tries:
                 break
             delay = backoff_delay(attempt)
-            log(f"[RETRY] خطأ شبكة مؤقّت ({type(exc).__name__}) — "
+            log(f"[RETRY] {provider}: خطأ شبكة مؤقّت ({type(exc).__name__}) — "
                 f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
             sleep(delay)
             continue
 
-        if status in RETRYABLE_STATUS and attempt + 1 < tries:
-            delay = backoff_delay(attempt, retry_after=header_get(headers, "Retry-After"))
-            log(f"[RETRY] استجابة مؤقّتة http_{status} — "
+        retryable, _code, _note = classify_failure(status, raw)
+        if retryable and attempt + 1 < tries:
+            delay = backoff_delay(attempt, retry_after=header_get(resp_headers, "Retry-After"))
+            log(f"[RETRY] {provider}: استجابة مؤقّتة http_{status} — "
                 f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
             sleep(delay)
             continue
         return status, raw, attempt + 1
 
-    raise last_exc if last_exc else RuntimeError("gemini_request failed")
+    raise last_exc if last_exc else RuntimeError("provider_request failed")
+
+
+def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
+    """طلب Gemini (نفس سلوك provider_request) — يبقى للتوافق ولاختبارات مسار Gemini."""
+    return provider_request(
+        url, body, {"Content-Type": "application/json; charset=utf-8",
+                    "x-goog-api-key": api_key},
+        provider="Gemini", timeout=timeout, tries=tries, sleep=sleep)
+
+
+def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
+    """طلب Groq (OpenAI-compatible) — المفتاح في ترويسة Authorization، ولا يُطبع أبداً."""
+    return provider_request(
+        url, body, {"Content-Type": "application/json; charset=utf-8",
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {api_key}"},
+        provider="Groq", timeout=timeout, tries=tries, sleep=sleep)
 
 
 # =====================================================================================
-# 6) Gemini
+# 6) مزوّدو المحتوى (Groq افتراضياً، Gemini اختياري)
 # =====================================================================================
 
 def build_prompt(topic, lang: str) -> str:
@@ -581,6 +751,15 @@ def build_prompt(topic, lang: str) -> str:
             "Explain Saudi statutory terms in plain language instead of mistranslating them. "
             "Cover the same statutory constraints as the Arabic version, and label any numeric example clearly as illustrative."
         )
+    preferred = official_sources_for(topic)
+    source_lines = "".join(
+        f"   - {item['title']} — {item['url']}\n" for item in preferred)
+    source_rule = (
+        "4) official_sources: اختر من 2 إلى 4 مصادر من هذه القائمة الرسمية المعتمدة فقط، "
+        "وانسخ الرابط كما هو بالحرف (ولا تخترع رابطاً ولا نطاقاً آخر):\n"
+        f"{source_lines}"
+        "   ممنوع تماماً استخدام النطاق المنتهي mol.gov.sa أو أي نطاق غير مذكور أعلاه.\n"
+    )
     return (
         "أنت محرّر محتوى إرشادي-عملي لمنصة أدوات سعودية. ما تكتبه إرشاد عام وليس استشارة قانونية.\n"
         f"الموضوع: {title}\n"
@@ -590,7 +769,7 @@ def build_prompt(topic, lang: str) -> str:
         "1) أعد كائن JSON واحداً فقط، بلا نص خارجه وبلا أسوار markdown.\n"
         "2) لا تُدرج أي HTML أو وسوم أو سكربتات داخل النصوص؛ نصّ عادي فقط.\n"
         "3) لا تخترع أرقام مواد أو نِسَباً أو مُدداً أو جهات. إن لم تكن واثقاً فاذكر القاعدة العامة بتحفّظ.\n"
-        "4) official_sources: من 2 إلى 4 مصادر رسمية سعودية فقط، ونطاقاتها ضمن *.gov.sa أو qiwa.sa.\n"
+        f"{source_rule}"
         "5) لا أسلوب دعائياً، ولا وعوداً بنتائج توظيف مضمونة، ولا ادّعاء بأن المحتوى مُراجَع قانونياً.\n"
         "6) لا تذكر أنك نموذج ذكاء اصطناعي.\n\n"
         "بنية JSON المطلوبة بالحرف:\n"
@@ -609,9 +788,26 @@ def build_prompt(topic, lang: str) -> str:
     )
 
 
+def _extract_json_text(text):
+    """يحوّل نصّ مخرجات المزوّد إلى JSON: مباشرةً، أو بعد استخراج أول كائن {…} عند الحاجة."""
+    text = (text or "").strip()
+    if not text:
+        return False, None, "empty_text"
+    try:
+        return True, json.loads(text), "ok"
+    except ValueError:
+        match = re.search(r"\{.*\}", text, re.S)
+        if match:
+            try:
+                return True, json.loads(match.group(0)), "ok_extracted"
+            except ValueError:
+                pass
+        return False, None, "invalid_content_json"
+
+
 def gemini_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
                         sleep=None):
-    """يرجع (ok, data|None, message). لا يطبع المفتاح أبداً.
+    """يرجع (ok, data|None, message) من Gemini. لا يطبع المفتاح أبداً.
 
     إعادة المحاولة تحدث داخل gemini_request: أخطاء مؤقّتة فقط وبحدّ أعلى صريح،
     ولا تزيد عدّاد `attempts` (العدّ مرة واحدة لكل دورة في run_once).
@@ -620,7 +816,7 @@ def gemini_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX
         return False, None, "no_api_key"
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        + urllib.parse.quote(model or "gemini-3.8-flash", safe="")
+        + urllib.parse.quote(model or DEFAULT_MODEL, safe="")
         + ":generateContent"
     )
     payload = {
@@ -640,11 +836,7 @@ def gemini_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX
         return False, None, f"network_error: {redact(exc)}"
 
     if status != 200:
-        note = ("خطأ مؤقّت — استُنفدت المحاولات" if status in RETRYABLE_STATUS
-                else "خطأ غير قابل لإعادة المحاولة")
-        return False, None, (
-            f"http_{status}: {redact(raw.decode('utf-8', 'replace')[:300])}"
-            f" [{note} — محاولات {tries_used}/{tries}]")
+        return False, None, format_failure(status, raw, tries_used, tries)
 
     try:
         envelope = json.loads(raw.decode("utf-8"))
@@ -661,19 +853,80 @@ def gemini_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX
     except (KeyError, IndexError, TypeError):
         return False, None, "no_candidate_text"
 
-    text = (text or "").strip()
-    if not text:
-        return False, None, "empty_text"
+    return _extract_json_text(text)
+
+
+# تعليمات نظام لـGroq: مخرجات JSON صالحة فقط، بلا نص أو أسوار markdown حولها.
+GROQ_SYSTEM_PROMPT = (
+    "أنت مساعد إنتاج محتوى آلي. أعد كائن JSON واحداً صالحاً فقط بالحقول المطلوبة في "
+    "تعليمات المستخدم، دون أي نص إضافي ودون أسوار markdown. لا تذكر أنك نموذج ذكاء اصطناعي."
+)
+
+
+def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
+                       sleep=None):
+    """يرجع (ok, data|None, message) من Groq عبر مخطط OpenAI-compatible.
+
+    المفتاح يُرسل في ترويسة Authorization ولا يُطبع أبداً، ولا يظهر في أي رسالة خطأ.
+    المخرجات تُمرَّر كما هي إلى بوابات التحقّق الحالية (لا استثناءات ولا تجاوز).
+    """
+    if not api_key:
+        return False, None, "no_api_key"
+    payload = {
+        "model": model or DEFAULT_GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": GROQ_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.35,
+        "max_tokens": 12000,
+        "response_format": {"type": "json_object"},
+    }
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     try:
-        return True, json.loads(text), "ok"
+        status, raw, tries_used = groq_request(
+            GROQ_URL, body, api_key, timeout=timeout, tries=tries, sleep=sleep)
+    except Exception as exc:  # noqa: BLE001
+        return False, None, f"network_error: {redact(exc)}"
+
+    if status != 200:
+        return False, None, format_failure(status, raw, tries_used, tries)
+
+    try:
+        envelope = json.loads(raw.decode("utf-8"))
     except ValueError:
-        match = re.search(r"\{.*\}", text, re.S)
-        if match:
-            try:
-                return True, json.loads(match.group(0)), "ok_extracted"
-            except ValueError:
-                pass
-        return False, None, "invalid_content_json"
+        return False, None, "invalid_envelope_json"
+    if not isinstance(envelope, dict):
+        return False, None, "invalid_envelope_shape"
+    if envelope.get("error"):
+        # خطأ أُعلن داخل جسم الاستجابة (بعض الأخطاء تصل بترميز 200) — بلا كشف أسرار.
+        return False, None, "provider_error: " + redact(json.dumps(envelope.get("error"), ensure_ascii=False)[:200])
+
+    choices = envelope.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False, None, "no_choices"
+    choice = choices[0]
+    message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+    text = message.get("content")
+    if not isinstance(text, str) or not text.strip():
+        if choice.get("finish_reason") == "length":
+            return False, None, "truncated_output"
+        return False, None, "empty_text"
+    if choice.get("finish_reason") == "length":
+        return False, None, "truncated_output"
+    return _extract_json_text(text)
+
+
+def generate_json(provider, prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
+                  sleep=None):
+    """يوجّه التوليد إلى المزوّد المطلوب فقط — بلا انتقال تلقائي عند الفشل."""
+    if provider == "groq":
+        return groq_generate_json(prompt, api_key=api_key, model=model,
+                                  timeout=timeout, tries=tries, sleep=sleep)
+    if provider == "gemini":
+        return gemini_generate_json(prompt, api_key=api_key, model=model,
+                                    timeout=timeout, tries=tries, sleep=sleep)
+    return False, None, f"unknown_provider: {provider}"
 
 
 # =====================================================================================
@@ -699,14 +952,42 @@ def _text(value, field, *, lo, hi):
     return text
 
 
+def normalize_source_url(url: str) -> str:
+    """يطبّع رابط المصدر: يحذف المسافات، يرمّز المسارات العربية (UTF-8 %)، ويُسقط fragment."""
+    url = strip_ws(url)
+    if not url:
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url
+    path = urllib.parse.quote(parts.path, safe="/%:@!$&'()*+,;=-._~")
+    query = urllib.parse.quote(parts.query, safe="=&%:@!$'()*+,;/?-._~")
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+
+
+def is_blocked_source_host(host: str) -> bool:
+    """يحجب النطاق الميت نفسه وكل نطاقاته الفرعية (مثل `portal.mol.gov.sa`).
+
+    لولاه لمرّ `portal.mol.gov.sa` من فحص اللاحقة `.gov.sa` — وهذا توسيعٌ للثقة مرفوض.
+    """
+    host = (host or "").lower()
+    return any(host == b or host.endswith("." + b) for b in BLOCKED_SOURCE_HOSTS)
+
+
 def is_allowed_source_url(url: str) -> bool:
     try:
         parts = urllib.parse.urlsplit(url or "")
     except ValueError:
         return False
-    if parts.scheme != "https" or not parts.netloc:
+    if parts.scheme != "https":
         return False
-    host = parts.netloc.lower().split(":")[0]
+    # `hostname` يحذف المنفذ وبيانات المستخدم ويحوّل إلى أحرف صغيرة (خلاف `netloc`).
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    if is_blocked_source_host(host):
+        return False
     if host in ALLOWED_SOURCE_HOSTS:
         return True
     return any(host.endswith(sfx) for sfx in ALLOWED_SOURCE_SUFFIXES)
@@ -725,7 +1006,7 @@ def normalize_sources(raw) -> list:
         if extra:
             raise Reject(f"official_sources[{i}]: حقول غير متوقّعة")
         title = _text(item.get("title"), f"official_sources[{i}].title", lo=3, hi=160)
-        url = strip_ws(item.get("url"))
+        url = normalize_source_url(item.get("url"))
         if not is_allowed_source_url(url):
             raise Reject(f"official_sources[{i}]: رابط غير مسموح ({url[:70]})")
         if url in seen:
@@ -850,20 +1131,69 @@ def duplicate_check(article, existing_records) -> list:
     return problems
 
 
-def check_sources(sources, *, timeout=20) -> list:
+SOURCE_FAILURE_LABEL = {
+    "dns": "فشل DNS: تعذّر ترجمة اسم المضيف",
+    "timeout": "انتهت المهلة قبل استجابة الخادم",
+    "network": "خطأ شبكة",
+    "empty": f"استجابة فارغة أو أقصر من {SOURCE_MIN_BYTES} بايت",
+}
+
+
+def _source_failure_code(exc) -> str:
+    """يصنّف استثناء الشبكة: dns أو timeout أو network (بلا كشف أي أسرار)."""
+    for candidate in (getattr(exc, "reason", None), exc):
+        if isinstance(candidate, socket.gaierror):
+            return "dns"
+        if isinstance(candidate, (TimeoutError, socket.timeout)):
+            return "timeout"
+    return "network"
+
+
+def probe_source(url, *, timeout=None) -> tuple:
+    """يفحص مصدراً واحداً ويرجع (ok, code, note).
+
+    code: ok / dns / timeout / network / http_<status> / empty.
+    """
+    url = normalize_source_url(url)
+    if timeout is None:
+        timeout = SOURCE_CHECK_TIMEOUT
+    try:
+        status, body, _ = http_request(
+            url, method="GET", headers=dict(SOURCE_REQUEST_HEADERS),
+            timeout=timeout, retries=1)
+    except Exception as exc:  # noqa: BLE001
+        code = _source_failure_code(exc)
+        if code == "network":
+            note = f"{SOURCE_FAILURE_LABEL['network']}: {redact(exc)}"
+        else:
+            note = SOURCE_FAILURE_LABEL[code]
+        return False, code, note
+    if status != 200:
+        note = f"أعادت الحالة {status}"
+        if status in RETRYABLE_STATUS:
+            note += " (خلل مؤقّت عند الخادم)"
+        return False, f"http_{status}", note
+    if not (body and len(body) > SOURCE_MIN_BYTES):
+        return False, "empty", SOURCE_FAILURE_LABEL["empty"]
+    return True, "ok", f"استجابة 200 ({len(body)} بايت)"
+
+
+def probe_sources(sources, *, timeout=None) -> list:
+    """يفحص قائمة مصادر مرة واحدة ويرجع نتائج منظّمة [{title,url,ok,code,note}]."""
+    results = []
+    for src in sources or []:
+        url = src.get("url") if isinstance(src, dict) else src
+        title = src.get("title") if isinstance(src, dict) else ""
+        ok, code, note = probe_source(url, timeout=timeout)
+        results.append({"title": title or "", "url": normalize_source_url(url),
+                        "ok": ok, "code": code, "note": note})
+    return results
+
+
+def check_sources(sources, *, timeout=None) -> list:
     """يتحقّق من إمكانية الوصول للمصادر الرسمية. يرجع قائمة مشاكل (فارغة = نجاح)."""
-    problems = []
-    for src in sources:
-        try:
-            status, body, _ = http_request(src["url"], method="GET", timeout=timeout, retries=1)
-        except Exception as exc:  # noqa: BLE001
-            problems.append(f"{src['url']} غير قابل للوصول ({redact(exc)})")
-            continue
-        if status != 200:
-            problems.append(f"{src['url']} أعاد الحالة {status}")
-        elif not (body and len(body) > 200):
-            problems.append(f"{src['url']} استجابة فارغة أو قصيرة جداً")
-    return problems
+    return [f"{r['url']} — {r['note']} [{r['code']}]"
+            for r in probe_sources(sources, timeout=timeout) if not r["ok"]]
 
 
 # =====================================================================================
@@ -1311,9 +1641,6 @@ def send_telegram(articles, social_lang: str, token: str, chat_id: str) -> str:
 # 11) الدورة الكاملة
 # =====================================================================================
 
-DEFAULT_MODEL = "gemini-3.8-flash"
-
-
 def write_article_files(article, *, published: bool) -> Path:
     root = ARTICLES_DIR if published else DRAFTS_DIR
     path = root / article["lang"] / f"{article['slug']}.html"
@@ -1321,18 +1648,35 @@ def write_article_files(article, *, published: bool) -> Path:
     return path
 
 
+def resolve_provider(value=None) -> str:
+    """يحسم المزوّد: الوسيط الصريح، ثم AI_PROVIDER، ثم الافتراضي. غير المعروف ⇒ الافتراضي."""
+    name = (value if value is not None else os.environ.get("AI_PROVIDER", "")) or ""
+    name = str(name).strip().lower()
+    if name in AI_PROVIDERS:
+        return name
+    if name:
+        log(f"[WARN] مزوّد غير معروف ({redact(name)}) — سيُستخدم {DEFAULT_PROVIDER}.")
+    return DEFAULT_PROVIDER
+
+
 def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
-             skip_source_check=False, api_key=None, model=None) -> int:
-    api_key = os.environ.get("GEMINI_API_KEY", "") if api_key is None else api_key
-    model = model or os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
+             skip_source_check=False, provider=None, api_key=None, model=None) -> int:
+    provider = resolve_provider(provider)
+    key_env = PROVIDER_KEY_ENV[provider]
+    model_env = PROVIDER_MODEL_ENV[provider]
+    api_key = os.environ.get(key_env, "") if api_key is None else api_key
+    model = model or os.environ.get(model_env) or PROVIDER_DEFAULT_MODEL[provider]
 
     # فشل الإعداد يُكتشف قبل أي قراءة/كتابة: لا محاولة تُستهلك، ولا ملف مقال أو مسودة،
-    # ولا نداء شبكة. (dry-run مستثنى: يعمل بمصادر وهمية بلا مفتاح.)
+    # ولا نداء شبكة، ولا انتقال إلى مزوّد آخر. (dry-run مستثنى: يعمل بمصادر وهمية بلا مفتاح.)
     if not api_key and not dry_run:
-        log("[FAIL] فشل الإعداد: GEMINI_API_KEY غير مضبوط، ولم يُجرَ توليد أو نشر.")
+        log(f"[FAIL] فشل الإعداد: مفتاح المزوّد ({provider}) غير مضبوط — "
+            f"المتغيّر الناقص: {key_env}، ولم يُجرَ توليد أو نشر.")
         log(f"[FAIL] النتيجة: فشل الإعداد (رمز خروج {EXIT_CONFIG_FAILED}) — "
-            "لم تُستهلك أي محاولة موضوع، ولم يُكتب أي ملف.")
+            "لم تُستهلك أي محاولة موضوع، ولم يُكتب أي ملف، ولم يُرسل أي طلب شبكة.")
         return EXIT_CONFIG_FAILED
+
+    log(f"مزوّد المحتوى: {provider} — النموذج: {model} (لا انتقال تلقائي بين المزوّدين).")
 
     state = load_state()
     records = load_json(ARTICLES_JSON, [])
@@ -1372,7 +1716,8 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         if dry_run:
             ok, data, msg = True, fixture_data(lang), "fixture"
         else:
-            ok, data, msg = gemini_generate_json(build_prompt(topic, lang), api_key=api_key, model=model)
+            ok, data, msg = generate_json(
+                provider, build_prompt(topic, lang), api_key=api_key, model=model)
         if not ok:
             log(f"[FAIL] تعذّر توليد النسخة {lang}: {redact(msg)}")
             state["topics"][topic["id"]][lang] = "error"
@@ -1411,19 +1756,42 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         log(f"[DRY-RUN] لا كتابة. النسخ الصالحة: {', '.join(a['lang'] for a in ready)} — لم يُلمس أي ملف.")
         return 0
 
-    if len(ready) == 2 and not skip_source_check:
-        problems = check_sources(ready[0]["official_sources"])
+    # --- فحص المصادر الرسمية: يجري لكل مصدر مستشهد به في كل نسخة اجتازت بوابة
+    # الجودة، حتى لو اجتازت نسخة واحدة فقط. النسخة الواحدة غير مؤهلة للنشر على أي
+    # حال، لكن نتيجة الفحص تحدّد تصنيف المسودة: نجاح كل المصادر ⇒ «draft»، وفشل أي
+    # مصدر أو تعذّر التحقّق ⇒ «draft_unverified» (لا تُصنَّف النسخة متحقَّقة).
+    if skip_source_check:
+        log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
+    else:
+        # نجمع مصادر النسخ الجاهزة ونوحّدها (ar/en قد تتشارك المصادر) بلا طلب مزدوج.
+        sources, seen_urls = [], set()
+        for art in ready:
+            for src in art.get("official_sources") or []:
+                if not isinstance(src, dict):
+                    continue
+                url = normalize_source_url(src.get("url"))
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append({"title": src.get("title", ""), "url": url})
+        source_results = probe_sources(sources)
+        problems = [f"{r['url']} — {r['note']} [{r['code']}]"
+                    for r in source_results if not r["ok"]]
+        log(f"[SOURCES] فحص {len(source_results)} مصدراً رسمياً عبر الشبكة "
+            f"(بمهلة {SOURCE_CHECK_TIMEOUT}s وبترويسات طلب عادية).")
+        for r in source_results:
+            log(f"   {'[OK]' if r['ok'] else '[FAIL]'} {r['url']} — {r['note']} [{r['code']}]")
         if problems:
-            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسختان مسودتين غير منشورتين:")
+            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسخ المولَّدة "
+                "مسودات غير منشورة (unverified)، ولا يُلمس articles.json ولا sitemap.xml:")
             for p in problems:
                 log("   - " + redact(p))
             for art in ready:
                 write_article_files(art, published=False)
                 state["topics"][topic["id"]][art["lang"]] = "draft_unverified"
             save_state(state)
+            log(f"[DONE] اكتملت الدورة بلا نشر: {len(ready)} مسودة بحالة "
+                "draft_unverified لإعادة المحاولة لاحقاً.")
             return 0
-    elif skip_source_check:
-        log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
 
     if len(ready) != 2:
         missing = [l for l in ("ar", "en") if l not in results]
@@ -1697,7 +2065,8 @@ def selftest() -> int:
           reconcile_state_with_records(
               {"topics": {t_second: {"ar": "draft", "en": "pending", "attempts": 1}}}, pairs_pub) == 0)
 
-    # 13) سياسة إعادة المحاولة عند التوليد (استجابات وهمية — بلا شبكة وبلا انتظار)
+    # 13) مزوّدو المحتوى (Groq افتراضياً، Gemini اختياري): إعادة المحاولة، بوابات
+    #     الجودة، ومنع النشر — كلها باستجابات وهمية فقط (بلا شبكة وبلا انتظار حقيقي).
     _real_http_full = globals()["http_request_full"]
     _real_sleep = globals()["SLEEP"]
     _real_paths = {name: globals()[name] for name in (
@@ -1717,25 +2086,59 @@ def selftest() -> int:
 
         return _fn, calls
 
+    _FAKE_GROQ_KEY = "gsk_FAKE_1234567890_SELFTEST"
+
     def _envelope(lang):
         text = json.dumps(fixture_data(lang), ensure_ascii=False)
         blob = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
         return 200, {}, json.dumps(blob, ensure_ascii=False).encode("utf-8")
 
+    def _groq_envelope(content=None, lang=None, finish="stop"):
+        """ظرف Groq (OpenAI-compatible) بنصّ JSON داخل message.content."""
+        if content is None:
+            content = json.dumps(fixture_data(lang), ensure_ascii=False)
+        blob = {
+            "id": "chatcmpl-selftest",
+            "object": "chat.completion",
+            "model": DEFAULT_GROQ_MODEL,
+            "choices": [{"index": 0, "finish_reason": finish,
+                         "message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+        return 200, {}, json.dumps(blob, ensure_ascii=False).encode("utf-8")
+
+    def _request_prompt(kwargs):
+        """يستخرج نصّ التعليمات من جسم الطلب أياً كان شكل المزوّد (Gemini أو Groq)."""
+        body = json.loads(kwargs["data"].decode("utf-8"))
+        if "messages" in body:
+            return body["messages"][-1]["content"]
+        return body["contents"][0]["parts"][0]["text"]
+
+    def _provider_of(url):
+        return "groq" if "api.groq.com" in url else "gemini"
+
     def _fake_by_lang(en_ok):
-        """503 للنسخة العربية دائماً، و(503 أو نجاح) للنسخة الإنجليزية."""
+        """503 للنسخة العربية دائماً، و(503 أو نجاح) للنسخة الإنجليزية — بحسب شكل الطلب.
+
+        طلبات فحص المصادر الرسمية (GET بلا جسم: `data=None`) تُقابَل بمصدر متاح،
+        فيبقى التصنيف المقصود (`draft` أو `draft_unverified`) محكوماً بمحاكاة التوليد لا بالمصادر.
+        """
         calls = {"ar": 0, "en": 0}
+        urls = []
 
         def _fn(url, **kwargs):
-            body = json.loads(kwargs["data"].decode("utf-8"))
-            prompt = body["contents"][0]["parts"][0]["text"]
+            urls.append(url)
+            if kwargs.get("data") is None:   # طلب فحص مصدر رسمي (GET بلا جسم)
+                return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
+            prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
             calls[lang] += 1
             if lang == "en" and en_ok:
-                return _envelope("en") + (url,)
+                ok_env = _groq_envelope(lang=lang) if _provider_of(url) == "groq" else _envelope(lang)
+                return ok_env + (url,)
             return (503, {}, b'{"error":{"status":"UNAVAILABLE","message":"high demand"}}', url)
 
-        return _fn, calls
+        return _fn, calls, urls
 
     def _sandbox():
         """مجلد مؤقّت بدل ملفات الموقع الحقيقية: الدورة الفاشلة لا تلمس المستودع."""
@@ -1801,17 +2204,17 @@ def selftest() -> int:
         _sandbox()
         before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         _sleeps.clear()
-        fake, _calls = _fake_by_lang(en_ok=False)
+        fake, _calls, _urls = _fake_by_lang(en_ok=False)
         globals()["http_request_full"] = fake
-        rc = run_once(mode="draft", api_key="k", model="m")
+        rc = run_once(mode="draft", provider="gemini", api_key="k", model="m")
         rec = load_state()["topics"][TOPICS[0]["id"]]
-        check("دورة فاشلة: رمز خروج غير صفري (لا نجاح مضلّل)",
+        check("Gemini دورة فاشلة: رمز خروج غير صفري (لا نجاح مضلّل)",
               rc == EXIT_GENERATION_FAILED and rc != 0)
-        check("دورة فاشلة: لا صفحة منشورة ولا مسودة ولا ملف يتيم",
+        check("Gemini دورة فاشلة: لا صفحة منشورة ولا مسودة ولا ملف يتيم",
               not ARTICLES_DIR.exists() and not DRAFTS_DIR.exists()
               and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
-        check("دورة فاشلة: الإعادات الداخلية لا تُحتسب محاولات ولا دورات",
+        check("Gemini دورة فاشلة: الإعادات الداخلية لا تُحتسب محاولات ولا دورات",
               rec.get("attempts") == 1 and rec.get("ar") == "error"
               and rec.get("en") == "error" and _calls == {"ar": GEMINI_MAX_TRIES,
                                                           "en": GEMINI_MAX_TRIES})
@@ -1821,9 +2224,9 @@ def selftest() -> int:
         # (هـ) فشل نسخة واحدة في وضع auto: مسودة فقط، ولا نشر إطلاقاً
         good = list(ARTICLES_DIR.glob("**/*.html")) + list(DRAFTS_DIR.glob("**/*.html"))
         before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
-        fake, _calls = _fake_by_lang(en_ok=True)
+        fake, _calls, _urls = _fake_by_lang(en_ok=True)
         globals()["http_request_full"] = fake
-        rc = run_once(mode="auto", api_key="k", model="m")
+        rc = run_once(mode="auto", provider="gemini", api_key="k", model="m")
         drafts = list(DRAFTS_DIR.glob("**/*.html"))
         check("فشل جزئي في وضع auto: لا نشر ولا سجل مقال (مسودة واحدة فقط)",
               rc == 0 and good == [] and len(drafts) == 1
@@ -1832,7 +2235,7 @@ def selftest() -> int:
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before
               and load_state()["topics"][TOPICS[0]["id"]]["en"] == "draft")
 
-        # (و) غياب GEMINI_API_KEY: فشل إعداد صريح بلا محاولات وبلا ملفات وبلا نداء شبكة
+        # (و) غياب مفتاح المزوّد المحدَّد: فشل إعداد صريح بلا محاولات وبلا ملفات وبلا نداء شبكة
         _sandbox()
         before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         _net_calls = []
@@ -1842,40 +2245,478 @@ def selftest() -> int:
             return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
 
         globals()["http_request_full"] = _no_network
-        _saved_key = os.environ.pop("GEMINI_API_KEY", None)
-        _saved_stdout = sys.stdout
-        _capture = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
-        try:
-            sys.stdout = _capture
+
+        def _capture_run(**kwargs):
+            """يشغّل دورة مع التقاط stdout (بلا طباعة) ويرجع (rc, out)."""
+            saved = sys.stdout
+            cap = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
             try:
-                rc = run_once(mode="draft")
+                sys.stdout = cap
+                rc_v = run_once(**kwargs)
+                sys.stdout = saved
+                cap.seek(0)
+                out_v = cap.read()
+                return rc_v, out_v
             finally:
-                sys.stdout = _saved_stdout
-                _capture.seek(0)
-                _out = _capture.read()
-                _capture.close()
+                sys.stdout = saved
+                cap.close()
+
+        _saved_keys = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
+        try:
+            rc, _out = _capture_run(mode="draft", provider="groq")
+            rc_gem, _out_gem = _capture_run(mode="draft", provider="gemini")
+            rc_dry, _out_dry = _capture_run(mode="draft", provider="groq", dry_run=True)
         finally:
-            sys.stdout = _saved_stdout
-            if _saved_key is not None:
-                os.environ["GEMINI_API_KEY"] = _saved_key
+            for var, val in _saved_keys.items():
+                if val is not None:
+                    os.environ[var] = val
 
         _state = load_state()
-        check("غياب المفتاح: فشل إعداد برمز خروج غير صفري ورسالة واضحة",
-              rc == EXIT_CONFIG_FAILED and rc != 0
-              and "فشل الإعداد: GEMINI_API_KEY غير مضبوط، ولم يُجرَ توليد أو نشر." in _out)
+        check("غياب المفتاح (Groq): رمز خروج 3 ورسالة تسمّي GROQ_API_KEY بلا كشف سرّ",
+              rc == EXIT_CONFIG_FAILED and rc != 0 and "GROQ_API_KEY" in _out
+              and "groq" in _out and "لم يُجرَ توليد أو نشر" in _out)
+        check("غياب المفتاح (Gemini): رمز خروج 3 ورسالة تسمّي GEMINI_API_KEY",
+              rc_gem == EXIT_CONFIG_FAILED and "GEMINI_API_KEY" in _out_gem)
         check("غياب المفتاح: بلا محاولات وبلا ملفات وبلا نداء شبكة",
               _net_calls == []
               and _state["topics"][TOPICS[0]["id"]].get("attempts", 0) == 0
               and not STATE_JSON.exists() and not ARTICLES_DIR.exists()
               and not DRAFTS_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
-
-        # (ز) بلا مفتاح + dry-run: يبقى يعمل بلا كتابة (لا ينكسر فحص CI/الاختبار الذاتي)
-        rc = run_once(mode="draft", dry_run=True)
-        check("غياب المفتاح + dry-run: نجاح بلا كتابة",
-              rc == 0 and not STATE_JSON.exists() and not ARTICLES_DIR.exists()
+        check("غياب المفتاح + dry-run: نجاح بلا كتابة (لا ينكسر CI/الاختبار الذاتي)",
+              rc_dry == 0 and not STATE_JSON.exists() and not ARTICLES_DIR.exists()
               and not DRAFTS_DIR.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # (ز) مسار Groq الكامل: ظرف chat.completions صالح ⇒ JSON صالح ⇒ مسودتان
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _groq_reqs = []
+
+        def _fake_groq_ok(url, **kwargs):
+            _groq_reqs.append({"url": url, "headers": dict(kwargs.get("headers") or {}),
+                               "body": json.loads(kwargs["data"].decode("utf-8"))})
+            prompt = _request_prompt(kwargs)
+            lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+            return _groq_envelope(lang=lang) + (url,)
+
+        globals()["http_request_full"] = _fake_groq_ok
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                      skip_source_check=True)
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("Groq: ظرف JSON صالح يمرّ إلى بوابات التحقّق ويُحفظ مسودتين",
+              rc == 0 and len(drafts) == 2 and len(_groq_reqs) == 2
+              and all(r["url"] == GROQ_URL for r in _groq_reqs)
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before
+              and load_state()["topics"][TOPICS[0]["id"]]["ar"] == "draft")
+        check("Groq: الطلب يطلب JSON صالحاً (response_format) ويمرّر التعليمات",
+              all(r["body"].get("response_format") == {"type": "json_object"}
+                  for r in _groq_reqs)
+              and all(r["body"].get("model") == DEFAULT_GROQ_MODEL for r in _groq_reqs)
+              and all(r["body"]["messages"][-1]["role"] == "user"
+                      and r["body"]["messages"][-1]["content"] for r in _groq_reqs))
+        check("Groq: المفتاح في ترويسة Authorization فقط ولا يظهر في الجسم",
+              all(r["headers"].get("Authorization") == f"Bearer {_FAKE_GROQ_KEY}"
+                  for r in _groq_reqs)
+              and all(_FAKE_GROQ_KEY not in json.dumps(r["body"], ensure_ascii=False)
+                      for r in _groq_reqs))
+
+        # (ح) نموذج Groq قابل للضبط عبر GROQ_MODEL
+        _groq_reqs.clear()
+        _saved_model = os.environ.get("GROQ_MODEL")
+        os.environ["GROQ_MODEL"] = "openai/gpt-oss-120b"
+        try:
+            rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                          skip_source_check=True)
+        finally:
+            if _saved_model is None:
+                os.environ.pop("GROQ_MODEL", None)
+            else:
+                os.environ["GROQ_MODEL"] = _saved_model
+        check("Groq: النموذج يُقرأ من GROQ_MODEL ويسود على الافتراضي",
+              rc == 0 and _groq_reqs
+              and all(r["body"].get("model") == "openai/gpt-oss-120b" for r in _groq_reqs))
+
+        # (ط) JSON ناقص أو نصّ غير JSON: ترفضه البوابات الحالية، ولا ملف يُكتب
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+
+        def _fake_content(text):
+            def _fn(url, **kwargs):
+                return _groq_envelope(content=text) + (url,)
+            return _fn
+
+        globals()["http_request_full"] = _fake_content('{"title": "ناقص", "slug": "x"}')
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY)
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        check("Groq: JSON ناقص الحقول يُرفض ببوابات الجودة الحالية (بلا استثناء)",
+              rc == EXIT_GENERATION_FAILED and st.get("ar") == "rejected"
+              and st.get("en") == "rejected" and not DRAFTS_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        globals()["http_request_full"] = _fake_content("هذا ليس JSON على الإطلاق")
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY)
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        check("Groq: نصّ غير JSON يُرفض ولا يُكتب أي ملف ولا فهرس",
+              rc == EXIT_GENERATION_FAILED and st.get("ar") == "error"
+              and not DRAFTS_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # (ي) إعادة المحاولة عند Groq: 429 مؤقّت مع Retry-After ثم نجاح
+        _sleeps.clear()
+        fake, calls = _fake_http([
+            (429, {"Retry-After": "7"}, b'{"error":{"message":"rate limit reached"}}'),
+            _groq_envelope(lang="ar"),
+        ])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: 429 مؤقّت يُعاد ويحترم Retry-After (ثوانٍ) ثم ينجح",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [7.0])
+
+        _sleeps.clear()
+        fake, calls = _fake_http([(503, {}, b'{"error":{"message":"overloaded"}}')])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: خطأ مؤقّت مستمرّ يستنفد الحدّ الأعلى (4 محاولات) ثم يفشل بوضوح",
+              not ok and data is None and len(calls) == GEMINI_MAX_TRIES
+              and msg.startswith("http_503") and "استُنفدت المحاولات" in msg
+              and len(_sleeps) == GEMINI_MAX_TRIES - 1)
+
+        # (ي) 401/403 ونموذج غير متاح: لا إعادة إطلاقاً، وتصنيف واضح
+        _sleeps.clear()
+        globals()["http_request_full"] = _fake_http(
+            [(401, {}, b'{"error":{"message":"Invalid API Key"}}')])[0]
+        ok, _d, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: 401 (مفتاح غير صالح) لا يُعاد ويُصنَّف خطأ مصادقة",
+              not ok and msg.startswith("http_401") and "مصادقة" in msg)
+
+        _sleeps.clear()
+        globals()["http_request_full"] = _fake_http(
+            [(403, {}, b'{"error":{"message":"permission denied"}}')])[0]
+        ok, _d, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: 403 لا يُعاد ويُصنَّف خطأ صلاحية",
+              not ok and msg.startswith("http_403") and "صلاحية" in msg)
+
+        _sleeps.clear()
+        globals()["http_request_full"] = _fake_http(
+            [(404, {}, b'{"error":{"code":"model_not_found","message":"model not found"}}')])[0]
+        ok, _d, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model="غير-موجود")
+        check("Groq: نموذج غير متاح لا يُعاد ويُصنَّف خطأ نموذج",
+              not ok and msg.startswith("http_404") and "النموذج غير متاح" in msg)
+        check("Groq: أخطاء 401/403/404 لم تُنتج أي انتظار",
+              _sleeps == [])
+
+        # (ك) 429 حصة يومية/فوترة: تكرار الطلب بلا فائدة ⇒ لا إعادة
+        _sleeps.clear()
+        fake, calls = _fake_http([
+            (429, {"Retry-After": "3"},
+             b'{"error":{"code":"rate_limit_exceeded","message":"Rate limit reached on requests per day (RPD)"}}'),
+        ])
+        globals()["http_request_full"] = fake
+        ok, _d, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: 429 حصة يومية/فوترة لا يُعاد (تجنّب تكرار بلا فائدة)",
+              not ok and len(calls) == 1 and _sleeps == [] and "حصة" in msg)
+
+        # (ل) لا يظهر المفتاح ولا أي جزء منه في السجل حتى لو أدرجته الاستجابة
+        _sandbox()
+        echo_body = json.dumps(
+            {"error": {"message": f"Invalid API key: {_FAKE_GROQ_KEY}"}},
+            ensure_ascii=False).encode("utf-8")
+        globals()["http_request_full"] = _fake_http([(401, {}, echo_body)])[0]
+        _saved_keys2 = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
+        try:
+            os.environ["GROQ_API_KEY"] = _FAKE_GROQ_KEY
+            rc, _out = _capture_run(mode="draft", provider="groq")
+        finally:
+            for var, val in _saved_keys2.items():
+                if val is not None:
+                    os.environ[var] = val
+        check("لا يظهر المفتاح (ولا جزء منه) في السجل أو رسائل الفشل",
+              _FAKE_GROQ_KEY not in _out and "gsk_" not in _out and "***" in _out
+              and rc == EXIT_GENERATION_FAILED)
+
+        # (م) لا انتقال تلقائي إلى Gemini عند فشل Groq
+        _sandbox()
+        fake, _calls, _urls = _fake_by_lang(en_ok=False)
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY)
+        check("فشل Groq لا ينتقل تلقائياً إلى Gemini ولا يطلب أي مضيف آخر",
+              rc == EXIT_GENERATION_FAILED and bool(_urls)
+              and all(u == GROQ_URL for u in _urls)
+              and not any("googleapis" in u for u in _urls))
+
+        # (ن) فشل التوليد في وضع auto: لا نشر ولا مسودات ولا تغيير في الفهارس
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, _calls, _urls = _fake_by_lang(en_ok=False)
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY)
+        check("فشل Groq في وضع auto: لا نشر ولا مسودات ولا تغيير في articles.json/sitemap.xml",
+              rc == EXIT_GENERATION_FAILED and not DRAFTS_DIR.exists()
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # (س) ثوابت المزوّد والموجِّه: الافتراضي Groq، والموجِّه لا يقبل مزوّداً مجهولاً
+        check("ثوابت المزوّد: Groq هو الافتراضي وGemini خيار مدعوم",
+              DEFAULT_PROVIDER == "groq" and DEFAULT_PROVIDER in AI_PROVIDERS
+              and "gemini" in AI_PROVIDERS and DEFAULT_GROQ_MODEL == "openai/gpt-oss-20b"
+              and GROQ_URL == "https://api.groq.com/openai/v1/chat/completions")
+        check("موجِّه المزوّد: مزوّد مجهول يفشل بوضوح بلا أي طلب شبكة",
+              generate_json("مجهول", "p", api_key="k", model="m")[0] is False
+              and "unknown_provider" in generate_json("مجهول", "p", api_key="k", model="m")[2])
+
+        # (ع) فحص المصادر الرسمية: رفض النطاق الميت، تمييز DNS/المهلة/HTTP،
+        #     وعدم النشر عند تعذّر التحقّق — كلها باستجابات وهمية وبلا أي طلب حقيقي.
+        check("المصادر: النطاقات الرسمية المعتمدة مقبولة (hrsd.gov.sa / gosi.gov.sa / qiwa.sa)",
+              is_allowed_source_url("https://www.hrsd.gov.sa/")
+              and is_allowed_source_url("https://www.hrsd.gov.sa/علاقات-العمل")
+              and is_allowed_source_url("https://www.gosi.gov.sa/")
+              and is_allowed_source_url("https://qiwa.sa/x"))
+        check("المصادر: النطاق المنتهي mol.gov.sa مرفوض صراحةً من البوابة الساكنة",
+              not is_allowed_source_url("https://www.mol.gov.sa/")
+              and not is_allowed_source_url("https://www.mol.gov.sa/portal/Pages/Default.aspx"))
+        check("المصادر: نطاقات mol.gov.sa الفرعية مرفوضة (لا يمرّ نطاق ميت بدعوى لاحقة .gov.sa)",
+              not is_allowed_source_url("https://portal.mol.gov.sa/x")
+              and not is_allowed_source_url("https://a.b.mol.gov.sa/")
+              and is_blocked_source_host("portal.mol.gov.sa")
+              and not is_blocked_source_host("www.hrsd.gov.sa"))
+        check("المصادر: لا توسيع للقائمة المسموحة (خارجي · http · تصيّد النطاق مرفوضة)",
+              not is_allowed_source_url("https://evil.example.com/x")
+              and not is_allowed_source_url("http://www.hrsd.gov.sa/")
+              and not is_allowed_source_url("https://www.hrsd.gov.sa.evil.com/")
+              and not is_allowed_source_url("https://evil.com/?u=https://www.hrsd.gov.sa/")
+              and not is_allowed_source_url("https://www.hrsd.gov.sa@evil.com/"))
+        check("المصادر: تطبيع الرابط العربي (UTF-8) وإسقاط fragment",
+              normalize_source_url("https://www.hrsd.gov.sa/علاقات-العمل#x")
+              == "https://www.hrsd.gov.sa/%D8%B9%D9%84%D8%A7%D9%82%D8%A7%D8%AA-%D8%A7%D9%84%D8%B9%D9%85%D9%84")
+
+        _dead = fixture_data("ar")
+        _dead["official_sources"] = [
+            {"title": "وزارة الموارد البشرية", "url": "https://www.mol.gov.sa/portal/Pages/Default.aspx"},
+            {"title": "المؤسسة العامة للتأمينات الاجتماعية", "url": "https://www.gosi.gov.sa/"},
+        ]
+        check("المصادر: مقال يستشهد بـ mol.gov.sa يُرفض في بوابة الجودة (لتفادي مسودة غير موثوقة)",
+              _rejects(lambda: validate_article(
+                  _dead, topic=topic, lang="ar", published_at="2026-01-01")))
+
+        _prompt_src = build_prompt(topic, "ar")
+        _preferred = official_sources_for(topic)
+        check("البرومبت: يضمّن الروابط الرسمية المعتمدة ويحظر mol.gov.sa",
+              "hrsd.gov.sa" in _prompt_src and "mol.gov.sa" in _prompt_src
+              and _preferred[0]["url"] in _prompt_src
+              and _preferred[0]["url"] == OFFICIAL_SOURCE_LIBRARY["hrsd_eosb"][1])
+
+        def _probe_with(*, exc=None, status=200, body=b""):
+            def _fn(url, **kwargs):
+                if exc is not None:
+                    raise exc
+                return status, {}, body, url
+            return _fn
+
+        _saved_http = globals()["http_request_full"]
+        _hdrs_sent = {}
+        try:
+            globals()["http_request_full"] = _probe_with(
+                exc=urllib.error.URLError(socket.gaierror(-2, "Name or service not known")))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: فشل DNS يُصنَّف dns برسالة تشخيص واضحة",
+                  _ok is False and _code == "dns" and "DNS" in _note)
+
+            globals()["http_request_full"] = _probe_with(
+                exc=urllib.error.URLError(socket.timeout("timed out")))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: انتهاء المهلة يُصنَّف timeout",
+                  _ok is False and _code == "timeout" and "المهلة" in _note)
+
+            globals()["http_request_full"] = _probe_with(exc=OSError("boom"))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: خطأ شبكة آخر يُصنَّف network بلا كشف أسرار",
+                  _ok is False and _code == "network")
+
+            for _st in (403, 404, 500, 503):
+                globals()["http_request_full"] = _probe_with(status=_st, body=b"x" * 400)
+                _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+                check(f"فحص المصدر: حالة HTTP {_st} تُصنَّف http_{_st} ولا تُعدّ تحقّقاً",
+                      _ok is False and _code == f"http_{_st}" and str(_st) in _note)
+
+            globals()["http_request_full"] = _probe_with(status=200, body=b"<html></html>")
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: استجابة قصيرة جداً (empty) لا تُعدّ تحقّقاً",
+                  _ok is False and _code == "empty")
+
+            def _capture_probe(url, **kwargs):
+                _hdrs_sent.update(kwargs.get("headers") or {})
+                return 200, {}, b"<html>" + b"a" * 4000 + b"</html>", url
+
+            globals()["http_request_full"] = _capture_probe
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: مصدر رسمي سليم (200 + جسم كافٍ) ينجح",
+                  _ok is True and _code == "ok"
+                  and check_sources([{"title": "t", "url": "https://www.hrsd.gov.sa/"}]) == [])
+            check("فحص المصدر: يرسل ترويسات طلب عادية (User-Agent/Accept/Accept-Language)",
+                  _hdrs_sent.get("User-Agent") == UA
+                  and _hdrs_sent.get("Accept") == SOURCE_REQUEST_HEADERS["Accept"]
+                  and _hdrs_sent.get("Accept-Language") == SOURCE_REQUEST_HEADERS["Accept-Language"])
+        finally:
+            globals()["http_request_full"] = _saved_http
+
+        # دورة كاملة: التوليد ينجح لكن DNS يفشل ⇒ مسودتان unverified فقط بلا نشر.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+
+        def _dns_for_sources(url, **kwargs):
+            if "generativelanguage.googleapis.com" in url:
+                return _envelope("en" if "لغة المخرجات: English" in _request_prompt(kwargs)
+                                 else "ar") + (url,)
+            raise urllib.error.URLError(socket.gaierror(-2, "Name or service not known"))
+
+        globals()["http_request_full"] = _dns_for_sources
+        rc, _out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        _rec = load_state()["topics"][TOPICS[0]["id"]]
+        check("تعذّر التحقّق من المصادر (DNS): مسودتان unverified فقط ولا نشر",
+              rc == 0 and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and _rec.get("ar") == "draft_unverified" and _rec.get("en") == "draft_unverified"
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("تعذّر التحقّق: السجل يميّز DNS ويذكر unverified وعدم لمس الفهارس",
+              "DNS" in _out and "unverified" in _out and "[SOURCES]" in _out
+              and "articles.json" in _out)
+
+        # دورة كاملة: التوليد والمصادر ينجحان ⇒ النشر السليم ما زال يعمل (auto)
+        _sandbox()
+        _saved_base = globals()["BASE_DIR"]
+        globals()["BASE_DIR"] = ARTICLES_DIR.parent
+
+        def _ok_for_all(url, **kwargs):
+            if "generativelanguage.googleapis.com" in url:
+                return _envelope("en" if "لغة المخرجات: English" in _request_prompt(kwargs)
+                                 else "ar") + (url,)
+            return 200, {}, b"<html>" + b"ok" * 500 + b"</html>", url
+
+        try:
+            globals()["http_request_full"] = _ok_for_all
+            rc = run_once(mode="auto", provider="gemini", api_key="k", model="m")
+            check("مصادر متحقَّق منها + وضع auto: يُنشر المقالان وتُحدَّث articles.json/sitemap.xml",
+                  rc == 0 and len(list(ARTICLES_DIR.glob("**/*.html"))) == 2
+                  and not DRAFTS_DIR.exists()
+                  and '"published"' in ARTICLES_JSON.read_text(encoding="utf-8")
+                  and "<loc>" in SITEMAP_XML.read_text(encoding="utf-8"))
+        finally:
+            globals()["BASE_DIR"] = _saved_base
+
+        # (ف) مسار فحص المصادر مع نسخة واحدة جاهزة (جوهر الإصلاح بعد دليل التشغيل
+        #     38938331321): كان الفحص لا يُنفّذ إلا عند اكتمال النسختين، فبقيت النسخة
+        #     الواحدة تُصنَّف «draft» دون أي تحقّق. الآن يُفحص كل مصدر في كل نسخة جاهزة.
+        def _src_ok(url):
+            return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
+
+        def _src_404(url):
+            return 404, {}, b"<html>404 not found</html>", url
+
+        def _src_dns(url):
+            raise urllib.error.URLError(socket.gaierror(-2, "Name or service not known"))
+
+        def _src_timeout(url):
+            raise urllib.error.URLError(socket.timeout("timed out"))
+
+        def _fake_run(*, fail_langs=(), source=_src_ok):
+            """توليد Gemini وهمي (لغات محدّدة تفشل) + استجابة فحص مصادر مخصّصة."""
+            probes = []
+
+            def _fn(url, **kwargs):
+                if "generativelanguage.googleapis.com" in url:
+                    lang = "en" if "لغة المخرجات: English" in _request_prompt(kwargs) else "ar"
+                    if lang in fail_langs:
+                        return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
+                    return _envelope(lang) + (url,)
+                probes.append(url)
+                return source(url)
+
+            return _fn, probes
+
+        # 1) النسختان جاهزتان وجميع المصادر متاحة ⇒ مسودتان «draft» (لا نشر).
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(source=_src_ok)
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        check("مصادر/نسختان: كل المصادر متاحة ⇒ draft للنسختين وبلا نشر",
+              rc == 0 and len(probes) == 2 and "[SOURCES]" in out
+              and st.get("ar") == "draft" and st.get("en") == "draft"
+              and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+              and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 2) النسختان جاهزتان ومصدر واحد يفشل (404) في وضع auto ⇒ draft_unverified
+        #    للنسختين، بلا نشر وبلا تعديل فهارس، وبلا استبدال صامت للاستشهادات.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(source=lambda u: _src_404(u) if "hrsd" in u else _src_ok(u))
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسختان: مصدر واحد يفشل ⇒ draft_unverified للنسختين ولا نشر",
+              rc == 0 and len(probes) == 2 and "[http_404]" in out and "unverified" in out
+              and st.get("ar") == "draft_unverified" and st.get("en") == "draft_unverified"
+              and len(drafts) == 2 and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("مصادر/نسختان: فشل المصدر لا يستبدل الاستشهادات (تبقى كما ولّدها النموذج)",
+              len(drafts) == 2 and all(
+                  "https://www.gosi.gov.sa/" in p.read_text(encoding="utf-8")
+                  and "https://www.hrsd.gov.sa/" in p.read_text(encoding="utf-8")
+                  for p in drafts)
+              and "https://www.hrsd.gov.sa/" in out)
+
+        # 3) العربية وحدها جاهزة (الإنجليزية تفشل) ⇒ يُنفَّذ الفحص فعلاً ومسودة draft واحدة.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(fail_langs=("en",), source=_src_ok)
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسخة عربية وحدها: يُنفَّذ فحص المصادر فعلاً (جوهر الإصلاح)",
+              rc == 0 and len(probes) == 2 and "[SOURCES]" in out and st.get("ar") == "draft"
+              and st.get("en") == "error" and len(drafts) == 1
+              and "/ar/" in drafts[0].as_posix() and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 4) الإنجليزية وحدها جاهزة + مصدر فاشل في وضع auto ⇒ draft_unverified (نسخة واحدة).
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(fail_langs=("ar",),
+                                 source=lambda u: _src_dns(u) if "hrsd" in u else _src_ok(u))
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسخة إنجليزية وحدها: فشل مصدر ⇒ draft_unverified وبلا نشر",
+              rc == 0 and len(probes) == 2 and st.get("en") == "draft_unverified"
+              and st.get("ar") == "error" and len(drafts) == 1
+              and "/en/" in drafts[0].as_posix() and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 5) أنواع الفشل الثلاثة عبر مسار الدورة كاملاً: DNS · HTTP 404 · انتهاء المهلة.
+        for _label, _src, _code in (("DNS", _src_dns, "dns"),
+                                    ("HTTP 404", _src_404, "http_404"),
+                                    ("انتهاء المهلة", _src_timeout, "timeout")):
+            _sandbox()
+            before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+            fake, _probes = _fake_run(source=_src)
+            globals()["http_request_full"] = fake
+            rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+            st = load_state()["topics"][TOPICS[0]["id"]]
+            check(f"مصادر: فشل {_label} ⇒ draft_unverified للنسختين وبلا نشر ولا تغيير فهارس",
+                  rc == 0 and f"[{_code}]" in out
+                  and st.get("ar") == "draft_unverified" and st.get("en") == "draft_unverified"
+                  and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+                  and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+                  and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
     finally:
         globals()["http_request_full"] = _real_http_full
         globals()["SLEEP"] = _real_sleep
@@ -1982,6 +2823,8 @@ def main(argv=None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="دورة كاملة بمحتوى تجريبي بلا كتابة")
     parser.add_argument("--topic", default=None, help="معرّف موضوع محدّد (مثال: eosb-resignation)")
     parser.add_argument("--mode", choices=["draft", "auto"], default=None, help="وضع النشر")
+    parser.add_argument("--provider", choices=list(AI_PROVIDERS), default=None,
+                        help="مزوّد المحتوى (الافتراضي من AI_PROVIDER أو groq؛ لا انتقال تلقائي)")
     parser.add_argument("--social-lang", choices=["ar", "en", "both"], default=None, help="لغة المنشور التسويقي")
     parser.add_argument("--skip-source-check", action="store_true",
                         help="تخطّي التحقّق الشبكي من المصادر الرسمية (استخدام يدوي فقط)")
@@ -2009,7 +2852,8 @@ def main(argv=None) -> int:
 
     try:
         return run_once(mode=mode, topic_id=args.topic, social_lang=social_lang,
-                        dry_run=args.dry_run, skip_source_check=args.skip_source_check)
+                        dry_run=args.dry_run, skip_source_check=args.skip_source_check,
+                        provider=args.provider)
     except Exception as exc:  # noqa: BLE001
         log(f"[ERROR] فشل غير متوقّع: {redact(exc)}")
         return 1
