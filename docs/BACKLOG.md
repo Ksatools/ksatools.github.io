@@ -181,7 +181,7 @@
 
 | # | البند | الحالة |
 |---|---|---|
-| M28 | **Groq مزوّد افتراضي**: `auto_marketing.py` يدعم `AI_PROVIDER` (`groq|gemini`، الافتراضي `groq`) و`GROQ_MODEL` (الافتراضي `openai/gpt-oss-20b`)؛ دالة مستقلّة `groq_generate_json` بـ`urllib` فقط ونقطة الاتصال `https://api.groq.com/openai/v1/chat/completions`، والمفتاح في ترويسة `Authorization: Bearer …`، مع `response_format={"type":"json_object"}`. مخرجات Groq تمرّ إلى بوابات التحقّق الحالية بلا أي استثناء | ✅ |
+| M28 | **Groq مزوّد افتراضي**: `auto_marketing.py` يدعم `AI_PROVIDER` (`groq|gemini`، الافتراضي `groq`) و`GROQ_MODEL` (الافتراضي `openai/gpt-oss-20b`)؛ دالة مستقلّة `groq_generate_json` بـ`urllib` فقط ونقطة الاتصال `https://api.groq.com/openai/v1/chat/completions`، والمفتاح في ترويسة `Authorization: Bearer …`، مع `response_format` من نوع `json_schema` و`strict: true` ومخطّط مطابق لبنية المقال (Structured Outputs). مخرجات Groq تمرّ إلى بوابات التحقّق الحالية بلا أي استثناء | ✅ |
 | M29 | **لا انتقال تلقائي بين المزوّدين**: Groq وGemini مستقلّان تماماً؛ فشل المزوّد المحدَّد يُنهي الدورة بفشل ولا يُرسل أي طلب للمزوّد الآخر. غياب مفتاح المزوّد المحدَّد ⇒ `EXIT_CONFIG_FAILED = 3` برسالة تسمّي المتغيّر الناقص بلا كشف أي قيمة | ✅ |
 | M30 | **تصنيف أخطاء المزوّد**: `401/403` مصادقة · `404`/رسالة نموذج غير متاح · `429` مع حصة يومية أو فوترة (بلا إعادة) · `429` مؤقّت (إعادة مع احترام `Retry-After`) · `408/425/5xx` (إعادة محدودة). المفتاح محجوب في كل الرسائل (`redact` يشمل `GROQ_API_KEY`) | ✅ |
 | M31 | `.github/workflows/ai_marketing.yml` يمرّر `AI_PROVIDER`/`GROQ_API_KEY`/`GROQ_MODEL` إلى دورة المحتوى مع إبقاء إعدادات Gemini، وخطوة «التحقّق من ضبط الإعدادات» تفحص مفتاح **المزوّد المحدَّد** وتفشل باسم الإعداد الناقص. `--selftest` الآن **74/74 PASS** (كان 55/55 في M22–M25) | ✅ |

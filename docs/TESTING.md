@@ -154,7 +154,7 @@ python auto_marketing.py --verify     → rc=0   لا مشاكل
 > **تحديث 2026-10-16 (إضافة Groq كمزوّد افتراضي — فرع `feat/groq-provider`، غير مُودَع بعد):**
 > الدافع: تجاوز الحصة المجانية لـGemini. المنفَّذ:
 > - `AI_PROVIDER` (`groq|gemini`، الافتراضي **`groq`**)، `GROQ_API_KEY`، `GROQ_MODEL` (الافتراضي `openai/gpt-oss-20b`)، مع إبقاء `GEMINI_API_KEY`/`GEMINI_MODEL` لاختيار Gemini صراحةً.
-> - دالة مستقلة `groq_generate_json` بمكتبة `urllib` القياسية فقط (بلا أي اعتماد جديد)، نقطة الاتصال `https://api.groq.com/openai/v1/chat/completions`، المفتاح في ترويسة `Authorization: Bearer <GROQ_API_KEY>`، و`response_format={"type":"json_object"}` مع تعليمات تطلب JSON صالحاً بالحقول المطلوبة.
+> - دالة مستقلة `groq_generate_json` بمكتبة `urllib` القياسية فقط (بلا أي اعتماد جديد)، نقطة الاتصال `https://api.groq.com/openai/v1/chat/completions`، المفتاح في ترويسة `Authorization: Bearer <GROQ_API_KEY>`، و`response_format` من نوع `json_schema` بـ`strict: true` ومخطّط `GROQ_ARTICLE_SCHEMA` المطابق لبنية المقال بالحرف (Structured Outputs)، مع تعليمات تطلب JSON صالحاً بالحقول المطلوبة.
 > - **لا انتقال تلقائي** بين المزوّدين: المزوّد المحدَّد هو الوحيد الذي يُستدعى، وفشله يُنهي الدورة برمز فشل (لا طلب احتياطي للمزوّد الآخر).
 > - مخرجات Groq تمرّ إلى **البوابات نفسها بلا استثناء**: `validate_article` + `duplicate_check` + فحص المصادر الرسمية قبل النشر.
 > - غياب مفتاح المزوّد المحدَّد ⇒ `EXIT_CONFIG_FAILED (3)` برسالة تسمّي المتغيّر الناقص (`GROQ_API_KEY` أو `GEMINI_API_KEY`) بلا طبع أي قيمة.
@@ -178,7 +178,7 @@ python auto_marketing.py --verify     → rc=0   لا مشاكل
 | الحالة | المتحقّق |
 |---|---|
 | ظرف `chat.completions` صالح | يُحلَّل `choices[0].message.content` كـJSON ويمرّ إلى البوابات ⇒ **مسودتان**، و`articles.json`/`sitemap.xml` بلا تغيير |
-| شكل الطلب | مضيف `GROQ_URL` وحده، `response_format={"type":"json_object"}`، النموذج من `GROQ_MODEL` وإلا `openai/gpt-oss-20b` |
+| شكل الطلب | مضيف `GROQ_URL` وحده، `response_format={"type":"json_schema"}` مع `json_schema.strict=true` ومخطّط `GROQ_ARTICLE_SCHEMA`، النموذج من `GROQ_MODEL` وإلا `openai/gpt-oss-20b` |
 | موضع المفتاح | `Authorization: Bearer …` فقط، ولا يظهر في جسم الطلب ولا في السجل ولا في رسائل الفشل (يُستبدل بـ`***`) |
 | JSON ناقص الحقول | ترفضه بوابات الجودة الحالية (`Reject`) ⇒ `rc=2` والحالة `rejected` وبلا أي ملف |
 | نصّ غير JSON | `invalid_content_json` ⇒ `rc=2` والحالة `error` وبلا أي ملف |
