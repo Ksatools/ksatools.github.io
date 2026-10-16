@@ -68,7 +68,6 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.8-flash' }}
       SOCIAL_LANGUAGE: ${{ vars.SOCIAL_LANGUAGE || 'both' }}
-      DRAFT_DIR: ${{ runner.temp }}/drafts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,6 +136,7 @@ jobs:
           # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
           TOPIC_INPUT: ${{ inputs.topic }}
           SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
+          DRAFT_DIR: ${{ runner.temp }}/drafts
         run: |
           set -euo pipefail
           ARGS=()
