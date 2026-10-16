@@ -55,6 +55,11 @@ jobs:
   content:
     name: توليد المحتوى والأرشفة
     runs-on: ubuntu-latest
+    outputs:
+      # وضع النشر الفعلي (draft|auto) — تستخدمه وظيفة deploy أدناه.
+      mode: ${{ steps.mode.outputs.mode }}
+      # نتيجة رفع أثر الموقع (success فقط في وضع auto مع نجاح الرفع).
+      pages_ready: ${{ steps.pages-artifact.outcome }}
     permissions:
       contents: write
     env:
@@ -72,11 +77,19 @@ jobs:
 
       - name: Restore marketing state from cache
         id: cache-state
-        uses: actions/cache@v4
+        # استعادة فقط (بلا حفظ) — الحفظ يجري في خطوة actions/cache/save منفصلة
+        # بعد دورة المحتوى. لا عمليتا حفظ للمسار والمفتاح نفسهما.
+        uses: actions/cache/restore@v4
         with:
           path: marketing_state.json
-          key: marketing-state-${{ github.ref_name }}
+          # مفتاح فريد لكل تشغيل: actions/cache غير قابل للتعديل، والمفتاح الثابت
+          # كان يُبقي الحالة مجمّدة عند أول لقطة (لا يُحفظ أي تحديث لاحق).
+          # الـCache غير دائم وقد يُحذف (إخلاء بعد عدم استخدام، أو تجاوز السعة،
+          # أو فشل تنزيل)، لذا يجب أن يعمل النظام بلا ملف حالة: load_state يعود
+          # إلى الحالة الافتراضية، وarticles.json هو مرجع منع تكرار النشر.
+          key: marketing-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            marketing-state-${{ github.ref_name }}-
             marketing-state-
 
       - name: Set up Python
@@ -101,10 +114,14 @@ jobs:
 
       - name: تحديد وضع النشر
         id: mode
+        env:
+          # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة (لا إدراج مباشر).
+          MODE_INPUT: ${{ inputs.publish_mode }}
+          MODE_VAR: ${{ vars.PUBLISH_MODE }}
         run: |
           set -euo pipefail
-          MODE="${{ inputs.publish_mode }}"
-          if [ -z "$MODE" ]; then MODE="${{ vars.PUBLISH_MODE }}"; fi
+          MODE="${MODE_INPUT}"
+          if [ -z "$MODE" ]; then MODE="${MODE_VAR}"; fi
           if [ -z "$MODE" ]; then MODE="draft"; fi
           case "$MODE" in
             draft|auto) ;;
@@ -116,11 +133,15 @@ jobs:
       - name: تشغيل دورة إنتاج المحتوى
         env:
           PUBLISH_MODE: ${{ steps.mode.outputs.mode }}
+          # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة؛ هكذا لا
+          # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
+          TOPIC_INPUT: ${{ inputs.topic }}
+          SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
         run: |
           set -euo pipefail
           ARGS=()
-          if [ -n "${{ inputs.topic }}" ]; then ARGS+=(--topic "${{ inputs.topic }}"); fi
-          if [ "${{ inputs.skip_source_check }}" = "true" ]; then ARGS+=(--skip-source-check); fi
+          if [ -n "${TOPIC_INPUT}" ]; then ARGS+=(--topic "${TOPIC_INPUT}"); fi
+          if [ "${SKIP_SOURCE_CHECK_INPUT}" = "true" ]; then ARGS+=(--skip-source-check); fi
           python auto_marketing.py "${ARGS[@]}"
 
       - name: فحص الناتج (JSON + XML + HTML)
@@ -165,11 +186,15 @@ jobs:
           retention-days: 14
 
       - name: حفظ حالة التسويق في Cache
-        if: always()
-        uses: actions/cache@v4
+        # حفظ فقط (لا استعادة)، ومرة واحدة بعد دورة المحتوى، تحت المفتاح الفريد نفسه
+        # الذي جرى تحتَه الاستيراد — فيستعيد التشغيل التالي أحدث مفتاح عبر restore-keys.
+        # hashFiles يمنع فشل الخطوة إذا لم يوجد ملف الحالة أصلاً (أول تشغيل مثلاً).
+        # ملاحظة: الحفظ لا يُعدّ ضماناً دائماً — الـCache عرضة للحذف.
+        if: ${{ always() && hashFiles('marketing_state.json') != '' }}
+        uses: actions/cache/save@v4
         with:
           path: marketing_state.json
-          key: marketing-state-${{ github.ref_name }}
+          key: marketing-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: تجهيز أثر الموقع للنشر (يُستثنى الملفات الداخلية)
         if: steps.mode.outputs.mode == 'auto'
@@ -195,12 +220,22 @@ jobs:
           find _site -type f | sort
 
       - name: رفع أثر الموقع للنشر
+        # يُرفَع أثر github-pages في وضع auto فقط، وتُصدَّر نتيجته عبر
+        # jobs.content.outputs.pages_ready كي لا تُشغَّل actions/deploy-pages
+        # إلا إذا وُجد الأثر فعلاً في هذا التشغيل.
         if: steps.mode.outputs.mode == 'auto'
+        id: pages-artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Commit وPush للملفات العامة فقط (articles.json, sitemap.xml, articles/)
+        # لا يدفع إلا في وضع auto، وبعد نجاح كل الفحوص أعلاه: run_once لا ينقل
+        # صفحات المقالات إلى الملفات العامة إلا بعد اجتياز فحص HTML وarticles.json
+        # وsitemap.xml، وخطوة «فحص الناتج» تعيد التحقّق قبل الوصول إلى هنا.
+        if: steps.mode.outputs.mode == 'auto'
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           git config user.name "ksa-tools-bot"
@@ -215,12 +250,17 @@ jobs:
             exit 0
           fi
           git commit -m "content: تحديث مقالات KSA Tools ثنائية اللغة ($(date -u +%Y-%m-%d))"
-          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "HEAD:${REF_NAME}"
 
   deploy:
     name: نشر GitHub Pages (اختياري عبر Actions)
     needs: content
-    if: ${{ vars.PAGES_VIA_ACTIONS == 'true' }}
+    # لا تنشر إلا بتحقّق الشروط الثلاثة معاً:
+    #   1) فعّل المالك النشر عبر Actions (PAGES_VIA_ACTIONS = true)
+    #   2) وضع النشر الفعلي في هذه الجولة هو auto (في draft تُتخطّى الوظيفة
+    #      بدل أن تحاول النشر بلا أثر upload-pages-artifact)
+    #   3) أثر الموقع (github-pages) رُفع فعلاً ونجح رفعه في هذه الجولة
+    if: ${{ vars.PAGES_VIA_ACTIONS == 'true' && needs.content.outputs.mode == 'auto' && needs.content.outputs.pages_ready == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

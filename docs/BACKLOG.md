@@ -145,3 +145,26 @@
 | M8 | `robots.txt` — `Disallow: /drafts/` احتياطي ثانوي | ✅ |
 | M9 | توثيق: `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/BACKLOG.md`, `docs/TESTING.md`, `DEPLOY_NOTES.md` §3+ — مزامنة | ✅ |
 | M10 | `--selftest` (28/28 PASS)، `--dry-run` (لا ملفات)، `--verify` (0 مشاكل)، اختبار تكاملي كامل (35/35 PASS) | ✅ |
+
+---
+
+## بنود تصلّب نظام التسويق الآلي (فرع `ai-marketing-integration` — 2026-10-16)
+
+| # | البند | الحالة |
+|---|---|---|
+| M11 | **`articles.json` هو المرجع الدائم** لمنع إعادة اختيار/نشر موضوع اكتملت نسختاه (ar+en): `pick_topic` يستثنيه حتى لو فُقد ملف الحالة كلياً | ✅ |
+| M12 | **الـCache غير دائم**: `marketing_state.json` في Actions مخزَّن في `actions/cache` المعرّض للإخلاء/الحذف/فشل التنزيل؛ النظام يعمل بلا الملف (`load_state` يرجع للافتراضي) وتُصلَح الحالة من `articles.json` عبر `reconcile_state_with_records` مع الإبقاء على `attempts` وحالات اللغات الأخرى | ✅ |
+| M13 | Cache بأسلوب واحد: `actions/cache/restore@v4` للاستعادة + `actions/cache/save@v4` **مرّة واحدة** بعد دورة المحتوى (لا عمليتا حفظ لنفس المسار والمفتاح)، بمفتاح فريد لكل تشغيل (`run_id`+`run_attempt`) و`restore-keys` ببادئة الفرع؛ الحفظ مشروط بـ`always()` ووجود الملف ⇒ غياب الحالة أو تلفها لا يُسقط السير | ✅ |
+| M14 | شرط نشر Pages: `deploy` لا يعمل إلا بـ`vars.PAGES_VIA_ACTIONS == 'true'` **و**`needs.content.outputs.mode == 'auto'` **و**`needs.content.outputs.pages_ready == 'success'` ⇒ تُتخطّى في `draft` ولا تحاول النشر بلا أثر `upload-pages-artifact` | ✅ |
+| M15 | نشر مرحلي آمن: الصفحات تُكتب في مجلد مؤقت وتُفحص (HTML + `articles.json` + `sitemap.xml`) قبل النقل؛ فشل أي فحص ⇒ لا صفحات يتيمة ولا تحديث للفهارس | ✅ |
+| M16 | `.github/workflows/ci.yml`: فحوص طلبات الدمج للقراءة فقط (`contents: read`، بلا أسرار/دفع/نشر/بيئة) | ✅ |
+| M17 | `--selftest` الآن **43/43 PASS** (كان 28/28 في M10)، و`smoke_test.py` **PASS=58 FAIL=0 FAIL(known)=13** | ✅ |
+
+### بنود مفتوحة في نظام التسويق (لم تُغلق)
+
+| # | البند | الحالة |
+|---|---|---|
+| M18 | `timezone: "Asia/Riyadh"` في `on.schedule` — مراجعة يدوية فقط، ولم يُشغَّل على runner | ⚠️ |
+| M19 | اختبار الدخان في CI يعتمد Google Chrome (`channel="chrome"`) على `ubuntu-latest` — غير متحقّق على runner | ⚠️ |
+| M20 | مدخل Cache واحد لكل تشغيل يتراكم (لا تنظيف للقديم) | ⬜ |
+| M21 | **الاتصال الحقيقي بـGemini، وإرسال Telegram، ونشر GitHub Pages لم تُختبر** (لا مفاتيح ولا تشغيل فعلي) | ⬜ |

@@ -1,0 +1,104 @@
+# =============================================================================
+# CI — فحوص طلبات الدمج (Pull Requests) لمنصة KSA Tools
+# -----------------------------------------------------------------------------
+# سير مستقل يشغّل الفحوص فقط:
+#   - لا توليد حقيقي عبر Gemini (لا يُستدعى auto_marketing.py بلا أعلام).
+#   - لا نشر ولا دفع إلى أي فرع، والصلاحيات للقراءة فقط (contents: read).
+#   - لا أسرار في هذا الملف ولا في المستودع (لا GEMINI_API_KEY ولا غيره).
+# الفحوص: py_compile، --selftest، --verify، node --check لجافاسكربت index.html،
+#         git diff --check، واختبار الدخان (Playwright + Google Chrome).
+# =============================================================================
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: فحوص (بلا توليد ولا نشر)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # وضع المسودات افتراضياً: لا أثر للفحوص على المستودع.
+      PUBLISH_MODE: draft
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: تثبيت Playwright (لاختبار الدخان فقط)
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install --with-deps chromium
+
+      - name: فحوص Python (compile + selftest + verify)
+        run: |
+          set -euo pipefail
+          python -m py_compile auto_marketing.py
+          python auto_marketing.py --selftest
+          python auto_marketing.py --verify
+
+      - name: فحص جافاسكربت index.html بـ node --check
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib, re, subprocess, sys, tempfile
+          html = pathlib.Path("index.html").read_text(encoding="utf-8")
+          if not html.rstrip().endswith("</html>"):
+              print("::error::index.html لا ينتهي بـ</html>")
+              sys.exit(1)
+          blocks = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S)
+          js = max(blocks, key=len) if blocks else ""
+          if not js.strip():
+              print("::error::لم يُعثر على جافاسكربت رئيسي في index.html")
+              sys.exit(1)
+          with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+              fh.write(js)
+              tmp_js = fh.name
+          proc = subprocess.run(["node", "--check", tmp_js], capture_output=True, text=True)
+          if proc.returncode != 0:
+              print("::error::node --check فشل: " + (proc.stderr or "").strip()[:400])
+              sys.exit(1)
+          print("node --check: ناجح (%d حرفاً)" % len(js))
+          PY
+
+      - name: git diff --check (فراغات وأسطر غير صحيحة)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git diff --check
+          if [ -n "${BASE_REF}" ] && git rev-parse --verify "origin/${BASE_REF}" >/dev/null 2>&1; then
+            git diff --check "origin/${BASE_REF}...HEAD"
+          fi
+
+      - name: اختبار الدخان (بلا شبكة خارجية)
+        run: |
+          set -euo pipefail
+          if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --version
+          else
+            echo "::warning::Google Chrome غير موجود في الـrunner — قد يُتخطّى فحص المتصفّح."
+          fi
+          python tests/smoke_test.py

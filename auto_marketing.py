@@ -19,6 +19,18 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     SOCIAL_LANGUAGE (ar|en|both، الافتراضي both),
     DRAFT_DIR (مسار المسودات، الافتراضي drafts/)
 
+حالة التسويق (marketing_state.json):
+    ملف محلي (مُتجاهَل في Git) يحفظ تقدّم المواضيع. في GitHub Actions يُحفظ عبر Cache،
+    والـCache غير دائم وقد يُحذف (إخلاء بعد فترة عدم استخدام، أو تجاوز سعة التخزين،
+    أو فشل التنزيل)، لذا يتعامل النظام مع غياب الملف أو تلفه بأمان: من دون الأسرار،
+    ويعود إلى الحالة الافتراضية. ولأن اختيار الموضوع يعتمد على سجل النشر الدائم
+    (articles.json) لا على الحالة وحدها، ففقدان الحالة لا يكرّر موضوعاً مكتمل النشر،
+    وتُصلَح الحالة تلقائياً من السجل في بداية كل دورة (مع الإبقاء على المحاولات).
+
+النشر الآمن (وضع auto):
+    تُجهَّز صفحات المقالات في مجلد مؤقت، ثم تُفحص HTML وarticles.json وsitemap.xml،
+    ولا يُنقل شيء إلى الملفات العامة ولا يُدفع إلا بعد نجاح كل الفحوص.
+
 رموز الخروج:
     0 = نجاح، أو حالة متوقّعة أُديرت بأمان (مفتاح مفقود، لا مواضيع، رفض بوابة جودة، خطأ API).
     1 = خطأ داخلي غير متوقّع، أو فشل في --selftest / --verify.
@@ -32,7 +44,9 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -67,18 +81,21 @@ LOG_PREFIX = "[auto_marketing]"
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 XHTML_NS = "http://www.w3.org/1999/xhtml"
 
-# أكواد الإعلان المعتمدة (تُدرج مرة واحدة في كل صفحة)
+# أكواد الإعلان المعتمدة (تُدرج مرة واحدة في كل صفحة).
+# نطاق المالك المعتمد: bauval.org — مطابق لما في index.html. لا تغيّره منفرداً.
 AD_SOCIAL_BAR = (
-    '<script type="text/javascript" '
-    'src="//pl25967834.profitablecpmrate.com/7c/dd/0a/'
-    '7cdd0a31b4560a6ce3906a22a43c5ed3.js"></script>'
+    '<script data-cfasync="false" '
+    'src="https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"></script>'
 )
 AD_NATIVE_BANNER = (
     '<script async="async" data-cfasync="false" '
-    'src="//pl25967834.profitablecpmrate.com/'
-    '7af3b8325dba6708da88eed5e517ec89/invoke.js"></script>\n'
+    'src="https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"></script>\n'
     '<div id="container-7af3b8325dba6708da88eed5e517ec89"></div>'
 )
+AD_SOCIAL_BAR_SRC = "https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"
+AD_NATIVE_BANNER_SRC = "https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"
+AD_CONTAINER_ID = "container-7af3b8325dba6708da88eed5e517ec89"
+LEGACY_AD_HOST = "pl25967834.profitablecpmrate.com"
 
 TOOL_ANCHOR = {"eos": "eos-tool", "salary": "salary-tool", "letter": "letter-tool", "cv": "cv-tool"}
 TOOL_LABEL = {
@@ -255,20 +272,37 @@ def topic_by_id(tid: str):
     return None
 
 
-def pick_topic(state):
+def pick_topic(state, published_pairs=None):
     """أول موضوع متاح للمعالجة.
 
-    يُستثنى: (1) ما نُشرت نسختاه، (2) ما أُنتجت مسودتاه وينتظران مراجعة بشرية،
-    (3) ما تجاوز حدّ المحاولات بعد تكرار الفشل.
+    المرجع الأساسي لمنع التكرار هو **سجل المقالات المنشورة** (articles.json)، لا
+    marketing_state.json وحده: الأخير يُخزَّن في GitHub Actions عبر Cache قد يُحذف
+    أو يتلف. فإذا اكتملت النسختان (ar/en) في السجل المنشور فلا يُعاد اختيار الموضوع
+    حتى لو ضاعت الحالة تماماً.
+
+    يُستثنى كذلك: (1) ما نُشرت نسختاه، (2) ما أُنتجت مسودتاه وينتظران مراجعة بشرية،
+    (3) ما تجاوز حدّ المحاولات بعد تكرار الفشل. حالات المحاولات/الأخطاء تبقى محفوظة.
     """
+    if published_pairs is None:
+        published_pairs = existing_published_pairs()
     produced = {"draft", "draft_unverified", "published"}
     for t in TOPICS:
-        rec = state["topics"].get(t["id"], {})
+        tid = t["id"]
+        # (1) مكتمل في سجل النشر الفعلي — مرجع دائم لا يعتمد على ملف الحالة.
+        if (tid, "ar") in published_pairs and (tid, "en") in published_pairs:
+            continue
+        rec = state.get("topics", {}).get(tid, {})
+        if not isinstance(rec, dict):
+            rec = {}
         if rec.get("ar") == "published" and rec.get("en") == "published":
             continue
         if rec.get("ar") in produced and rec.get("en") in produced:
             continue
-        if int(rec.get("attempts", 0)) >= MAX_ATTEMPTS:
+        try:
+            attempts = int(rec.get("attempts", 0) or 0)
+        except (TypeError, ValueError):
+            attempts = 0
+        if attempts >= MAX_ATTEMPTS:
             continue
         return t
     return None
@@ -345,19 +379,44 @@ def default_state():
 
 
 def load_state():
-    state = load_json(STATE_JSON, default_state())
-    if not isinstance(state, dict):
-        state = default_state()
-    state.setdefault("version", 1)
-    if not isinstance(state.get("topics"), dict):
-        state["topics"] = {}
-    state.setdefault("last_run", None)
+    """يقرأ حالة التسويق من marketing_state.json بأمان.
+
+    الملف قد يكون غائباً أو تالفاً: في GitHub Actions يُخزَّن عبر Cache، والـCache
+    قد يُحذف (إخلاء بعد فترة عدم استخدام، أو تجاوز سعة التخزين، أو فقد التنزيل).
+    لذلك نتحقّق من صحة JSON ومن بنيته، وعند أي خلل نعود إلى الحالة الافتراضية بهدوء،
+    دون طباعة أي محتوى من الملف ودون كشف أي أسرار.
+    """
+    raw = load_json(STATE_JSON, default_state())
+    if not isinstance(raw, dict):
+        log("[WARN] ملف الحالة ليس كائناً JSON — سيُستخدم الافتراضي.")
+        raw = default_state()
+
+    state = {"version": 1, "topics": {}, "last_run": None}
+    try:
+        state["version"] = int(raw.get("version") or 1)
+    except (TypeError, ValueError):
+        state["version"] = 1
+
+    topics = raw.get("topics")
+    if isinstance(topics, dict):
+        for tid, rec in topics.items():
+            if isinstance(tid, str) and isinstance(rec, dict):
+                state["topics"][tid] = dict(rec)
+
+    last_run = raw.get("last_run")
+    state["last_run"] = last_run if isinstance(last_run, str) else None
+
     for t in TOPICS:
         rec = state["topics"].setdefault(t["id"], {"ar": "pending", "en": "pending", "published_at": None})
-        rec.setdefault("ar", "pending")
-        rec.setdefault("en", "pending")
-        rec.setdefault("attempts", 0)
-        rec.setdefault("published_at", None)
+        for lang in ("ar", "en"):
+            if not isinstance(rec.get(lang), str):
+                rec[lang] = "pending"
+        try:
+            rec["attempts"] = max(0, int(rec.get("attempts", 0) or 0))
+        except (TypeError, ValueError):
+            rec["attempts"] = 0
+        if not isinstance(rec.get("published_at"), str):
+            rec["published_at"] = None
     return state
 
 
@@ -871,6 +930,33 @@ def render_article_html(article, *, published: bool) -> str:
     )
 
 
+def validate_generated_page(html_text: str, article) -> list:
+    """يتحقّق من صفحة مقال مولَّدة قبل نشرها؛ يعيد قائمة مشاكل (فارغة = سليمة).
+
+    يضمن: HTML مكتمل، canonical مطابق، robots مناسب للنشر، وجود أكواد الإعلان
+    المعتمدة (bauval.org) مرة واحدة لكل كود، وغياب أي نطاق إعلان قديم.
+    """
+    problems = []
+    if not html_text.rstrip().endswith("</html>"):
+        problems.append("الصفحة لا تنتهي بـ</html>")
+    canonical = f"{SITE_BASE}/articles/{article['lang']}/{article['slug']}.html"
+    if f'hreflang="x-default"' not in html_text:
+        problems.append("وسم hreflang x-default غير موجود")
+    if canonical not in html_text:
+        problems.append("رابط canonical غير موجود في الصفحة")
+    if '<meta name="robots" content="index,follow"' not in html_text:
+        problems.append("صفحة النشر غير قابلة للفهرسة (robots)")
+    if html_text.count(AD_SOCIAL_BAR) != 1:
+        problems.append("كود Social Bar المعتمد ليس مرة واحدة")
+    if html_text.count(AD_NATIVE_BANNER) != 1:
+        problems.append("كود Native Banner المعتمد ليس مرة واحدة")
+    if AD_CONTAINER_ID not in html_text:
+        problems.append("معرّف حاوية الإعلان المعتمد غير موجود")
+    if LEGACY_AD_HOST in html_text:
+        problems.append("نطاق إعلان قديم " + LEGACY_AD_HOST)
+    return problems
+
+
 # =====================================================================================
 # 9) الأرشفة
 # =====================================================================================
@@ -927,14 +1013,42 @@ def validate_articles_json(records) -> list:
     return problems
 
 
-def existing_published_pairs() -> set:
-    records = load_json(ARTICLES_JSON, [])
+def existing_published_pairs(records=None) -> set:
+    """أزواج (translation_id, lang) المنشورة فعلاً في articles.json.
+
+    هذا هو المرجع الدائم للنشر: لا يعتمد إطلاقاً على ملف الحالة (الـCache) ولا على
+    متغيّرات البيئة، فيصمد أمام فقدان الحالة أو تلفها.
+    """
+    if records is None:
+        records = load_json(ARTICLES_JSON, [])
     pairs = set()
     if isinstance(records, list):
         for rec in records:
             if isinstance(rec, dict) and rec.get("status") == "published":
-                pairs.add((rec.get("translation_id"), rec.get("lang")))
+                tid = rec.get("translation_id")
+                lang = rec.get("lang")
+                if isinstance(tid, str) and lang in ("ar", "en"):
+                    pairs.add((tid, lang))
     return pairs
+
+
+def reconcile_state_with_records(state, published_pairs) -> int:
+    """يُصلح الحالة وفق السجل المنشور (مثلاً بعد فقدان الـCache أو تلفه).
+
+    يعلّم النسخ المنشورة فعلاً في articles.json كـ"published"، دون مسح حالة
+    المحاولات ولا حالات اللغات الأخرى (error/rejected/draft_unverified). يعيد عدد
+    السجلات التي أُصلحت.
+    """
+    topics = state.get("topics") if isinstance(state, dict) else None
+    if not isinstance(topics, dict):
+        return 0
+    fixed = 0
+    for tid, lang in published_pairs:
+        rec = topics.get(tid)
+        if isinstance(rec, dict) and rec.get(lang) != "published":
+            rec[lang] = "published"
+            fixed += 1
+    return fixed
 
 
 def article_record(art) -> dict:
@@ -1106,10 +1220,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
     model = model or os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
 
     state = load_state()
-    published_pairs = existing_published_pairs()
     records = load_json(ARTICLES_JSON, [])
     if not isinstance(records, list):
         records = []
+    # مرجع النشر الدائم هو articles.json (لا الحالة/الـCache). نُصلح الحالة وفقه
+    # كي لا يعيد اختيار موضوع مكتمل حتى بعد فقدان الحالة، مع الإبقاء على المحاولات.
+    published_pairs = existing_published_pairs(records)
+    healed = reconcile_state_with_records(state, published_pairs)
+    if healed:
+        log(f"[INFO] أُصلحت حالة {healed} نسخة منشورة من articles.json (فقدان/تلف الحالة).")
 
     if topic_id:
         topic = topic_by_id(topic_id)
@@ -1117,7 +1236,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
             log(f"[SKIP] معرّف الموضوع غير معروف: {topic_id}")
             return 0
     else:
-        topic = pick_topic(state)
+        topic = pick_topic(state, published_pairs)
         if topic is None:
             log("[SKIP] لا يوجد موضوع متاح: الكل إما منشور، أو مسوّد وينتظر مراجعة بشرية، "
                 "أو موقوف بعد تكرار الفشل. راجع المسودات أو أضِف مواضيع جديدة إلى TOPICS.")
@@ -1193,41 +1312,64 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         log(f"[DRAFT] حفظ {len(ready)} مسودة في {DRAFTS_DIR} — لم تُضف إلى articles.json ولا إلى sitemap.xml.")
         return 0
 
-    new_records = []
-    for art in ready:
-        write_article_files(art, published=True)
-        new_records.append(article_record(art))
-
-    records = merge_articles(records, new_records)
-    problems = validate_articles_json(records)
-    if problems:
-        log("[REJECT] articles.json غير صالح — لم يُكتب: " + "; ".join(problems[:5]))
-        save_state(state)
-        return 0
-    atomic_write_json(ARTICLES_JSON, records)
-    log("[OK] تحديث articles.json.")
-
+    # --- النشر الآمن: نجهّز الصفحات في مجلد مؤقت، ونتحقّق من HTML وarticles.json
+    # و sitemap.xml بالكامل قبل نقل أي شيء إلى الملفات العامة. فشل أي فحص ⇒
+    # لا تُكتب صفحات ولا يُحدَّث articles.json/sitemap.xml (فلا صفحات يتيمة تُدفع).
+    staging_root = Path(tempfile.mkdtemp(prefix="ksa-articles-"))
     try:
-        xml_text = SITEMAP_XML.read_text(encoding="utf-8") if SITEMAP_XML.exists() else SITEMAP_EMPTY
-        entries = []
-        seen_tids = set()
+        staged_pages = []
         for art in ready:
-            # زوج اللغتين يُضاف مرة واحدة لكل مقال (لا مرة لكل نسخة لغوية)
-            if art["translation_id"] in seen_tids:
-                continue
-            seen_tids.add(art["translation_id"])
-            entries.extend(article_sitemap_entries(art))
-        new_xml = add_sitemap_entries(xml_text, entries)
-    except (OSError, ValueError) as exc:
-        new_xml = None
-        log("[REJECT] تعذّر تحديث sitemap.xml: " + redact(exc))
-    if new_xml is not None:
+            rel = Path(art["lang"]) / f"{art['slug']}.html"
+            html_text = render_article_html(art, published=True)
+            problems = validate_generated_page(html_text, art)
+            if problems:
+                log("[REJECT] صفحة المقال لم تجتز الفحص — لم يُنشر شيء: " + "; ".join(problems[:5]))
+                save_state(state)
+                return 0
+            staged_path = staging_root / rel
+            atomic_write_text(staged_path, html_text)
+            staged_pages.append((staged_path, ARTICLES_DIR / rel))
+
+        new_records = [article_record(art) for art in ready]
+        records = merge_articles(records, new_records)
+        problems = validate_articles_json(records)
+        if problems:
+            log("[REJECT] articles.json غير صالح — لم يُنشر شيء: " + "; ".join(problems[:5]))
+            save_state(state)
+            return 0
+
+        try:
+            xml_text = SITEMAP_XML.read_text(encoding="utf-8") if SITEMAP_XML.exists() else SITEMAP_EMPTY
+            entries = []
+            seen_tids = set()
+            for art in ready:
+                # زوج اللغتين يُضاف مرة واحدة لكل مقال (لا مرة لكل نسخة لغوية)
+                if art["translation_id"] in seen_tids:
+                    continue
+                seen_tids.add(art["translation_id"])
+                entries.extend(article_sitemap_entries(art))
+            new_xml = add_sitemap_entries(xml_text, entries)
+        except (OSError, ValueError) as exc:
+            log("[REJECT] تعذّر تحديث sitemap.xml — لم يُنشر شيء: " + redact(exc))
+            save_state(state)
+            return 0
         problems = validate_sitemap(new_xml)
         if problems:
-            log("[REJECT] sitemap.xml غير صالح — لم يُكتب: " + "; ".join(problems))
-        else:
-            atomic_write_text(SITEMAP_XML, new_xml)
-            log("[OK] تحديث sitemap.xml.")
+            log("[REJECT] sitemap.xml غير صالح — لم يُنشر شيء: " + "; ".join(problems))
+            save_state(state)
+            return 0
+
+        # كل الفحوص ناجحة: انقل الصفحات إلى مجلد المقالات، ثم اكتب الفهارس العامة.
+        for staged_path, dest in staged_pages:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staged_path), str(dest))
+            log(f"[OK] نُشرت الصفحة: {dest.relative_to(BASE_DIR).as_posix()}")
+        atomic_write_json(ARTICLES_JSON, records)
+        log("[OK] تحديث articles.json.")
+        atomic_write_text(SITEMAP_XML, new_xml)
+        log("[OK] تحديث sitemap.xml.")
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
     for art in ready:
         state["topics"][topic["id"]][art["lang"]] = "published"
@@ -1311,6 +1453,27 @@ def selftest() -> int:
     check("صفحة مسودة غير قابلة للفهرسة", "noindex" in draft_out)
     check("JSON-LD صالح", '"@type": "Article"' in html_out)
 
+    # 7-أ) أكواد الإعلان المعتمدة في القالب المولَّد (bauval.org) وغياب النطاق القديم
+    check("قالب المقال يستخدم كود Social Bar المعتمد (bauval.org)",
+          AD_SOCIAL_BAR_SRC in html_out and html_out.count(AD_SOCIAL_BAR_SRC) == 1)
+    check("قالب المقال يستخدم كود Native Banner المعتمد (bauval.org)",
+          html_out.count(AD_NATIVE_BANNER_SRC) == 1)
+    _native_id = re.search(r"bauval\.org/21/([0-9a-f]+)", html_out)
+    _container_id = re.search(r'id="(container-[0-9a-f]+)"', html_out)
+    check("معرّف حاوية الإعلان مطابق لمعرّف Native Banner",
+          bool(_native_id and _container_id and _container_id.group(1) == "container-" + _native_id.group(1)))
+    check("قالب المقال بلا نطاق إعلان قديم",
+          LEGACY_AD_HOST not in ARTICLE_TEMPLATE.template
+          and LEGACY_AD_HOST not in AD_SOCIAL_BAR
+          and LEGACY_AD_HOST not in AD_NATIVE_BANNER)
+    check("صفحة مولَّدة جديدة بلا نطاق إعلان قديم", LEGACY_AD_HOST not in html_out)
+    check("validate_generated_page يقبل صفحة سليمة", validate_generated_page(html_out, art) == [])
+    _legacy_probe = validate_generated_page(
+        html_out.replace(AD_SOCIAL_BAR, '<script src="https://' + LEGACY_AD_HOST + '/x.js"></script>'),
+        art)
+    check("validate_generated_page يرفض صفحة تحمل نطاقاً قديماً",
+          any(LEGACY_AD_HOST in p for p in _legacy_probe))
+
     # 8) دمج articles.json بلا حذف
     rec = {"translation_id": "x", "lang": "ar", "title": "t", "url": "/articles/ar/x-ar.html",
            "published_at": "2026-01-01", "updated_at": "2026-01-01", "status": "published"}
@@ -1357,6 +1520,47 @@ def selftest() -> int:
     ids = [t["id"] for t in TOPICS]
     check("عدد المواضيع >= 30", len(TOPICS) >= 30)
     check("معرّفات المواضيع فريدة وصالحة", len(ids) == len(set(ids)) and all(slug_ok(i) for i in ids))
+
+    # 12) اختيار الموضوعات: سجل النشر (articles.json) مرجع دائم لا يعتمد على الحالة
+    t_first, t_second = TOPICS[0]["id"], TOPICS[1]["id"]
+    pub_records = [
+        {"translation_id": t_first, "lang": "ar", "status": "published"},
+        {"translation_id": t_first, "lang": "en", "status": "published"},
+    ]
+    pairs_pub = existing_published_pairs(pub_records)
+    check("existing_published_pairs: يقرأ المنشور فقط ويتجاهل غير المنشور",
+          pairs_pub == {(t_first, "ar"), (t_first, "en")}
+          and existing_published_pairs(
+              [{"translation_id": t_first, "lang": "ar", "status": "draft"}]) == set()
+          and existing_published_pairs(
+              [{"translation_id": 5, "lang": "xx", "status": "published"}]) == set())
+    check("pick_topic: لا يعيد موضوعاً اكتملت نسختاه في السجل المنشور",
+          pick_topic(default_state(), pairs_pub)["id"] != t_first)
+    check("pick_topic: يختار الموضوع التالي غير المنشور",
+          pick_topic(default_state(), pairs_pub)["id"] == t_second)
+    check("pick_topic: بلا سجل منشور يختار أول موضوع",
+          pick_topic(default_state(), set())["id"] == t_first)
+    check("pick_topic: نسخة منشورة واحدة لا تُكمل الموضوع",
+          pick_topic(default_state(), {(t_first, "ar")})["id"] == t_first)
+    check("pick_topic: فقدان الحالة تماماً لا يكرّر موضوعاً مكتملاً في السجل",
+          pick_topic(default_state(), existing_published_pairs(pub_records))["id"] == t_second)
+    check("pick_topic: حالة تالفة (بلا topics) لا تُسقط الاختيار",
+          pick_topic({}, pairs_pub)["id"] == t_second)
+    stopped = {"version": 1, "last_run": None,
+               "topics": {t_first: {"ar": "pending", "en": "pending", "attempts": MAX_ATTEMPTS}}}
+    check("pick_topic: يوقف الموضوع المتجاوز حدّ المحاولات (ويُبقي المحاولات محفوظة)",
+          pick_topic(stopped, set())["id"] == t_second
+          and stopped["topics"][t_first]["attempts"] == MAX_ATTEMPTS)
+    healed_state = {"version": 1, "last_run": None,
+                    "topics": {t_first: {"ar": "pending", "en": "error", "attempts": 2}}}
+    _fixed = reconcile_state_with_records(healed_state, pairs_pub)
+    check("reconcile: يُعلّم النسخ المنشورة ويُبقي المحاولات وحالة اللغة الأخرى",
+          _fixed == 2 and healed_state["topics"][t_first]["ar"] == "published"
+          and healed_state["topics"][t_first]["en"] == "published"
+          and healed_state["topics"][t_first]["attempts"] == 2)
+    check("reconcile: يحترم حالة languages غير المنشورة",
+          reconcile_state_with_records(
+              {"topics": {t_second: {"ar": "draft", "en": "pending", "attempts": 1}}}, pairs_pub) == 0)
 
     if problems:
         log(f"[SELFTEST] فشل {len(problems)} فحصاً.")
@@ -1406,8 +1610,19 @@ def verify_outputs() -> list:
                 if not rel:
                     problems.append("سجل منشور بلا رابط")
                     continue
-                if not (BASE_DIR / rel).exists():
+                page = BASE_DIR / rel
+                if not page.exists():
                     problems.append(f"سجل منشور بلا ملف مقابل: {rec.get('url')}")
+                else:
+                    page_html = page.read_text(encoding="utf-8", errors="replace")
+                    if AD_SOCIAL_BAR_SRC not in page_html:
+                        problems.append(f"مقال منشور بلا كود Social Bar المعتمد: {rec.get('url')}")
+                    if AD_NATIVE_BANNER_SRC not in page_html:
+                        problems.append(f"مقال منشور بلا كود Native Banner المعتمد: {rec.get('url')}")
+                    if AD_CONTAINER_ID not in page_html:
+                        problems.append(f"مقال منشور بلا حاوية الإعلان المعتمدة: {rec.get('url')}")
+                    if LEGACY_AD_HOST in page_html:
+                        problems.append(f"مقال منشور يحمل نطاق إعلان قديم: {rec.get('url')}")
                 if SITEMAP_XML.exists() and (SITE_BASE + "/" + rel) not in sitemap_locs:
                     problems.append(f"مقال منشور غير مُدرج في sitemap.xml: {rec.get('url')}")
 
@@ -1423,6 +1638,8 @@ def verify_outputs() -> list:
             problems.append("index.html: كود Social Bar ليس مرة واحدة")
         if text.count("container-7af3b8325dba6708da88eed5e517ec89") != 1:
             problems.append("index.html: حاوية الإعلان ليست مرة واحدة")
+        if LEGACY_AD_HOST in text:
+            problems.append("index.html: يحمل نطاق إعلان قديم")
         if not text.rstrip().endswith("</html>"):
             problems.append("index.html: الملف لا ينتهي بـ </html>")
 
