@@ -111,8 +111,6 @@
   </script>
 
   <!-- ====== Adsterra: Social Bar (مفعل — يوضع قبل إغلاق head) ====== -->
-  <script data-cfasync="false" src="https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"></script>
-
   <style>
     :root {
       /* ——— الهوية الأساسية: عائلة أخضر واحدة (زمردي) مشتقة من #0a6847 (H≈159°) ——— */
@@ -1946,6 +1944,69 @@
     }
     @page { margin: 12mm 13mm; }
 
+  .guides-section {
+      max-width: 1080px;
+      margin: 10px auto 26px;
+      padding: 22px 18px 4px;
+    }
+    .guides-heading {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      color: var(--dark);
+    }
+    .guides-intro {
+      margin: 0 0 16px;
+      color: var(--slate);
+      font-size: 0.92rem;
+    }
+    .guides-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+      gap: 14px;
+    }
+    .guide-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .guide-title {
+      margin: 0;
+      font-size: 1.03rem;
+      line-height: 1.55;
+    }
+    .guide-title a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .guide-title a:hover { text-decoration: underline; }
+    .guide-excerpt {
+      margin: 0;
+      color: var(--slate);
+      font-size: 0.88rem;
+    }
+    .guide-meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .guide-alt {
+      margin-top: auto;
+      padding-top: 6px;
+      color: var(--primary);
+      font-size: 0.8rem;
+      text-decoration: none;
+    }
+    .guide-alt:hover { text-decoration: underline; }
+    .guides-status {
+      margin: 6px 0 18px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -2432,11 +2493,16 @@
       </div>
     </section>
   </main>
+<section class="guides-section" id="guides" aria-labelledby="guides-heading">
+    <h2 class="guides-heading" id="guides-heading" data-i18n="guidesHeading">أحدث الأدلة العمالية في السعودية</h2>
+    <p class="guides-intro" data-i18n="guidesIntro">أدلة ثنائية اللغة عن نظام العمل السعودي والتأمينات والسيرة الذاتية، تُحدَّث دورياً.</p>
+    <div id="guides-list" aria-live="polite"></div>
+  </section>
 
   <!-- ====== Adsterra: Native Banner مفعل ====== -->
   <div class="ad-slot ad-native" id="ad-bottom" style="border-style:solid; min-height:auto; padding:18px 12px 12px;">
     <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
-    <script async="async" data-cfasync="false" src="https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"></script>
+    <script async="async" data-cfasync="false" src="//pl25967834.profitablecpmrate.com/7af3b8325dba6708da88eed5e517ec89/invoke.js"></script>
     <div id="container-7af3b8325dba6708da88eed5e517ec89"></div>
   </div>
 
@@ -2757,6 +2823,14 @@
       cvResetConfirm: 'سيتم مسح كل بيانات السيرة. هل أنت متأكد؟',
       atsExcellent: 'ممتاز — السيرة مكتملة العناصر الأساسية ومهيأة للتقديم.',
       atsGood: 'جيد — أكمل العناصر الناقصة أدناه لرفع جاهزية سيرتك.',
+      shareCvPrivacy: 'ملخص آمن للمشاركة — بدون اسم أو هاتف أو بريد أو محتوى السيرة:',
+      guidesHeading: 'أحدث الأدلة العمالية في السعودية',
+      guidesIntro: 'أدلة ثنائية اللغة عن نظام العمل السعودي والتأمينات والسيرة الذاتية، تُحدَّث دورياً.',
+      guidesLoading: 'جارٍ تحميل الأدلة…',
+      guidesEmpty: 'لا توجد أدلة منشورة بالعربية بعد. تابعنا قريباً.',
+      guidesError: 'تعذّر تحميل قائمة الأدلة حالياً. يمكنك استخدام الأدوات أعلاه كما هي.',
+      guidesUpdated: 'آخر تحديث',
+      guidesOther: 'اقرأ النسخة الإنجليزية',
       atsNeeds: 'يحتاج عملاً — راجع العناصر الناقصة أدناه قبل التقديم.'
     },
     en: {
@@ -2971,6 +3045,14 @@
       cvResetConfirm: 'All resume data will be cleared. Are you sure?',
       atsExcellent: 'Excellent — your resume has all core elements and is ready to submit.',
       atsGood: 'Good — complete the missing items below to improve readiness.',
+      shareCvPrivacy: 'Safe share summary — no name, phone, email or resume content:',
+      guidesHeading: 'Latest Saudi Labour Guides',
+      guidesIntro: 'Bilingual guides on Saudi labour law, social insurance and job applications, updated regularly.',
+      guidesLoading: 'Loading guides…',
+      guidesEmpty: 'No published guides in English yet. Please check back soon.',
+      guidesError: 'The guides list could not be loaded right now. The tools above still work normally.',
+      guidesUpdated: 'Last updated',
+      guidesOther: 'Read the Arabic version',
       atsNeeds: 'Needs work — review the missing items below before applying.'
     }
   };
@@ -3281,11 +3363,30 @@
     refreshPrintDate();
   }
 
+function cvSharePayload() {
+    if (!cvHasContent) return null;
+    const scoreNode = $('ats-score-text');
+    const score = scoreNode ? (scoreNode.textContent || '').trim() : '';
+    const feedbackNode = $('ats-feedback');
+    const feedback = feedbackNode ? (feedbackNode.textContent || '').trim() : '';
+    if (!score) return null;
+    const lines = [
+      t('shareCvPrivacy'),
+      '• ' + t('cvScoreTitle') + ' ' + score + (feedback ? ' — ' + feedback : ''),
+      '',
+      t('shareBrand') + ': ' + SHARE_BASE + '#cv-tool'
+    ].join('\n');
+    return { title: t('shareCvTitle'), text: lines, link: SHARE_BASE + '#cv-tool' };
+  }
+
+  /* استعادة الأرقام من رابط المشاركة (?tool=...&...) */
+
   function toggleLanguage() {
     closeShareSheet();
     currentLang = currentLang === 'ar' ? 'en' : 'ar';
     localStorage.setItem('seh_lang', currentLang);
     applyI18n();
+    renderGuides();
     calculateEOS(); calculateSalary(); generateLetter(); cvRenderAll();
   }
 
@@ -4244,6 +4345,141 @@ ${body}
     buildCV();
   }
 
+const GUIDES_JSON = 'articles.json';
+  const GUIDES_LIMIT = 6;
+  const GUIDES_ALLOWED_ORIGIN = 'https://ksatools.github.io';
+  let guidesData = [];
+  let guidesState = 'idle';   /* idle | loading | ready | error */
+
+  /* يقبل: مساراً داخلياً مطلقاً ينتهي بـ.html، أو رابطاً مطلقاً على نطاق الموقع.
+     يرفض كل ما عدا ذلك (javascript:، data:، نطاقات خارجية، //، ..). */
+  function safeGuideUrl(raw) {
+    if (typeof raw !== 'string') return null;
+    const s = raw.trim();
+    if (!s) return null;
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+      let u;
+      try { u = new URL(s); } catch (e) { return null; }
+      if (u.protocol !== 'https:') return null;
+      if (u.origin !== location.origin && u.origin !== GUIDES_ALLOWED_ORIGIN) return null;
+      return u.href;
+    }
+    if (s.startsWith('//') || !s.startsWith('/')) return null;
+    if (s.indexOf('..') !== -1) return null;
+    if (!/^\/[A-Za-z0-9._~\-\/]*\.html$/.test(s)) return null;
+    return s;
+  }
+
+  function guidesSetStatus(message) {
+    const box = $('guides-list');
+    if (!box) return;
+    box.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'guides-status';
+    p.textContent = message;
+    box.appendChild(p);
+  }
+
+  function guidesCard(item) {
+    const card = document.createElement('article');
+    card.className = 'guide-card';
+
+    const h = document.createElement('h3');
+    h.className = 'guide-title';
+    const link = document.createElement('a');
+    link.href = item.href;
+    link.textContent = item.title;
+    h.appendChild(link);
+    card.appendChild(h);
+
+    if (item.excerpt) {
+      const p = document.createElement('p');
+      p.className = 'guide-excerpt';
+      p.textContent = item.excerpt;
+      card.appendChild(p);
+    }
+
+    if (item.updated) {
+      const meta = document.createElement('p');
+      meta.className = 'guide-meta';
+      meta.textContent = t('guidesUpdated') + ': ' + item.updated;
+      card.appendChild(meta);
+    }
+
+    if (item.altHref) {
+      const alt = document.createElement('a');
+      alt.className = 'guide-alt';
+      alt.href = item.altHref;
+      alt.textContent = t('guidesOther');
+      card.appendChild(alt);
+    }
+    return card;
+  }
+
+  function renderGuides() {
+    const box = $('guides-list');
+    if (!box) return;
+    if (guidesState === 'loading') { guidesSetStatus(t('guidesLoading')); return; }
+    if (guidesState === 'error') { guidesSetStatus(t('guidesError')); return; }
+    if (guidesState !== 'ready') return;
+
+    const items = [];
+    guidesData.forEach(rec => {
+      if (!rec || typeof rec !== 'object') return;
+      if (rec.status !== 'published' || rec.lang !== currentLang) return;
+      if (typeof rec.title !== 'string' || !rec.title.trim()) return;
+      const href = safeGuideUrl(rec.url);
+      if (!href) return;
+      items.push({
+        href: href,
+        title: rec.title.trim(),
+        excerpt: (typeof rec.excerpt === 'string' ? rec.excerpt.trim() : ''),
+        updated: (typeof rec.updated_at === 'string' ? rec.updated_at.trim() : ''),
+        altHref: safeGuideUrl(rec.alternate_url),
+        sortKey: (typeof rec.updated_at === 'string' && rec.updated_at) ||
+                 (typeof rec.published_at === 'string' ? rec.published_at : '')
+      });
+    });
+
+    if (!items.length) { guidesSetStatus(t('guidesEmpty')); return; }
+
+    items.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
+
+    box.textContent = '';
+    const grid = document.createElement('div');
+    grid.className = 'guides-grid';
+    items.slice(0, GUIDES_LIMIT).forEach(it => grid.appendChild(guidesCard(it)));
+    box.appendChild(grid);
+  }
+
+  function loadGuides() {
+    const box = $('guides-list');
+    if (!box) return;
+    if (typeof fetch !== 'function' || location.protocol === 'file:') {
+      /* على file:// لا يمكن قراءة JSON عبر fetch — نُظهر حالة الخطأ بهدوء دون أي طلب */
+      guidesState = 'error';
+      renderGuides();
+      return;
+    }
+    guidesState = 'loading';
+    renderGuides();
+    fetch(GUIDES_JSON, { cache: 'no-store' })
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(data => {
+        guidesData = Array.isArray(data) ? data : [];
+        guidesState = 'ready';
+        renderGuides();
+      })
+      .catch(() => {
+        guidesData = [];
+        guidesState = 'error';
+        renderGuides();
+      });
+  }
+
   /* ==================== التهيئة ==================== */
   document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('seh_theme')
@@ -4267,6 +4503,7 @@ ${body}
     applyShareParams();
     applyI18n();
     initShareSheet();
+    loadGuides();
 
     const bindCalc = (ids, fn) => ids.forEach(id => {
       const el = $(id);
@@ -4300,7 +4537,7 @@ ${body}
     });
     $('cv-share').addEventListener('click', () => {
       if (!cvHasContent) { showToast(t('cvEmptyWarn')); return; }
-      openShareSheet(textSharePayload('shareCvTitle', 'cv-tool', $('cv-output')));
+      openShareSheet(cvSharePayload());
     });
     $('cv-print').addEventListener('click', printDoc);
 
@@ -4308,5 +4545,8 @@ ${body}
   });
   </script>
   <!-- ملاحظة: تم نقل كود Adsterra Social Bar إلى <head> أعلاه لمنع تحميله مرتين -->
+  <!-- ====== Adsterra: Social Bar ====== -->
+  <script type="text/javascript" src="//pl25967834.profitablecpmrate.com/7c/dd/0a/7cdd0a31b4560a6ce3906a22a43c5ed3.js"></script>
+
 </body>
 </html>
