@@ -8,16 +8,20 @@
 #
 # المطلوب من مالك المستودع (مرة واحدة):
 #   1) Settings → Secrets and variables → Actions → Secrets:
-#        GEMINI_API_KEY            (إلزامي للتوليد)
+#        GROQ_API_KEY              (إلزامي للتوليد — المزوّد الافتراضي groq)
+#        GEMINI_API_KEY            (اختياري — يُلزم فقط عند AI_PROVIDER=gemini)
 #        TELEGRAM_BOT_TOKEN        (اختياري)
 #        TELEGRAM_CHAT_ID          (اختياري)
 #   2) Settings → Secrets and variables → Actions → Variables:
 #        PUBLISH_MODE   = draft | auto      (الافتراضي draft)
+#        AI_PROVIDER    = groq | gemini     (اختياري، الافتراضي groq — بلا انتقال تلقائي)
+#        GROQ_MODEL     = openai/gpt-oss-20b (اختياري)
 #        GEMINI_MODEL   = gemini-3.8-flash  (اختياري)
 #        SOCIAL_LANGUAGE= ar | en | both    (اختياري)
 #        PAGES_VIA_ACTIONS = true           (فقط إذا كان نشر Pages عبر Actions)
 #   3) Settings → Pages: إما "Deploy from a branch" (المسار الافتراضي هنا)
 #        أو "GitHub Actions" مع PAGES_VIA_ACTIONS=true.
+# ملاحظة: لا حاجة لضبط أي Variable لاستخدام الإعدادات الافتراضية (groq + نموذجه).
 # =============================================================================
 
 name: AI Marketing
@@ -63,6 +67,11 @@ jobs:
     permissions:
       contents: write
     env:
+      # مزوّد المحتوى: groq افتراضياً (خطة مجانية)، وgemini خيار صريح.
+      # لا انتقال تلقائي بين المزوّدين: فشل المزوّد المحدَّد يُفشل التشغيل بوضوح.
+      AI_PROVIDER: ${{ vars.AI_PROVIDER || 'groq' }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-20b' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -107,8 +116,28 @@ jobs:
 
       - name: التحقّق من ضبط الإعدادات
         run: |
-          if [ -z "${GEMINI_API_KEY:-}" ]; then
-            echo "::warning::GEMINI_API_KEY غير مضبوط — سيتوقّف التوليد بأمان ولن يُنشر شيء."
+          set -euo pipefail
+          PROVIDER="${AI_PROVIDER:-groq}"
+          case "$PROVIDER" in
+            groq)
+              NEEDED="GROQ_API_KEY"
+              HAVE="${GROQ_API_KEY:-}"
+              ;;
+            gemini)
+              NEEDED="GEMINI_API_KEY"
+              HAVE="${GEMINI_API_KEY:-}"
+              ;;
+            *)
+              echo "::error::قيمة AI_PROVIDER غير مدعومة: $PROVIDER (المدعوم: groq | gemini)."
+              exit 1
+              ;;
+          esac
+          echo "مزوّد المحتوى المحدَّد: $PROVIDER (لا انتقال تلقائي إلى مزوّد آخر)."
+          if [ -z "$HAVE" ]; then
+            # لا تُطبع أي قيمة سرّية؛ يُذكر اسم الإعداد الناقص فقط. الفشل الحتمي
+            # يأتي من الدورة نفسها برمز خروج 3، وهذه مجرّد ملاحظة مبكرة واضحة.
+            echo "::error::${NEEDED} غير مضبوط — ستفشل دورة التوليد برمز خروج 3 ولن يُنشر شيء."
+            exit 1
           fi
 
       - name: تحديد وضع النشر
