@@ -78,13 +78,20 @@ def static_checks():
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
     check("سكربت Social Bar موجود مرة واحدة",
-          text.count("pl25967834.profitablecpmrate.com/7c/dd/0a/7cdd0a31b4560a6ce3906a22a43c5ed3.js") == 1,
-          "count=%d" % text.count("pl25967834.profitablecpmrate.com/7c/dd/0a/7cdd0a31b4560a6ce3906a22a43c5ed3.js"))
+          text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3") == 1,
+          "count=%d" % text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"))
     check("سكربت Native Banner موجود مرة واحدة",
-          text.count("pl25967834.profitablecpmrate.com/7af3b8325dba6708da88eed5e517ec89/invoke.js") == 1,
-          "count=%d" % text.count("pl25967834.profitablecpmrate.com/7af3b8325dba6708da88eed5e517ec89/invoke.js"))
+          text.count("https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89") == 1,
+          "count=%d" % text.count("https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"))
+    native_id = re.search(r"bauval\.org/21/([0-9a-f]+)", text)
+    container_id = re.search(r'<div id="container-([0-9a-f]+)"></div>', text)
+    check("حاوية Native Banner تطابق معرّف الإعلان",
+          bool(native_id and container_id and native_id.group(1) == container_id.group(1)),
+          "native=%s container=%s" % (native_id.group(1) if native_id else None,
+                                      container_id.group(1) if container_id else None))
     check("لا يوجد نطاق الإعلان القديم",
-          text.count("bauval.org") == 0, "count=%d" % text.count("bauval.org"))
+          text.count("pl25967834.profitablecpmrate.com") == 0,
+          "count=%d" % text.count("pl25967834.profitablecpmrate.com"))
     check("لا يوجد أثر اختبار ('ad stripped')", "<!--ad stripped-->" not in text)
     check("بصيغة LF فقط", b"\r\n" not in raw and raw.count(b"\r") == 0)
 
