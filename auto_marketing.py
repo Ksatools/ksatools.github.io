@@ -32,8 +32,18 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     ولا يُنقل شيء إلى الملفات العامة ولا يُدفع إلا بعد نجاح كل الفحوص.
 
 رموز الخروج:
-    0 = نجاح، أو حالة متوقّعة أُديرت بأمان (مفتاح مفقود، لا مواضيع، رفض بوابة جودة، خطأ API).
+    0 = نجاح، أو حالة متوقّعة أُديرت بأمان (لا مواضيع متاحة، النسختان منشورتان سابقاً،
+        فشل جزئي تُكتب فيه مسودة واحدة بلا نشر، وأخطاء تُدار دون كتابة).
     1 = خطأ داخلي غير متوقّع، أو فشل في --selftest / --verify.
+    2 = فشل توليد المحتوى: لم تنتج الدورة أي نسخة صالحة (EXIT_GENERATION_FAILED)
+        — لا مسودات ولا نشر، ويُحفظ `attempts` فقط.
+    3 = فشل الإعداد: GEMINI_API_KEY غير مضبوط (EXIT_CONFIG_FAILED)
+        — لا محاولة تُستهلك، ولا ملف يُكتب، ولا نداء شبكة.
+
+الإعادة عند أخطاء Gemini المؤقّتة:
+    يُعاد الطلب عند 408/425/429/500/502/503/504 بحدّ أقصى GEMINI_MAX_TRIES = 4
+    محاولات لكل نسخة لغوية، بتراجع تصاعدي 2/4/8s (سقف 30s) وباحترام Retry-After
+    كرقم ثوانٍ فقط. الإعادة ليست محاولة موضوع جديدة ولا تزيد MAX_ATTEMPTS.
 """
 
 from __future__ import annotations
@@ -114,6 +124,24 @@ MIN_SECTIONS = 3
 MAX_SECTIONS = 12
 MIN_TOTAL_CHARS = 1200
 MAX_ATTEMPTS = 3
+
+# سياسة إعادة المحاولة عند استدعاء Gemini: أخطاء مؤقّتة فقط.
+#   408/425 = انتهاء مهلة أو طلب مبكّر، 429 = تجاوز المعدّل، 5xx = خلل مؤقّت عند المزوّد.
+#   503 (UNAVAILABLE) هو الأكثر وقوعاً: «النموذج يواجه طلباً مرتفعاً حالياً».
+RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+# حدّ أعلى صريح: المحاولة الأولى + 3 إعادات = 4 محاولات كحدّ أقصى لكل نسخة لغوية.
+# الإعادة الداخلية ليست محاولة موضوع جديدة ولا دورة تسويق جديدة: عدّاد `attempts`
+# يُزاد مرة واحدة لكل دورة في run_once، لا لكل نداء شبكة.
+GEMINI_MAX_TRIES = 4
+GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
+GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار بين محاولتين
+# رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
+EXIT_GENERATION_FAILED = 2
+# رمز خروج مميّز لفشل الإعداد (غياب GEMINI_API_KEY مثلاً): لا توليد ولا نشر ولا استهلاك محاولات.
+EXIT_CONFIG_FAILED = 3
+
+# نقطة استبدال للاختبارات: نصمت الانتظار الحقيقي في الاختبار الذاتي.
+SLEEP = time.sleep
 
 UA = "KSA-Tools-Bot/1.0 (+https://ksatools.github.io/)"
 
@@ -429,8 +457,12 @@ def save_state(state) -> None:
 # 5) HTTP
 # =====================================================================================
 
-def http_request(url, *, method="GET", data=None, headers=None, timeout=25, retries=2):
-    """يرجع (status, bytes, final_url). يرفع آخر استثناء عند فشل الشبكة كاملاً."""
+def http_request_full(url, *, method="GET", data=None, headers=None, timeout=25, retries=2):
+    """يرجع (status, headers, bytes, final_url). يرفع آخر استثناء عند فشل الشبكة كاملاً.
+
+    `retries=0` يعني محاولة واحدة فقط، ويُستعمل حين تتولّى الدالة المستدعية سياسة
+    إعادة المحاولة بنفسها (كما في Gemini) حتى لا تتضاعف المحاولات.
+    """
     hdrs = {"User-Agent": UA, "Accept": "*/*"}
     if headers:
         hdrs.update(headers)
@@ -439,9 +471,9 @@ def http_request(url, *, method="GET", data=None, headers=None, timeout=25, retr
         try:
             req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.status, resp.read(), resp.geturl()
+                return resp.status, resp.headers, resp.read(), resp.geturl()
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+            if exc.code in RETRYABLE_STATUS and attempt < retries:
                 last_exc = exc
                 time.sleep(1.5 * (attempt + 1))
                 continue
@@ -449,13 +481,85 @@ def http_request(url, *, method="GET", data=None, headers=None, timeout=25, retr
                 payload = exc.read()
             except Exception:  # noqa: BLE001
                 payload = b""
-            return exc.code, payload, url
+            return exc.code, getattr(exc, "headers", None), payload, url
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last_exc = exc
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
     raise last_exc if last_exc else RuntimeError("http_request failed")
+
+
+def http_request(url, *, method="GET", data=None, headers=None, timeout=25, retries=2):
+    """يرجع (status, bytes, final_url) — نسخة مختصرة من http_request_full."""
+    status, _headers, body, final_url = http_request_full(
+        url, method=method, data=data, headers=headers, timeout=timeout, retries=retries)
+    return status, body, final_url
+
+
+def header_get(headers, name):
+    """قراءة ترويسة استجابة بلا حساسية لحالة الأحرف، مع تجاهل القيم غير النصّية."""
+    try:
+        value = headers.get(name) if headers is not None else None
+    except AttributeError:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def backoff_delay(attempt, *, retry_after=None, base=GEMINI_BACKOFF_BASE,
+                  cap=GEMINI_BACKOFF_MAX) -> float:
+    """انتظار تصاعدي `base × 2^attempt` بحدّ أعلى `cap`، مع احترام Retry-After إن وُجد."""
+    delay = min(base * (2 ** max(0, int(attempt))), cap)
+    if retry_after:
+        try:
+            asked = float(str(retry_after).strip())
+        except ValueError:
+            asked = 0.0   # تاريخ HTTP أو قيمة غير صالحة ⇒ نكتفي بالانتظار التصاعدي
+        if asked > 0:
+            delay = min(max(delay, asked), cap)
+    return float(delay)
+
+
+def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
+    """يرسل الطلب إلى Gemini ويعيد (status, raw, tries_used).
+
+    يُعاد الطلب على الأخطاء المؤقّتة فقط (خطأ شبكة أو رمز في RETRYABLE_STATUS)
+    بانتظار تصاعدي وحدّ أعلى صريح `tries`. الأخطاء غير المؤقّتة (400/401/403/404/422…)
+    تُعاد إلى المستدعي فوراً بلا إعادة، وخطأ الشبكة بعد استنفاد المحاولات يُرفع.
+    """
+    sleep = SLEEP if sleep is None else sleep
+    tries = max(1, int(tries))
+    last_exc = None
+    for attempt in range(tries):
+        try:
+            status, headers, raw, _ = http_request_full(
+                url,
+                method="POST",
+                data=body,
+                headers={"Content-Type": "application/json; charset=utf-8",
+                         "x-goog-api-key": api_key},
+                timeout=timeout,
+                retries=0,
+            )
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_exc = exc
+            if attempt + 1 >= tries:
+                break
+            delay = backoff_delay(attempt)
+            log(f"[RETRY] خطأ شبكة مؤقّت ({type(exc).__name__}) — "
+                f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
+            sleep(delay)
+            continue
+
+        if status in RETRYABLE_STATUS and attempt + 1 < tries:
+            delay = backoff_delay(attempt, retry_after=header_get(headers, "Retry-After"))
+            log(f"[RETRY] استجابة مؤقّتة http_{status} — "
+                f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
+            sleep(delay)
+            continue
+        return status, raw, attempt + 1
+
+    raise last_exc if last_exc else RuntimeError("gemini_request failed")
 
 
 # =====================================================================================
@@ -505,8 +609,13 @@ def build_prompt(topic, lang: str) -> str:
     )
 
 
-def gemini_generate_json(prompt, *, api_key, model, timeout=90, retries=2):
-    """يرجع (ok, data|None, message). لا يطبع المفتاح أبداً."""
+def gemini_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
+                        sleep=None):
+    """يرجع (ok, data|None, message). لا يطبع المفتاح أبداً.
+
+    إعادة المحاولة تحدث داخل gemini_request: أخطاء مؤقّتة فقط وبحدّ أعلى صريح،
+    ولا تزيد عدّاد `attempts` (العدّ مرة واحدة لكل دورة في run_once).
+    """
     if not api_key:
         return False, None, "no_api_key"
     url = (
@@ -525,19 +634,17 @@ def gemini_generate_json(prompt, *, api_key, model, timeout=90, retries=2):
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     try:
-        status, raw, _ = http_request(
-            url,
-            method="POST",
-            data=body,
-            headers={"Content-Type": "application/json; charset=utf-8", "x-goog-api-key": api_key},
-            timeout=timeout,
-            retries=retries,
-        )
+        status, raw, tries_used = gemini_request(
+            url, body, api_key, timeout=timeout, tries=tries, sleep=sleep)
     except Exception as exc:  # noqa: BLE001
         return False, None, f"network_error: {redact(exc)}"
 
     if status != 200:
-        return False, None, f"http_{status}: {redact(raw.decode('utf-8', 'replace')[:300])}"
+        note = ("خطأ مؤقّت — استُنفدت المحاولات" if status in RETRYABLE_STATUS
+                else "خطأ غير قابل لإعادة المحاولة")
+        return False, None, (
+            f"http_{status}: {redact(raw.decode('utf-8', 'replace')[:300])}"
+            f" [{note} — محاولات {tries_used}/{tries}]")
 
     try:
         envelope = json.loads(raw.decode("utf-8"))
@@ -1219,6 +1326,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
     api_key = os.environ.get("GEMINI_API_KEY", "") if api_key is None else api_key
     model = model or os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
 
+    # فشل الإعداد يُكتشف قبل أي قراءة/كتابة: لا محاولة تُستهلك، ولا ملف مقال أو مسودة،
+    # ولا نداء شبكة. (dry-run مستثنى: يعمل بمصادر وهمية بلا مفتاح.)
+    if not api_key and not dry_run:
+        log("[FAIL] فشل الإعداد: GEMINI_API_KEY غير مضبوط، ولم يُجرَ توليد أو نشر.")
+        log(f"[FAIL] النتيجة: فشل الإعداد (رمز خروج {EXIT_CONFIG_FAILED}) — "
+            "لم تُستهلك أي محاولة موضوع، ولم يُكتب أي ملف.")
+        return EXIT_CONFIG_FAILED
+
     state = load_state()
     records = load_json(ARTICLES_JSON, [])
     if not isinstance(records, list):
@@ -1244,17 +1359,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
 
     log(f"الموضوع المختار: {topic['id']} — {topic['title_ar']}")
 
-    if not api_key and not dry_run:
-        log("[SKIP] GEMINI_API_KEY غير موجود — لا توليد. المقالات السابقة لم تُمس.")
-        return 0
-
     state["topics"][topic["id"]]["attempts"] = int(state["topics"][topic["id"]].get("attempts", 0)) + 1
 
     results = {}
+    attempted = False
     for lang in ("ar", "en"):
         if (topic["id"], lang) in published_pairs:
             log(f"[SKIP] النسخة {lang} منشورة سابقاً — لا إعادة إنشاء.")
             continue
+        attempted = True
         log(f"توليد النسخة {lang}…")
         if dry_run:
             ok, data, msg = True, fixture_data(lang), "fixture"
@@ -1281,10 +1394,18 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
 
     ready = [results[l] for l in ("ar", "en") if results.get(l)]
     if not ready:
-        log("[SKIP] لم تكتمل أي نسخة صالحة في هذه الدورة. لم يُنشأ أي مقال مكرر.")
+        if not attempted:
+            log("[SKIP] النسختان (ar/en) منشورتان سابقاً — لا شيء لتوليده في هذه الدورة.")
+            return 0
+        statuses = ", ".join(
+            f"{lang}={state['topics'][topic['id']].get(lang)}" for lang in ("ar", "en"))
+        log("[FAIL] فشل توليد المحتوى: لم تنتج هذه الدورة أي نسخة صالحة "
+            f"({statuses}). لم يُكتب أي ملف، ولم تُنشأ مسودة، ولم يُنشر شيء.")
+        log("[FAIL] النتيجة: فشل توليد المحتوى (رمز خروج "
+            f"{EXIT_GENERATION_FAILED}) — وليس اكتمال دورة تسويق.")
         if not dry_run:
             save_state(state)
-        return 0
+        return EXIT_GENERATION_FAILED
 
     if dry_run:
         log(f"[DRY-RUN] لا كتابة. النسخ الصالحة: {', '.join(a['lang'] for a in ready)} — لم يُلمس أي ملف.")
@@ -1304,12 +1425,18 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
     elif skip_source_check:
         log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
 
+    if len(ready) != 2:
+        missing = [l for l in ("ar", "en") if l not in results]
+        log(f"[WARN] نسخة واحدة فقط اجتازت هذه الدورة (الناقص: {', '.join(missing)}) — "
+            "لا نشر مع نسخة واحدة، ولن يُعاد إنشاء النسخة المنشورة سابقاً.")
+
     if mode != "auto" or len(ready) != 2:
         for art in ready:
             write_article_files(art, published=False)
             state["topics"][topic["id"]][art["lang"]] = "draft"
         save_state(state)
         log(f"[DRAFT] حفظ {len(ready)} مسودة في {DRAFTS_DIR} — لم تُضف إلى articles.json ولا إلى sitemap.xml.")
+        log("[DONE] اكتملت دورة التسويق (بلا نشر).")
         return 0
 
     # --- النشر الآمن: نجهّز الصفحات في مجلد مؤقت، ونتحقّق من HTML وarticles.json
@@ -1382,13 +1509,21 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
                        os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                        os.environ.get("TELEGRAM_CHAT_ID", ""))
     log(f"Telegram: {tg}")
-    log(f"[DONE] الوضع=auto — نُشرت {len(ready)} نسخة لمقال واحد.")
+    log(f"[DONE] اكتملت دورة التسويق — الوضع=auto — نُشرت {len(ready)} نسخة لمقال واحد.")
+
     return 0
 
 
 # =====================================================================================
 # 12) اختبارات داخلية (بلا شبكة وبلا API)
 # =====================================================================================
+
+_PUBLISHED_SAMPLE = [{
+    "translation_id": "zz-existing", "lang": "ar", "title": "سجل قائم",
+    "url": "/articles/ar/zz-existing-ar.html", "published_at": "2026-01-01",
+    "updated_at": "2026-01-01", "status": "published",
+}]
+
 
 def selftest() -> int:
     problems = []
@@ -1561,6 +1696,193 @@ def selftest() -> int:
     check("reconcile: يحترم حالة languages غير المنشورة",
           reconcile_state_with_records(
               {"topics": {t_second: {"ar": "draft", "en": "pending", "attempts": 1}}}, pairs_pub) == 0)
+
+    # 13) سياسة إعادة المحاولة عند التوليد (استجابات وهمية — بلا شبكة وبلا انتظار)
+    _real_http_full = globals()["http_request_full"]
+    _real_sleep = globals()["SLEEP"]
+    _real_paths = {name: globals()[name] for name in (
+        "ARTICLES_JSON", "SITEMAP_XML", "STATE_JSON", "SOCIAL_TXT",
+        "ARTICLES_DIR", "DRAFTS_DIR")}
+    _sandboxes = []
+    _sleeps = []
+
+    def _fake_http(responses):
+        """يستبدل http_request_full باستجابات متتابعة؛ آخر استجابة تتكرّر."""
+        calls = []
+
+        def _fn(url, **kwargs):
+            calls.append(kwargs)
+            status, headers, body = responses[min(len(calls) - 1, len(responses) - 1)]
+            return status, headers, body, url
+
+        return _fn, calls
+
+    def _envelope(lang):
+        text = json.dumps(fixture_data(lang), ensure_ascii=False)
+        blob = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+        return 200, {}, json.dumps(blob, ensure_ascii=False).encode("utf-8")
+
+    def _fake_by_lang(en_ok):
+        """503 للنسخة العربية دائماً، و(503 أو نجاح) للنسخة الإنجليزية."""
+        calls = {"ar": 0, "en": 0}
+
+        def _fn(url, **kwargs):
+            body = json.loads(kwargs["data"].decode("utf-8"))
+            prompt = body["contents"][0]["parts"][0]["text"]
+            lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+            calls[lang] += 1
+            if lang == "en" and en_ok:
+                return _envelope("en") + (url,)
+            return (503, {}, b'{"error":{"status":"UNAVAILABLE","message":"high demand"}}', url)
+
+        return _fn, calls
+
+    def _sandbox():
+        """مجلد مؤقّت بدل ملفات الموقع الحقيقية: الدورة الفاشلة لا تلمس المستودع."""
+        root = Path(tempfile.mkdtemp(prefix="ksa-selftest-"))
+        _sandboxes.append(root)
+        globals()["ARTICLES_JSON"] = root / "articles.json"
+        globals()["SITEMAP_XML"] = root / "sitemap.xml"
+        globals()["STATE_JSON"] = root / "marketing_state.json"
+        globals()["SOCIAL_TXT"] = root / "latest_social_post.txt"
+        globals()["ARTICLES_DIR"] = root / "articles"
+        globals()["DRAFTS_DIR"] = root / "drafts"
+        atomic_write_json(ARTICLES_JSON, _PUBLISHED_SAMPLE)
+        atomic_write_text(SITEMAP_XML, SITEMAP_EMPTY)
+        return root
+
+    try:
+        globals()["SLEEP"] = _sleeps.append
+
+        # (أ) نجاح بعد خطأ 503 مؤقّت واحد
+        fake, calls = _fake_http([
+            (503, {}, b'{"error":{"status":"UNAVAILABLE"}}'), _envelope("ar")])
+        globals()["http_request_full"] = fake
+        ok, data, msg = gemini_generate_json("p", api_key="k", model="m")
+        check("إعادة المحاولة: نجاح بعد 503 مؤقّت",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [backoff_delay(0)])
+
+        # (ب) استمرار 503 حتى استنفاد الحدّ الأعلى
+        _sleeps.clear()
+        fake, calls = _fake_http([(503, {}, b'{"error":{"status":"UNAVAILABLE"}}')])
+        globals()["http_request_full"] = fake
+        ok, data, msg = gemini_generate_json("p", api_key="k", model="m")
+        _delays = [backoff_delay(i) for i in range(GEMINI_MAX_TRIES - 1)]
+        check("إعادة المحاولة: 503 متكرّر يستنفد الحدّ الأعلى بانتظار تصاعدي",
+              not ok and data is None and msg.startswith("http_503")
+              and len(calls) == GEMINI_MAX_TRIES
+              and _sleeps == _delays and len(_sleeps) == GEMINI_MAX_TRIES - 1
+              and all(_delays[i] < _delays[i + 1] for i in range(len(_delays) - 1))
+              and "استُنفدت المحاولات" in msg)
+
+        check("إعادة المحاولة: حدّ أعلى صريح وسقف انتظار معلَنان",
+              2 <= GEMINI_MAX_TRIES <= 6
+              and backoff_delay(50) == GEMINI_BACKOFF_MAX
+              and backoff_delay(0) == GEMINI_BACKOFF_BASE
+              and backoff_delay(0, retry_after="12") == 12.0
+              and backoff_delay(0, retry_after="600") == GEMINI_BACKOFF_MAX
+              and backoff_delay(0, retry_after="غير رقمي") == GEMINI_BACKOFF_BASE
+              and {503, 429, 500, 502, 504} <= RETRYABLE_STATUS
+              and not ({400, 401, 403, 404, 422} & RETRYABLE_STATUS))
+
+        # (ج) خطأ غير مؤقّت (مفتاح غير صالح / طلب غير صحيح) ⇒ بلا أي إعادة
+        _sleeps.clear()
+        fake, calls = _fake_http([
+            (400, {}, b'{"error":{"message":"API key not valid. Please pass a valid API key."}}')])
+        globals()["http_request_full"] = fake
+        ok, data, msg = gemini_generate_json("p", api_key="bad", model="m")
+        check("إعادة المحاولة: الخطأ غير المؤقّت لا يُعاد إطلاقاً",
+              not ok and len(calls) == 1 and _sleeps == []
+              and msg.startswith("http_400") and "not valid" in msg
+              and "غير قابل لإعادة المحاولة" in msg)
+
+        # (د) فشل النسختين: لا مسودات، ولا صفحات، ولا تعديل على الفهارس، ومحاولة واحدة للموضوع
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _sleeps.clear()
+        fake, _calls = _fake_by_lang(en_ok=False)
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="draft", api_key="k", model="m")
+        rec = load_state()["topics"][TOPICS[0]["id"]]
+        check("دورة فاشلة: رمز خروج غير صفري (لا نجاح مضلّل)",
+              rc == EXIT_GENERATION_FAILED and rc != 0)
+        check("دورة فاشلة: لا صفحة منشورة ولا مسودة ولا ملف يتيم",
+              not ARTICLES_DIR.exists() and not DRAFTS_DIR.exists()
+              and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("دورة فاشلة: الإعادات الداخلية لا تُحتسب محاولات ولا دورات",
+              rec.get("attempts") == 1 and rec.get("ar") == "error"
+              and rec.get("en") == "error" and _calls == {"ar": GEMINI_MAX_TRIES,
+                                                          "en": GEMINI_MAX_TRIES})
+        check("دورة فاشلة: الحالة تُحفظ كي يعمل حدّ المحاولات لاحقاً",
+              load_state().get("last_run") and not (ARTICLES_DIR / "ar").exists())
+
+        # (هـ) فشل نسخة واحدة في وضع auto: مسودة فقط، ولا نشر إطلاقاً
+        good = list(ARTICLES_DIR.glob("**/*.html")) + list(DRAFTS_DIR.glob("**/*.html"))
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, _calls = _fake_by_lang(en_ok=True)
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="auto", api_key="k", model="m")
+        drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        check("فشل جزئي في وضع auto: لا نشر ولا سجل مقال (مسودة واحدة فقط)",
+              rc == 0 and good == [] and len(drafts) == 1
+              and "/en/" in drafts[0].as_posix()
+              and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before
+              and load_state()["topics"][TOPICS[0]["id"]]["en"] == "draft")
+
+        # (و) غياب GEMINI_API_KEY: فشل إعداد صريح بلا محاولات وبلا ملفات وبلا نداء شبكة
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _net_calls = []
+
+        def _no_network(url, **kwargs):
+            _net_calls.append(url)
+            return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
+
+        globals()["http_request_full"] = _no_network
+        _saved_key = os.environ.pop("GEMINI_API_KEY", None)
+        _saved_stdout = sys.stdout
+        _capture = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        try:
+            sys.stdout = _capture
+            try:
+                rc = run_once(mode="draft")
+            finally:
+                sys.stdout = _saved_stdout
+                _capture.seek(0)
+                _out = _capture.read()
+                _capture.close()
+        finally:
+            sys.stdout = _saved_stdout
+            if _saved_key is not None:
+                os.environ["GEMINI_API_KEY"] = _saved_key
+
+        _state = load_state()
+        check("غياب المفتاح: فشل إعداد برمز خروج غير صفري ورسالة واضحة",
+              rc == EXIT_CONFIG_FAILED and rc != 0
+              and "فشل الإعداد: GEMINI_API_KEY غير مضبوط، ولم يُجرَ توليد أو نشر." in _out)
+        check("غياب المفتاح: بلا محاولات وبلا ملفات وبلا نداء شبكة",
+              _net_calls == []
+              and _state["topics"][TOPICS[0]["id"]].get("attempts", 0) == 0
+              and not STATE_JSON.exists() and not ARTICLES_DIR.exists()
+              and not DRAFTS_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # (ز) بلا مفتاح + dry-run: يبقى يعمل بلا كتابة (لا ينكسر فحص CI/الاختبار الذاتي)
+        rc = run_once(mode="draft", dry_run=True)
+        check("غياب المفتاح + dry-run: نجاح بلا كتابة",
+              rc == 0 and not STATE_JSON.exists() and not ARTICLES_DIR.exists()
+              and not DRAFTS_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+    finally:
+        globals()["http_request_full"] = _real_http_full
+        globals()["SLEEP"] = _real_sleep
+        for _name, _val in _real_paths.items():
+            globals()[_name] = _val
+        for _root in _sandboxes:
+            shutil.rmtree(_root, ignore_errors=True)
 
     if problems:
         log(f"[SELFTEST] فشل {len(problems)} فحصاً.")
