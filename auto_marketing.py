@@ -68,6 +68,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
 import time
@@ -128,9 +129,88 @@ TOOL_LABEL = {
     "cv": ("منسّق السيرة الذاتية وفاحص ATS", "Resume Builder & ATS Checker"),
 }
 
-# النطاقات المسموح بها للمصادر الرسمية
+# النطاقات المسموح بها للمصادر الرسمية (لا توسيع: كل نطاق ليس `.gov.sa` أو قوى مرفوض)
 ALLOWED_SOURCE_SUFFIXES = (".gov.sa",)
 ALLOWED_SOURCE_HOSTS = {"qiwa.sa", "www.qiwa.sa"}
+# نطاقات منتهية/مهجورة تُرفض صراحةً فلا يمرّ مصدر ميت من البوابة الساكنة.
+# `mol.gov.sa` هو الاسم السابق لوزارة العمل، وتحققنا عملياً أنه لا يُترجَم عبر DNS
+# (NXDOMAIN) — البديل الرسمي الحالي هو `hrsd.gov.sa`.
+BLOCKED_SOURCE_HOSTS = {"mol.gov.sa", "www.mol.gov.sa"}
+
+# فحص المصادر عبر الشبكة: بعض المواقع الرسمية (مثل `hrsd.gov.sa`) ترفض الطلبات بلا
+# ترويسات طلب عادية فتُعيد 403، وتُعيد 200 معها — لذا نرسل ترويسات قياسية.
+SOURCE_CHECK_TIMEOUT = 20
+SOURCE_MIN_BYTES = 200
+# ترويسة `User-Agent` معرَّفة هنا (قبل `SOURCE_REQUEST_HEADERS`) لتُستعمل في فحص المصادر
+# وفي بقية الطلبات دون تكرار.
+UA = "KSA-Tools-Bot/1.0 (+https://ksatools.github.io/)"
+SOURCE_REQUEST_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ar,en;q=0.8",
+}
+# مكتبة المصادر الرسمية المعتمدة: الرابط الأساسي + بديل رسمي لنفس الجهة عند تعذّر الأول.
+OFFICIAL_SOURCE_LIBRARY = {
+    "hrsd_home": (
+        "وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/"),
+    "hrsd_labor_relations": (
+        "علاقات العمل — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/علاقات-العمل"),
+    "hrsd_labor_law": (
+        "نظام العمل — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/knowledge-centre/نظام-العمل"),
+    "hrsd_eosb": (
+        "نهاية الخدمة — وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/media-center/media/leendofservice"),
+    "hrsd_services": (
+        "دليل خدمات وزارة الموارد البشرية والتنمية الاجتماعية",
+        "https://www.hrsd.gov.sa/ministry-services/services"),
+    "gosi_home": (
+        "المؤسسة العامة للتأمينات الاجتماعية",
+        "https://www.gosi.gov.sa/"),
+    "qiwa_eosb": (
+        "منصة قوى — احتساب مكافأة نهاية الخدمة",
+        "https://qiwa.sa/ar/employees/manage-your-current-job/how-calculate-your-end-service-benefits"),
+}
+# لكل موضوع: مصدر أساسي أولاً ثم بديل رسمي معتمد لنفس الجهة (عند تعذّر الأول).
+DEFAULT_SOURCE_KEYS = ("hrsd_labor_law", "hrsd_home", "gosi_home")
+TOPIC_SOURCE_KEYS = {
+    "eosb-basics": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "eosb-resignation": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "eosb-full-entitlement": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "labor-art84": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art85": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art81": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "labor-art80": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "rights-contract-end": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "rights-employer-termination": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "annual-leave-balance": ("hrsd_labor_law", "hrsd_services", "hrsd_home"),
+    "daily-monthly-wage": ("hrsd_labor_law", "hrsd_home", "hrsd_services"),
+    "wage-definition": ("hrsd_labor_law", "hrsd_home", "hrsd_services"),
+    "basic-vs-actual-wage": ("hrsd_labor_law", "hrsd_home", "gosi_home"),
+    "payslip-reading": ("hrsd_labor_law", "gosi_home", "hrsd_home"),
+    "net-salary-calculation": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "final-settlement": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "contract-end-vs-resignation": ("hrsd_eosb", "hrsd_labor_law", "hrsd_home"),
+    "notice-period": ("hrsd_labor_law", "hrsd_labor_relations", "hrsd_home"),
+    "employee-exit-checklist": ("hrsd_labor_relations", "hrsd_labor_law", "hrsd_home"),
+    "gosi-overview": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "gosi-deduction-basis": ("gosi_home", "hrsd_labor_law", "hrsd_home"),
+    "gosi-new-registrant": ("gosi_home", "hrsd_services", "hrsd_home"),
+}
+
+
+def official_sources_for(topic) -> list:
+    """المصادر الرسمية المفضّلة لموضوع: الأساسي أولاً ثم بدائله الرسمية."""
+    tid = topic.get("id") if isinstance(topic, dict) else ""
+    keys = TOPIC_SOURCE_KEYS.get(tid) or DEFAULT_SOURCE_KEYS
+    out = []
+    for key in keys:
+        entry = OFFICIAL_SOURCE_LIBRARY.get(key)
+        if entry:
+            out.append({"title": entry[0], "url": entry[1]})
+    return out
 
 MIN_WORDS = {"ar": 250, "en": 250}
 MIN_SECTIONS = 3
@@ -181,8 +261,6 @@ QUOTA_STOP_HINTS = (
 
 # نقطة استبدال للاختبارات: نصمت الانتظار الحقيقي في الاختبار الذاتي.
 SLEEP = time.sleep
-
-UA = "KSA-Tools-Bot/1.0 (+https://ksatools.github.io/)"
 
 DISCLAIMER_AR = (
     "هذا المحتوى إرشادي وتعليمي عام، ولا يُعدّ استشارة قانونية. "
@@ -673,6 +751,15 @@ def build_prompt(topic, lang: str) -> str:
             "Explain Saudi statutory terms in plain language instead of mistranslating them. "
             "Cover the same statutory constraints as the Arabic version, and label any numeric example clearly as illustrative."
         )
+    preferred = official_sources_for(topic)
+    source_lines = "".join(
+        f"   - {item['title']} — {item['url']}\n" for item in preferred)
+    source_rule = (
+        "4) official_sources: اختر من 2 إلى 4 مصادر من هذه القائمة الرسمية المعتمدة فقط، "
+        "وانسخ الرابط كما هو بالحرف (ولا تخترع رابطاً ولا نطاقاً آخر):\n"
+        f"{source_lines}"
+        "   ممنوع تماماً استخدام النطاق المنتهي mol.gov.sa أو أي نطاق غير مذكور أعلاه.\n"
+    )
     return (
         "أنت محرّر محتوى إرشادي-عملي لمنصة أدوات سعودية. ما تكتبه إرشاد عام وليس استشارة قانونية.\n"
         f"الموضوع: {title}\n"
@@ -682,7 +769,7 @@ def build_prompt(topic, lang: str) -> str:
         "1) أعد كائن JSON واحداً فقط، بلا نص خارجه وبلا أسوار markdown.\n"
         "2) لا تُدرج أي HTML أو وسوم أو سكربتات داخل النصوص؛ نصّ عادي فقط.\n"
         "3) لا تخترع أرقام مواد أو نِسَباً أو مُدداً أو جهات. إن لم تكن واثقاً فاذكر القاعدة العامة بتحفّظ.\n"
-        "4) official_sources: من 2 إلى 4 مصادر رسمية سعودية فقط، ونطاقاتها ضمن *.gov.sa أو qiwa.sa.\n"
+        f"{source_rule}"
         "5) لا أسلوب دعائياً، ولا وعوداً بنتائج توظيف مضمونة، ولا ادّعاء بأن المحتوى مُراجَع قانونياً.\n"
         "6) لا تذكر أنك نموذج ذكاء اصطناعي.\n\n"
         "بنية JSON المطلوبة بالحرف:\n"
@@ -865,14 +952,42 @@ def _text(value, field, *, lo, hi):
     return text
 
 
+def normalize_source_url(url: str) -> str:
+    """يطبّع رابط المصدر: يحذف المسافات، يرمّز المسارات العربية (UTF-8 %)، ويُسقط fragment."""
+    url = strip_ws(url)
+    if not url:
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url
+    path = urllib.parse.quote(parts.path, safe="/%:@!$&'()*+,;=-._~")
+    query = urllib.parse.quote(parts.query, safe="=&%:@!$'()*+,;/?-._~")
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+
+
+def is_blocked_source_host(host: str) -> bool:
+    """يحجب النطاق الميت نفسه وكل نطاقاته الفرعية (مثل `portal.mol.gov.sa`).
+
+    لولاه لمرّ `portal.mol.gov.sa` من فحص اللاحقة `.gov.sa` — وهذا توسيعٌ للثقة مرفوض.
+    """
+    host = (host or "").lower()
+    return any(host == b or host.endswith("." + b) for b in BLOCKED_SOURCE_HOSTS)
+
+
 def is_allowed_source_url(url: str) -> bool:
     try:
         parts = urllib.parse.urlsplit(url or "")
     except ValueError:
         return False
-    if parts.scheme != "https" or not parts.netloc:
+    if parts.scheme != "https":
         return False
-    host = parts.netloc.lower().split(":")[0]
+    # `hostname` يحذف المنفذ وبيانات المستخدم ويحوّل إلى أحرف صغيرة (خلاف `netloc`).
+    host = (parts.hostname or "").lower()
+    if not host:
+        return False
+    if is_blocked_source_host(host):
+        return False
     if host in ALLOWED_SOURCE_HOSTS:
         return True
     return any(host.endswith(sfx) for sfx in ALLOWED_SOURCE_SUFFIXES)
@@ -891,7 +1006,7 @@ def normalize_sources(raw) -> list:
         if extra:
             raise Reject(f"official_sources[{i}]: حقول غير متوقّعة")
         title = _text(item.get("title"), f"official_sources[{i}].title", lo=3, hi=160)
-        url = strip_ws(item.get("url"))
+        url = normalize_source_url(item.get("url"))
         if not is_allowed_source_url(url):
             raise Reject(f"official_sources[{i}]: رابط غير مسموح ({url[:70]})")
         if url in seen:
@@ -1016,20 +1131,69 @@ def duplicate_check(article, existing_records) -> list:
     return problems
 
 
-def check_sources(sources, *, timeout=20) -> list:
+SOURCE_FAILURE_LABEL = {
+    "dns": "فشل DNS: تعذّر ترجمة اسم المضيف",
+    "timeout": "انتهت المهلة قبل استجابة الخادم",
+    "network": "خطأ شبكة",
+    "empty": f"استجابة فارغة أو أقصر من {SOURCE_MIN_BYTES} بايت",
+}
+
+
+def _source_failure_code(exc) -> str:
+    """يصنّف استثناء الشبكة: dns أو timeout أو network (بلا كشف أي أسرار)."""
+    for candidate in (getattr(exc, "reason", None), exc):
+        if isinstance(candidate, socket.gaierror):
+            return "dns"
+        if isinstance(candidate, (TimeoutError, socket.timeout)):
+            return "timeout"
+    return "network"
+
+
+def probe_source(url, *, timeout=None) -> tuple:
+    """يفحص مصدراً واحداً ويرجع (ok, code, note).
+
+    code: ok / dns / timeout / network / http_<status> / empty.
+    """
+    url = normalize_source_url(url)
+    if timeout is None:
+        timeout = SOURCE_CHECK_TIMEOUT
+    try:
+        status, body, _ = http_request(
+            url, method="GET", headers=dict(SOURCE_REQUEST_HEADERS),
+            timeout=timeout, retries=1)
+    except Exception as exc:  # noqa: BLE001
+        code = _source_failure_code(exc)
+        if code == "network":
+            note = f"{SOURCE_FAILURE_LABEL['network']}: {redact(exc)}"
+        else:
+            note = SOURCE_FAILURE_LABEL[code]
+        return False, code, note
+    if status != 200:
+        note = f"أعادت الحالة {status}"
+        if status in RETRYABLE_STATUS:
+            note += " (خلل مؤقّت عند الخادم)"
+        return False, f"http_{status}", note
+    if not (body and len(body) > SOURCE_MIN_BYTES):
+        return False, "empty", SOURCE_FAILURE_LABEL["empty"]
+    return True, "ok", f"استجابة 200 ({len(body)} بايت)"
+
+
+def probe_sources(sources, *, timeout=None) -> list:
+    """يفحص قائمة مصادر مرة واحدة ويرجع نتائج منظّمة [{title,url,ok,code,note}]."""
+    results = []
+    for src in sources or []:
+        url = src.get("url") if isinstance(src, dict) else src
+        title = src.get("title") if isinstance(src, dict) else ""
+        ok, code, note = probe_source(url, timeout=timeout)
+        results.append({"title": title or "", "url": normalize_source_url(url),
+                        "ok": ok, "code": code, "note": note})
+    return results
+
+
+def check_sources(sources, *, timeout=None) -> list:
     """يتحقّق من إمكانية الوصول للمصادر الرسمية. يرجع قائمة مشاكل (فارغة = نجاح)."""
-    problems = []
-    for src in sources:
-        try:
-            status, body, _ = http_request(src["url"], method="GET", timeout=timeout, retries=1)
-        except Exception as exc:  # noqa: BLE001
-            problems.append(f"{src['url']} غير قابل للوصول ({redact(exc)})")
-            continue
-        if status != 200:
-            problems.append(f"{src['url']} أعاد الحالة {status}")
-        elif not (body and len(body) > 200):
-            problems.append(f"{src['url']} استجابة فارغة أو قصيرة جداً")
-    return problems
+    return [f"{r['url']} — {r['note']} [{r['code']}]"
+            for r in probe_sources(sources, timeout=timeout) if not r["ok"]]
 
 
 # =====================================================================================
@@ -1593,15 +1757,34 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         return 0
 
     if len(ready) == 2 and not skip_source_check:
-        problems = check_sources(ready[0]["official_sources"])
+        # نتحقّق من مصادر النسختين معاً (قد تختلف ar/en)، بلا تكرار ولا طلب مزدوج.
+        sources, seen_urls = [], set()
+        for art in ready:
+            for src in art.get("official_sources") or []:
+                if not isinstance(src, dict):
+                    continue
+                url = normalize_source_url(src.get("url"))
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append({"title": src.get("title", ""), "url": url})
+        source_results = probe_sources(sources)
+        problems = [f"{r['url']} — {r['note']} [{r['code']}]"
+                    for r in source_results if not r["ok"]]
+        log(f"[SOURCES] فحص {len(source_results)} مصدراً رسمياً عبر الشبكة "
+            f"(بمهلة {SOURCE_CHECK_TIMEOUT}s وبترويسات طلب عادية).")
+        for r in source_results:
+            log(f"   {'[OK]' if r['ok'] else '[FAIL]'} {r['url']} — {r['note']} [{r['code']}]")
         if problems:
-            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسختان مسودتين غير منشورتين:")
+            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسختان مسودتين "
+                "غير منشورتين (unverified)، ولا يُلمس articles.json ولا sitemap.xml:")
             for p in problems:
                 log("   - " + redact(p))
             for art in ready:
                 write_article_files(art, published=False)
                 state["topics"][topic["id"]][art["lang"]] = "draft_unverified"
             save_state(state)
+            log(f"[DONE] اكتملت الدورة بلا نشر: {len(ready)} مسودة بحالة "
+                "draft_unverified لإعادة المحاولة لاحقاً.")
             return 0
     elif skip_source_check:
         log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
@@ -2274,6 +2457,145 @@ def selftest() -> int:
         check("موجِّه المزوّد: مزوّد مجهول يفشل بوضوح بلا أي طلب شبكة",
               generate_json("مجهول", "p", api_key="k", model="m")[0] is False
               and "unknown_provider" in generate_json("مجهول", "p", api_key="k", model="m")[2])
+
+        # (ع) فحص المصادر الرسمية: رفض النطاق الميت، تمييز DNS/المهلة/HTTP،
+        #     وعدم النشر عند تعذّر التحقّق — كلها باستجابات وهمية وبلا أي طلب حقيقي.
+        check("المصادر: النطاقات الرسمية المعتمدة مقبولة (hrsd.gov.sa / gosi.gov.sa / qiwa.sa)",
+              is_allowed_source_url("https://www.hrsd.gov.sa/")
+              and is_allowed_source_url("https://www.hrsd.gov.sa/علاقات-العمل")
+              and is_allowed_source_url("https://www.gosi.gov.sa/")
+              and is_allowed_source_url("https://qiwa.sa/x"))
+        check("المصادر: النطاق المنتهي mol.gov.sa مرفوض صراحةً من البوابة الساكنة",
+              not is_allowed_source_url("https://www.mol.gov.sa/")
+              and not is_allowed_source_url("https://www.mol.gov.sa/portal/Pages/Default.aspx"))
+        check("المصادر: نطاقات mol.gov.sa الفرعية مرفوضة (لا يمرّ نطاق ميت بدعوى لاحقة .gov.sa)",
+              not is_allowed_source_url("https://portal.mol.gov.sa/x")
+              and not is_allowed_source_url("https://a.b.mol.gov.sa/")
+              and is_blocked_source_host("portal.mol.gov.sa")
+              and not is_blocked_source_host("www.hrsd.gov.sa"))
+        check("المصادر: لا توسيع للقائمة المسموحة (خارجي · http · تصيّد النطاق مرفوضة)",
+              not is_allowed_source_url("https://evil.example.com/x")
+              and not is_allowed_source_url("http://www.hrsd.gov.sa/")
+              and not is_allowed_source_url("https://www.hrsd.gov.sa.evil.com/")
+              and not is_allowed_source_url("https://evil.com/?u=https://www.hrsd.gov.sa/")
+              and not is_allowed_source_url("https://www.hrsd.gov.sa@evil.com/"))
+        check("المصادر: تطبيع الرابط العربي (UTF-8) وإسقاط fragment",
+              normalize_source_url("https://www.hrsd.gov.sa/علاقات-العمل#x")
+              == "https://www.hrsd.gov.sa/%D8%B9%D9%84%D8%A7%D9%82%D8%A7%D8%AA-%D8%A7%D9%84%D8%B9%D9%85%D9%84")
+
+        _dead = fixture_data("ar")
+        _dead["official_sources"] = [
+            {"title": "وزارة الموارد البشرية", "url": "https://www.mol.gov.sa/portal/Pages/Default.aspx"},
+            {"title": "المؤسسة العامة للتأمينات الاجتماعية", "url": "https://www.gosi.gov.sa/"},
+        ]
+        check("المصادر: مقال يستشهد بـ mol.gov.sa يُرفض في بوابة الجودة (لتفادي مسودة غير موثوقة)",
+              _rejects(lambda: validate_article(
+                  _dead, topic=topic, lang="ar", published_at="2026-01-01")))
+
+        _prompt_src = build_prompt(topic, "ar")
+        _preferred = official_sources_for(topic)
+        check("البرومبت: يضمّن الروابط الرسمية المعتمدة ويحظر mol.gov.sa",
+              "hrsd.gov.sa" in _prompt_src and "mol.gov.sa" in _prompt_src
+              and _preferred[0]["url"] in _prompt_src
+              and _preferred[0]["url"] == OFFICIAL_SOURCE_LIBRARY["hrsd_eosb"][1])
+
+        def _probe_with(*, exc=None, status=200, body=b""):
+            def _fn(url, **kwargs):
+                if exc is not None:
+                    raise exc
+                return status, {}, body, url
+            return _fn
+
+        _saved_http = globals()["http_request_full"]
+        _hdrs_sent = {}
+        try:
+            globals()["http_request_full"] = _probe_with(
+                exc=urllib.error.URLError(socket.gaierror(-2, "Name or service not known")))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: فشل DNS يُصنَّف dns برسالة تشخيص واضحة",
+                  _ok is False and _code == "dns" and "DNS" in _note)
+
+            globals()["http_request_full"] = _probe_with(
+                exc=urllib.error.URLError(socket.timeout("timed out")))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: انتهاء المهلة يُصنَّف timeout",
+                  _ok is False and _code == "timeout" and "المهلة" in _note)
+
+            globals()["http_request_full"] = _probe_with(exc=OSError("boom"))
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: خطأ شبكة آخر يُصنَّف network بلا كشف أسرار",
+                  _ok is False and _code == "network")
+
+            for _st in (403, 404, 500, 503):
+                globals()["http_request_full"] = _probe_with(status=_st, body=b"x" * 400)
+                _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+                check(f"فحص المصدر: حالة HTTP {_st} تُصنَّف http_{_st} ولا تُعدّ تحقّقاً",
+                      _ok is False and _code == f"http_{_st}" and str(_st) in _note)
+
+            globals()["http_request_full"] = _probe_with(status=200, body=b"<html></html>")
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: استجابة قصيرة جداً (empty) لا تُعدّ تحقّقاً",
+                  _ok is False and _code == "empty")
+
+            def _capture_probe(url, **kwargs):
+                _hdrs_sent.update(kwargs.get("headers") or {})
+                return 200, {}, b"<html>" + b"a" * 4000 + b"</html>", url
+
+            globals()["http_request_full"] = _capture_probe
+            _ok, _code, _note = probe_source("https://www.hrsd.gov.sa/")
+            check("فحص المصدر: مصدر رسمي سليم (200 + جسم كافٍ) ينجح",
+                  _ok is True and _code == "ok"
+                  and check_sources([{"title": "t", "url": "https://www.hrsd.gov.sa/"}]) == [])
+            check("فحص المصدر: يرسل ترويسات طلب عادية (User-Agent/Accept/Accept-Language)",
+                  _hdrs_sent.get("User-Agent") == UA
+                  and _hdrs_sent.get("Accept") == SOURCE_REQUEST_HEADERS["Accept"]
+                  and _hdrs_sent.get("Accept-Language") == SOURCE_REQUEST_HEADERS["Accept-Language"])
+        finally:
+            globals()["http_request_full"] = _saved_http
+
+        # دورة كاملة: التوليد ينجح لكن DNS يفشل ⇒ مسودتان unverified فقط بلا نشر.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+
+        def _dns_for_sources(url, **kwargs):
+            if "generativelanguage.googleapis.com" in url:
+                return _envelope("en" if "لغة المخرجات: English" in _request_prompt(kwargs)
+                                 else "ar") + (url,)
+            raise urllib.error.URLError(socket.gaierror(-2, "Name or service not known"))
+
+        globals()["http_request_full"] = _dns_for_sources
+        rc, _out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        _rec = load_state()["topics"][TOPICS[0]["id"]]
+        check("تعذّر التحقّق من المصادر (DNS): مسودتان unverified فقط ولا نشر",
+              rc == 0 and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and _rec.get("ar") == "draft_unverified" and _rec.get("en") == "draft_unverified"
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("تعذّر التحقّق: السجل يميّز DNS ويذكر unverified وعدم لمس الفهارس",
+              "DNS" in _out and "unverified" in _out and "[SOURCES]" in _out
+              and "articles.json" in _out)
+
+        # دورة كاملة: التوليد والمصادر ينجحان ⇒ النشر السليم ما زال يعمل (auto)
+        _sandbox()
+        _saved_base = globals()["BASE_DIR"]
+        globals()["BASE_DIR"] = ARTICLES_DIR.parent
+
+        def _ok_for_all(url, **kwargs):
+            if "generativelanguage.googleapis.com" in url:
+                return _envelope("en" if "لغة المخرجات: English" in _request_prompt(kwargs)
+                                 else "ar") + (url,)
+            return 200, {}, b"<html>" + b"ok" * 500 + b"</html>", url
+
+        try:
+            globals()["http_request_full"] = _ok_for_all
+            rc = run_once(mode="auto", provider="gemini", api_key="k", model="m")
+            check("مصادر متحقَّق منها + وضع auto: يُنشر المقالان وتُحدَّث articles.json/sitemap.xml",
+                  rc == 0 and len(list(ARTICLES_DIR.glob("**/*.html"))) == 2
+                  and not DRAFTS_DIR.exists()
+                  and '"published"' in ARTICLES_JSON.read_text(encoding="utf-8")
+                  and "<loc>" in SITEMAP_XML.read_text(encoding="utf-8"))
+        finally:
+            globals()["BASE_DIR"] = _saved_base
     finally:
         globals()["http_request_full"] = _real_http_full
         globals()["SLEEP"] = _real_sleep
