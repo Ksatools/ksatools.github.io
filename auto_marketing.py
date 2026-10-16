@@ -1756,8 +1756,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         log(f"[DRY-RUN] لا كتابة. النسخ الصالحة: {', '.join(a['lang'] for a in ready)} — لم يُلمس أي ملف.")
         return 0
 
-    if len(ready) == 2 and not skip_source_check:
-        # نتحقّق من مصادر النسختين معاً (قد تختلف ar/en)، بلا تكرار ولا طلب مزدوج.
+    # --- فحص المصادر الرسمية: يجري لكل مصدر مستشهد به في كل نسخة اجتازت بوابة
+    # الجودة، حتى لو اجتازت نسخة واحدة فقط. النسخة الواحدة غير مؤهلة للنشر على أي
+    # حال، لكن نتيجة الفحص تحدّد تصنيف المسودة: نجاح كل المصادر ⇒ «draft»، وفشل أي
+    # مصدر أو تعذّر التحقّق ⇒ «draft_unverified» (لا تُصنَّف النسخة متحقَّقة).
+    if skip_source_check:
+        log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
+    else:
+        # نجمع مصادر النسخ الجاهزة ونوحّدها (ar/en قد تتشارك المصادر) بلا طلب مزدوج.
         sources, seen_urls = [], set()
         for art in ready:
             for src in art.get("official_sources") or []:
@@ -1775,8 +1781,8 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         for r in source_results:
             log(f"   {'[OK]' if r['ok'] else '[FAIL]'} {r['url']} — {r['note']} [{r['code']}]")
         if problems:
-            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسختان مسودتين "
-                "غير منشورتين (unverified)، ولا يُلمس articles.json ولا sitemap.xml:")
+            log("[REJECT] تعذّر التحقّق من المصادر الرسمية — تبقى النسخ المولَّدة "
+                "مسودات غير منشورة (unverified)، ولا يُلمس articles.json ولا sitemap.xml:")
             for p in problems:
                 log("   - " + redact(p))
             for art in ready:
@@ -1786,8 +1792,6 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
             log(f"[DONE] اكتملت الدورة بلا نشر: {len(ready)} مسودة بحالة "
                 "draft_unverified لإعادة المحاولة لاحقاً.")
             return 0
-    elif skip_source_check:
-        log("[WARN] تم تخطّي التحقّق الشبكي من المصادر بأمر صريح (استخدام يدوي فقط).")
 
     if len(ready) != 2:
         missing = [l for l in ("ar", "en") if l not in results]
@@ -2114,12 +2118,18 @@ def selftest() -> int:
         return "groq" if "api.groq.com" in url else "gemini"
 
     def _fake_by_lang(en_ok):
-        """503 للنسخة العربية دائماً، و(503 أو نجاح) للنسخة الإنجليزية — بحسب شكل الطلب."""
+        """503 للنسخة العربية دائماً، و(503 أو نجاح) للنسخة الإنجليزية — بحسب شكل الطلب.
+
+        طلبات فحص المصادر الرسمية (GET بلا جسم: `data=None`) تُقابَل بمصدر متاح،
+        فيبقى التصنيف المقصود (`draft` أو `draft_unverified`) محكوماً بمحاكاة التوليد لا بالمصادر.
+        """
         calls = {"ar": 0, "en": 0}
         urls = []
 
         def _fn(url, **kwargs):
             urls.append(url)
+            if kwargs.get("data") is None:   # طلب فحص مصدر رسمي (GET بلا جسم)
+                return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
             prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
             calls[lang] += 1
@@ -2596,6 +2606,117 @@ def selftest() -> int:
                   and "<loc>" in SITEMAP_XML.read_text(encoding="utf-8"))
         finally:
             globals()["BASE_DIR"] = _saved_base
+
+        # (ف) مسار فحص المصادر مع نسخة واحدة جاهزة (جوهر الإصلاح بعد دليل التشغيل
+        #     38938331321): كان الفحص لا يُنفّذ إلا عند اكتمال النسختين، فبقيت النسخة
+        #     الواحدة تُصنَّف «draft» دون أي تحقّق. الآن يُفحص كل مصدر في كل نسخة جاهزة.
+        def _src_ok(url):
+            return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
+
+        def _src_404(url):
+            return 404, {}, b"<html>404 not found</html>", url
+
+        def _src_dns(url):
+            raise urllib.error.URLError(socket.gaierror(-2, "Name or service not known"))
+
+        def _src_timeout(url):
+            raise urllib.error.URLError(socket.timeout("timed out"))
+
+        def _fake_run(*, fail_langs=(), source=_src_ok):
+            """توليد Gemini وهمي (لغات محدّدة تفشل) + استجابة فحص مصادر مخصّصة."""
+            probes = []
+
+            def _fn(url, **kwargs):
+                if "generativelanguage.googleapis.com" in url:
+                    lang = "en" if "لغة المخرجات: English" in _request_prompt(kwargs) else "ar"
+                    if lang in fail_langs:
+                        return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
+                    return _envelope(lang) + (url,)
+                probes.append(url)
+                return source(url)
+
+            return _fn, probes
+
+        # 1) النسختان جاهزتان وجميع المصادر متاحة ⇒ مسودتان «draft» (لا نشر).
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(source=_src_ok)
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        check("مصادر/نسختان: كل المصادر متاحة ⇒ draft للنسختين وبلا نشر",
+              rc == 0 and len(probes) == 2 and "[SOURCES]" in out
+              and st.get("ar") == "draft" and st.get("en") == "draft"
+              and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+              and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 2) النسختان جاهزتان ومصدر واحد يفشل (404) في وضع auto ⇒ draft_unverified
+        #    للنسختين، بلا نشر وبلا تعديل فهارس، وبلا استبدال صامت للاستشهادات.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(source=lambda u: _src_404(u) if "hrsd" in u else _src_ok(u))
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسختان: مصدر واحد يفشل ⇒ draft_unverified للنسختين ولا نشر",
+              rc == 0 and len(probes) == 2 and "[http_404]" in out and "unverified" in out
+              and st.get("ar") == "draft_unverified" and st.get("en") == "draft_unverified"
+              and len(drafts) == 2 and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("مصادر/نسختان: فشل المصدر لا يستبدل الاستشهادات (تبقى كما ولّدها النموذج)",
+              len(drafts) == 2 and all(
+                  "https://www.gosi.gov.sa/" in p.read_text(encoding="utf-8")
+                  and "https://www.hrsd.gov.sa/" in p.read_text(encoding="utf-8")
+                  for p in drafts)
+              and "https://www.hrsd.gov.sa/" in out)
+
+        # 3) العربية وحدها جاهزة (الإنجليزية تفشل) ⇒ يُنفَّذ الفحص فعلاً ومسودة draft واحدة.
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(fail_langs=("en",), source=_src_ok)
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="draft", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسخة عربية وحدها: يُنفَّذ فحص المصادر فعلاً (جوهر الإصلاح)",
+              rc == 0 and len(probes) == 2 and "[SOURCES]" in out and st.get("ar") == "draft"
+              and st.get("en") == "error" and len(drafts) == 1
+              and "/ar/" in drafts[0].as_posix() and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 4) الإنجليزية وحدها جاهزة + مصدر فاشل في وضع auto ⇒ draft_unverified (نسخة واحدة).
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        fake, probes = _fake_run(fail_langs=("ar",),
+                                 source=lambda u: _src_dns(u) if "hrsd" in u else _src_ok(u))
+        globals()["http_request_full"] = fake
+        rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        drafts = sorted(DRAFTS_DIR.glob("**/*.html"))
+        check("مصادر/نسخة إنجليزية وحدها: فشل مصدر ⇒ draft_unverified وبلا نشر",
+              rc == 0 and len(probes) == 2 and st.get("en") == "draft_unverified"
+              and st.get("ar") == "error" and len(drafts) == 1
+              and "/en/" in drafts[0].as_posix() and not ARTICLES_DIR.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # 5) أنواع الفشل الثلاثة عبر مسار الدورة كاملاً: DNS · HTTP 404 · انتهاء المهلة.
+        for _label, _src, _code in (("DNS", _src_dns, "dns"),
+                                    ("HTTP 404", _src_404, "http_404"),
+                                    ("انتهاء المهلة", _src_timeout, "timeout")):
+            _sandbox()
+            before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+            fake, _probes = _fake_run(source=_src)
+            globals()["http_request_full"] = fake
+            rc, out = _capture_run(mode="auto", provider="gemini", api_key="k", model="m")
+            st = load_state()["topics"][TOPICS[0]["id"]]
+            check(f"مصادر: فشل {_label} ⇒ draft_unverified للنسختين وبلا نشر ولا تغيير فهارس",
+                  rc == 0 and f"[{_code}]" in out
+                  and st.get("ar") == "draft_unverified" and st.get("en") == "draft_unverified"
+                  and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
+                  and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+                  and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
     finally:
         globals()["http_request_full"] = _real_http_full
         globals()["SLEEP"] = _real_sleep
