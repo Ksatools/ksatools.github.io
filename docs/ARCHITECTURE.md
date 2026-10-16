@@ -25,9 +25,9 @@
 ## 2) مسار التحميل
 
 1. `<html lang="ar" dir="rtl" id="html-root" data-theme="light">`.
-2. `<head>` بالترتيب الفعلي: `<meta charset="UTF-8">` **أول عنصر** ← `<meta name="google-site-verification">` ← الوصف والكلمات المفتاحية و`robots` ← `canonical` ← `viewport` ← `<title>` ← `theme-color` ← الأيقونات والـmanifest ← `hreflang` (ثلاث قيم) ← Open Graph ← Twitter Card ← خطوط Google (Cairo + Inter) ← JSON-LD ← **سكربت Adsterra Social Bar** (المخزّن في `head`).
+2. `<head>` بالترتيب الفعلي: `<meta charset="UTF-8">` **أول عنصر** ← `<meta name="google-site-verification">` ← الوصف والكلمات المفتاحية و`robots` ← `canonical` ← `viewport` ← `<title>` ← `theme-color` ← الأيقونات والـmanifest ← `hreflang` (ثلاث قيم) ← Open Graph ← Twitter Card ← خطوط Google (Cairo + Inter) ← JSON-LD.
 3. `<body>`: `<header>` الموقع ← `<div class="ad-slot" id="ad-top">` (مخفٍ) ← `<nav class="nav-tabs" id="main-tabs" role="tablist">` ← أقسام الأدوات الأربعة ← `<footer>` (لقطات الموقع + شريط الخصوصية + إخلاء المسؤولية) ← حاوية النشرة/الشيت `<div id="share-sheet" role="dialog">` ← `<div id="toast">`.
-4. `<script>` واحد (الجافاسكربت كله) ثم `</body>` و`</html>`.
+4. `<script>` واحد (الجافاسكربت كله)، ثم **سكربت Adsterra Social Bar** في نهاية `<body>` قبل `</body>`، ثم `</body>` و`</html>`.
 
 **سكربتان خارجيان فقط**: نصّ JSON-LD (يُتحقّق من صحته)، وسكربتَا Adsterra (`Social Bar` + `Native Banner`). لا شيء آخر.
 

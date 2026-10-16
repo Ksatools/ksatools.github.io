@@ -43,7 +43,7 @@ adsterra.com, <publisher-id>, DIRECT
 
 ## 4) الإعلانات
 
-- **Social Bar** (Adsterra): سكربت متزامن في `<head>`.
+- **Social Bar** (Adsterra): سكربت متزامن في نهاية `<body>` قبل `</body>`.
 - **Native Banner** (Adsterra): سكربت + حاوية قرب نهاية الصفحة.
 - **تحذير:** لا تُكرِّر السكربت ولا تحذفه؛ التكرار يخالف شروط الشبكة ويسبّب أخطاء.
 - توجد حاوية `#ad-top` **مخفية** وأزرار `.btn-ad` غير مستخدمة (بند تنظيف في `docs/BACKLOG.md` #19).
