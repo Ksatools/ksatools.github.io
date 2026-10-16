@@ -1,0 +1,280 @@
+# =============================================================================
+# AI Marketing — توليد ونشر مقالين (عربي + إنجليزي) يومياً على KSA Tools
+# -----------------------------------------------------------------------------
+# الجدولة: يومياً 09:00 بتوقيت الرياض (Asia/Riyadh) عبر حقل timezone الرسمي
+#          المدعوم في GitHub Actions، مع إمكانية التشغيل اليدوي.
+# ملاحظة: إن رفض وسيط الفحص (actionlint) حقل timezone فقد لا يكون محدّثاً؛
+#          GitHub نفسه يدعمه (Workflow syntax → on.schedule).
+#
+# المطلوب من مالك المستودع (مرة واحدة):
+#   1) Settings → Secrets and variables → Actions → Secrets:
+#        GEMINI_API_KEY            (إلزامي للتوليد)
+#        TELEGRAM_BOT_TOKEN        (اختياري)
+#        TELEGRAM_CHAT_ID          (اختياري)
+#   2) Settings → Secrets and variables → Actions → Variables:
+#        PUBLISH_MODE   = draft | auto      (الافتراضي draft)
+#        GEMINI_MODEL   = gemini-3.8-flash  (اختياري)
+#        SOCIAL_LANGUAGE= ar | en | both    (اختياري)
+#        PAGES_VIA_ACTIONS = true           (فقط إذا كان نشر Pages عبر Actions)
+#   3) Settings → Pages: إما "Deploy from a branch" (المسار الافتراضي هنا)
+#        أو "GitHub Actions" مع PAGES_VIA_ACTIONS=true.
+# =============================================================================
+
+name: AI Marketing
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+      timezone: "Asia/Riyadh"
+  workflow_dispatch:
+    inputs:
+      publish_mode:
+        description: "وضع النشر (draft = مسودات فقط)"
+        type: choice
+        options:
+          - draft
+          - auto
+        default: draft
+      topic:
+        description: "معرّف موضوع محدّد (اتركه فارغاً للاختيار التلقائي)"
+        type: string
+        default: ""
+      skip_source_check:
+        description: "تخطّي التحقّق الشبكي من المصادر الرسمية (يدوي فقط)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-marketing
+  cancel-in-progress: false
+
+jobs:
+  content:
+    name: توليد المحتوى والأرشفة
+    runs-on: ubuntu-latest
+    outputs:
+      # وضع النشر الفعلي (draft|auto) — تستخدمه وظيفة deploy أدناه.
+      mode: ${{ steps.mode.outputs.mode }}
+      # نتيجة رفع أثر الموقع (success فقط في وضع auto مع نجاح الرفع).
+      pages_ready: ${{ steps.pages-artifact.outcome }}
+    permissions:
+      contents: write
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.8-flash' }}
+      SOCIAL_LANGUAGE: ${{ vars.SOCIAL_LANGUAGE || 'both' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore marketing state from cache
+        id: cache-state
+        # استعادة فقط (بلا حفظ) — الحفظ يجري في خطوة actions/cache/save منفصلة
+        # بعد دورة المحتوى. لا عمليتا حفظ للمسار والمفتاح نفسهما.
+        uses: actions/cache/restore@v4
+        with:
+          path: marketing_state.json
+          # مفتاح فريد لكل تشغيل: actions/cache غير قابل للتعديل، والمفتاح الثابت
+          # كان يُبقي الحالة مجمّدة عند أول لقطة (لا يُحفظ أي تحديث لاحق).
+          # الـCache غير دائم وقد يُحذف (إخلاء بعد عدم استخدام، أو تجاوز السعة،
+          # أو فشل تنزيل)، لذا يجب أن يعمل النظام بلا ملف حالة: load_state يعود
+          # إلى الحالة الافتراضية، وarticles.json هو مرجع منع تكرار النشر.
+          key: marketing-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            marketing-state-${{ github.ref_name }}-
+            marketing-state-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: فحوصات مسبقة (بلا شبكة)
+        run: |
+          set -euo pipefail
+          python -m py_compile auto_marketing.py
+          python auto_marketing.py --selftest
+
+      - name: فحص ملفات الموقع قبل التعديل
+        run: python auto_marketing.py --verify
+
+      - name: التحقّق من ضبط الإعدادات
+        run: |
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "::warning::GEMINI_API_KEY غير مضبوط — سيتوقّف التوليد بأمان ولن يُنشر شيء."
+          fi
+
+      - name: تحديد وضع النشر
+        id: mode
+        env:
+          # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة (لا إدراج مباشر).
+          MODE_INPUT: ${{ inputs.publish_mode }}
+          MODE_VAR: ${{ vars.PUBLISH_MODE }}
+        run: |
+          set -euo pipefail
+          MODE="${MODE_INPUT}"
+          if [ -z "$MODE" ]; then MODE="${MODE_VAR}"; fi
+          if [ -z "$MODE" ]; then MODE="draft"; fi
+          case "$MODE" in
+            draft|auto) ;;
+            *) echo "::error::قيمة PUBLISH_MODE غير مدعومة: $MODE"; exit 1 ;;
+          esac
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "وضع النشر الفعلي: $MODE"
+
+      - name: تشغيل دورة إنتاج المحتوى
+        env:
+          PUBLISH_MODE: ${{ steps.mode.outputs.mode }}
+          # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة؛ هكذا لا
+          # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
+          TOPIC_INPUT: ${{ inputs.topic }}
+          SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
+          DRAFT_DIR: ${{ runner.temp }}/drafts
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ -n "${TOPIC_INPUT}" ]; then ARGS+=(--topic "${TOPIC_INPUT}"); fi
+          if [ "${SKIP_SOURCE_CHECK_INPUT}" = "true" ]; then ARGS+=(--skip-source-check); fi
+          python auto_marketing.py "${ARGS[@]}"
+
+      - name: فحص الناتج (JSON + XML + HTML)
+        run: |
+          set -euo pipefail
+          python auto_marketing.py --verify
+          python - <<'PY'
+          import json, pathlib, sys, xml.etree.ElementTree as ET
+          root = pathlib.Path(".")
+          problems = []
+          try:
+              data = json.loads((root / "articles.json").read_text(encoding="utf-8"))
+              if not isinstance(data, list):
+                  problems.append("articles.json ليس قائمة")
+              for rec in data:
+                  if rec.get("status") != "published":
+                      problems.append(f"سجل غير منشور داخل articles.json: {rec.get('url')}")
+          except Exception as exc:
+              problems.append(f"articles.json غير صالح: {exc}")
+          try:
+              ET.fromstring((root / "sitemap.xml").read_text(encoding="utf-8"))
+          except Exception as exc:
+              problems.append(f"sitemap.xml غير صالح: {exc}")
+          if problems:
+              print("::error::" + " | ".join(problems))
+              sys.exit(1)
+          print("فحص JSON/XML: ناجح")
+          PY
+
+      - name: عرض الفروقات
+        run: |
+          git status --porcelain
+          git --no-pager diff --stat
+
+      - name: رفع المسودات كأثر (لا تُنشر ولا تُلتزم)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drafts
+          path: ${{ runner.temp }}/drafts
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: حفظ حالة التسويق في Cache
+        # حفظ فقط (لا استعادة)، ومرة واحدة بعد دورة المحتوى، تحت المفتاح الفريد نفسه
+        # الذي جرى تحتَه الاستيراد — فيستعيد التشغيل التالي أحدث مفتاح عبر restore-keys.
+        # hashFiles يمنع فشل الخطوة إذا لم يوجد ملف الحالة أصلاً (أول تشغيل مثلاً).
+        # ملاحظة: الحفظ لا يُعدّ ضماناً دائماً — الـCache عرضة للحذف.
+        if: ${{ always() && hashFiles('marketing_state.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: marketing_state.json
+          key: marketing-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: تجهيز أثر الموقع للنشر (يُستثنى الملفات الداخلية)
+        if: steps.mode.outputs.mode == 'auto'
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          # نسخ ملفات الموقع العامة فقط
+          cp -r articles _site/ 2>/dev/null || true
+          cp index.html _site/
+          cp privacy.html _site/ 2>/dev/null || true
+          cp 404.html _site/ 2>/dev/null || true
+          cp robots.txt _site/ 2>/dev/null || true
+          cp sitemap.xml _site/ 2>/dev/null || true
+          cp ads.txt _site/ 2>/dev/null || true
+          cp -r assets _site/ 2>/dev/null || true
+          cp -r icons _site/ 2>/dev/null || true
+          cp *.png _site/ 2>/dev/null || true
+          cp *.svg _site/ 2>/dev/null || true
+          cp *.ico _site/ 2>/dev/null || true
+          cp *.webmanifest _site/ 2>/dev/null || true
+          # لا ننسخ: marketing_state.json, latest_social_post.txt, .github/, docs/, tests/, *.py, .gitignore
+          echo "محتوى _site:"
+          find _site -type f | sort
+
+      - name: رفع أثر الموقع للنشر
+        # يُرفَع أثر github-pages في وضع auto فقط، وتُصدَّر نتيجته عبر
+        # jobs.content.outputs.pages_ready كي لا تُشغَّل actions/deploy-pages
+        # إلا إذا وُجد الأثر فعلاً في هذا التشغيل.
+        if: steps.mode.outputs.mode == 'auto'
+        id: pages-artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Commit وPush للملفات العامة فقط (articles.json, sitemap.xml, articles/)
+        # لا يدفع إلا في وضع auto، وبعد نجاح كل الفحوص أعلاه: run_once لا ينقل
+        # صفحات المقالات إلى الملفات العامة إلا بعد اجتياز فحص HTML وarticles.json
+        # وsitemap.xml، وخطوة «فحص الناتج» تعيد التحقّق قبل الوصول إلى هنا.
+        if: steps.mode.outputs.mode == 'auto'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "ksa-tools-bot"
+          git config user.email "ksa-tools-bot@users.noreply.github.com"
+          # نضيف فقط الملفات التي يجب أن تكون في المستودع العام
+          for p in articles articles.json sitemap.xml; do
+            if [ -e "$p" ]; then git add -- "$p"; fi
+          done
+          # لا نضيف: marketing_state.json, latest_social_post.txt (في .gitignore)
+          if git diff --cached --quiet; then
+            echo "لا تغييرات حقيقية — لن يُنشأ commit فارغ."
+            exit 0
+          fi
+          git commit -m "content: تحديث مقالات KSA Tools ثنائية اللغة ($(date -u +%Y-%m-%d))"
+          git push origin "HEAD:${REF_NAME}"
+
+  deploy:
+    name: نشر GitHub Pages (اختياري عبر Actions)
+    needs: content
+    # لا تنشر إلا بتحقّق الشروط الثلاثة معاً:
+    #   1) فعّل المالك النشر عبر Actions (PAGES_VIA_ACTIONS = true)
+    #   2) وضع النشر الفعلي في هذه الجولة هو auto (في draft تُتخطّى الوظيفة
+    #      بدل أن تحاول النشر بلا أثر upload-pages-artifact)
+    #   3) أثر الموقع (github-pages) رُفع فعلاً ونجح رفعه في هذه الجولة
+    if: ${{ vars.PAGES_VIA_ACTIONS == 'true' && needs.content.outputs.mode == 'auto' && needs.content.outputs.pages_ready == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
