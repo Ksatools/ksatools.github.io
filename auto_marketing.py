@@ -24,7 +24,8 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     DRAFT_DIR (مسار المسودات، الافتراضي drafts/)
 
 مزوّدو المحتوى:
-    Groq هو الافتراضي (‎/v1/chat/completions مع response_format=json_object)، وGemini خيار
+    Groq هو الافتراضي (‎/v1/chat/completions مع Structured Outputs: response_format=json_schema
+    وstrict=true بمخطّط مطابق لبنية المقال بالحرف)، وGemini خيار
     صريح. لا يوجد انتقال تلقائي بين المزوّدين: فشل المزوّد المحدَّد يُنهي الدورة بفشل واضح
     ولا يُرسل أي طلب إلى المزوّد الآخر. مخرجات المزوّد تمرّ على البوابات نفسها بلا استثناء
     (validate_article + duplicate_check + فحص المصادر الرسمية قبل النشر).
@@ -862,13 +863,94 @@ GROQ_SYSTEM_PROMPT = (
     "تعليمات المستخدم، دون أي نص إضافي ودون أسوار markdown. لا تذكر أنك نموذج ذكاء اصطناعي."
 )
 
+# اسم المخطّط داخل response_format — اسم ASCII بسيط بلا مسافات.
+GROQ_SCHEMA_NAME = "article"
+
+# مخطّط Structured Outputs الصارم (strict: true) المطابق لبنية المقال في build_prompt
+# وحقول validate_article بالحرف. التزم بمتطلبات Groq الصارمة وبكلمات المخطط المدعومة
+# فقط: كل الحقول في `required`، وكل كائن بـ`additionalProperties: false`،
+# ولا أي قيد JSON Schema غير مدعوم (بلا minLength/minItems/maxItems/pattern/anyOf).
+# لزوم ذلك: امتثال مضمون عند التوليد (constrained decoding)، فيتعذّر وقوع الحقول
+# الناقصة أو الزائدة أو الأنواع الخاطئة أصلاً — وتبقى بوابات الجودة قائمة كما هي
+# تحقق دفاعاً عن الآخر، لا استثناءً له.
+GROQ_ARTICLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "عنوان المقال"},
+        "meta_description": {"type": "string",
+                             "description": "وصف من 50 إلى 160 حرفاً"},
+        "excerpt": {"type": "string",
+                    "description": "ملخص من 40 إلى 240 حرفاً"},
+        "sections": {
+            "type": "array",
+            "description": "من 3 إلى 12 قسماً",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "heading": {"type": "string", "description": "عنوان فرعي"},
+                    "body": {"type": "string",
+                             "description": "فقرة لا تقل عن 120 حرفاً، أو فقرات "
+                                            "مفصولة بسطر فارغ"},
+                    "bullets": {"type": "array",
+                                "description": "اتركها [] عند عدم الحاجة (بحد أقصى 8)",
+                                "items": {"type": "string"}},
+                },
+                "required": ["heading", "body", "bullets"],
+                "additionalProperties": False,
+            },
+        },
+        "faq": {
+            "type": "array",
+            "description": "من سؤالين إلى أربعة أسئلة",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "q": {"type": "string"},
+                    "a": {"type": "string"},
+                },
+                "required": ["q", "a"],
+                "additionalProperties": False,
+            },
+        },
+        "official_sources": {
+            "type": "array",
+            "description": "من 2 إلى 4 مصادر رسمية منقولة حرفاً من قائمة البرومبت",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "url": {"type": "string"},
+                },
+                "required": ["title", "url"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["title", "meta_description", "excerpt", "sections", "faq",
+                 "official_sources"],
+    "additionalProperties": False,
+}
+
+
+def groq_response_format() -> dict:
+    """إعدادات Structured Outputs الصارمة لطلب Groq: json_schema + strict=true.
+
+    التزم بوضع الصارم لا بالوضع الأضعف: عند تعذّر المخطّط يفشل الطلب بوضوح ولا
+    يُستبدل تلقائياً بوضع أدنى (json_object أو strict=false).
+    """
+    return {"type": "json_schema",
+            "json_schema": {"name": GROQ_SCHEMA_NAME, "strict": True,
+                            "schema": GROQ_ARTICLE_SCHEMA}}
+
 
 def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
                        sleep=None):
-    """يرجع (ok, data|None, message) من Groq عبر مخطط OpenAI-compatible.
+    """يرجع (ok, data|None, message) من Groq عبر Structured Outputs بوضع صارم.
 
     المفتاح يُرسل في ترويسة Authorization ولا يُطبع أبداً، ولا يظهر في أي رسالة خطأ.
-    المخرجات تُمرَّر كما هي إلى بوابات التحقّق الحالية (لا استثناءات ولا تجاوز).
+    الطلب يفرض `response_format` من نوع json_schema بـstrict=true ومخطّط مطابق لبنية
+    المقال، فيلتزم النموذج بالمخطّط عند التوليد (constrained decoding). المخرجات
+    تمرّر كما هي إلى بوابات التحقّق الحالية (لا استثناءات ولا تجاوز).
     """
     if not api_key:
         return False, None, "no_api_key"
@@ -880,7 +962,7 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
         ],
         "temperature": 0.35,
         "max_tokens": 12000,
-        "response_format": {"type": "json_object"},
+        "response_format": groq_response_format(),
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     try:
@@ -2309,8 +2391,10 @@ def selftest() -> int:
               and all(r["url"] == GROQ_URL for r in _groq_reqs)
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before
               and load_state()["topics"][TOPICS[0]["id"]]["ar"] == "draft")
-        check("Groq: الطلب يطلب JSON صالحاً (response_format) ويمرّر التعليمات",
-              all(r["body"].get("response_format") == {"type": "json_object"}
+        check("Groq: الطلب يستخدم Structured Outputs (json_schema + strict) ويمرّر التعليمات",
+              all(r["body"].get("response_format") == groq_response_format()
+                  and r["body"]["response_format"]["type"] == "json_schema"
+                  and r["body"]["response_format"]["json_schema"]["strict"] is True
                   for r in _groq_reqs)
               and all(r["body"].get("model") == DEFAULT_GROQ_MODEL for r in _groq_reqs)
               and all(r["body"]["messages"][-1]["role"] == "user"
@@ -2717,6 +2801,173 @@ def selftest() -> int:
                   and len(list(DRAFTS_DIR.glob("**/*.html"))) == 2
                   and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
                   and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+
+        # (ص) Structured Outputs الصارم من Groq — إصلاح فشل التوليد الموثّق في
+        #     التشغيل 38946220138 (http_400 / json_validate_failed للنسختين معاً).
+        #     يُثبت: شكل الطلب (json_schema + strict)، ومطابقة المخطّط لبنية المقال
+        #     وبلا كلمات غير مدعومة، ومرور الاستجابة الكاملة إلى البوابات، ورفض
+        #     الناقص أو خاطئ النوع، ومنع النشر عند فشل المزوّد — كلها باستجابات
+        #     وهمية وبلا أي طلب شبكة حقيقي.
+        _schema_reqs = []
+
+        def _fake_schema_run(fail=None):
+            """يلتقط جسم كل طلب Groq ويردّ (فشل مُعطى) أو ظرف صالح باللغة الصحيحة."""
+            def _fn(url, **kwargs):
+                _schema_reqs.append(json.loads(kwargs["data"].decode("utf-8")))
+                if fail is not None:
+                    return fail + (url,)
+                prompt = _request_prompt(kwargs)
+                lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+                return _groq_envelope(lang=lang) + (url,)
+            return _fn
+
+        def _schema_problems(node, path="$"):
+            """يتحقق من متطلبات Groq الصارمة ومن كلمات المخطّط المدعومة في كل مستوًى."""
+            found = []
+            if not isinstance(node, dict):
+                return [f"{path}: ليست كائناً"]
+            kind = node.get("type")
+            words = {"type", "properties", "required", "additionalProperties",
+                     "items", "description"}
+            extra = set(node) - words
+            if extra:
+                found.append(f"{path}: كلمات غير مدعومة {sorted(extra)}")
+            if kind == "object":
+                props = node.get("properties")
+                if not isinstance(props, dict) or not props:
+                    found.append(f"{path}: properties ناقصة")
+                else:
+                    if set(node.get("required") or []) != set(props):
+                        found.append(f"{path}: required لا يغطي كل الحقول")
+                    if node.get("additionalProperties") is not False:
+                        found.append(f"{path}: additionalProperties ليس false")
+                    for key, child in props.items():
+                        found += _schema_problems(child, f"{path}.{key}")
+            elif kind == "array":
+                found += _schema_problems(node.get("items"), f"{path}[]")
+            elif kind in ("string", "number", "integer", "boolean"):
+                pass
+            else:
+                found.append(f"{path}: نوع غير مدعوم {kind!r}")
+            return found
+
+        # 1) شكل الطلب: json_schema + strict=true، ولا رجوع تلقائي إلى json_object.
+        _schema_reqs.clear()
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        globals()["http_request_full"] = _fake_schema_run()
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                      skip_source_check=True)
+        _rf = (_schema_reqs[0].get("response_format") or {}) if _schema_reqs else {}
+        _js = _rf.get("json_schema") or {}
+        _schema = _js.get("schema") or {}
+        _props = _schema.get("properties") or {}
+        check("Structured Outputs: الطلب يستخدم json_schema مع strict=true ولا يعود إلى json_object",
+              rc == 0 and len(_schema_reqs) == 2
+              and _rf.get("type") == "json_schema" and _js.get("strict") is True
+              and _js.get("name") == GROQ_SCHEMA_NAME
+              and _rf == groq_response_format()
+              and "json_object" not in json.dumps(_rf, ensure_ascii=False))
+
+        # 2) المخطّط: حقول المقال الستة بالضبط، وكل كائن مغلق ومتطلبه كامل، وبلا أي
+        #    كلمة JSON Schema غير مدعومة (فلا يُرفض الطلب عند Groq بسببها).
+        check("Structured Outputs: المخطّط يحقق متطلبات Groq الصارمة وبلا كلمات غير مدعومة",
+              _schema.get("type") == "object" and _schema_problems(_schema) == [])
+        check("Structured Outputs: المخطّط يضمّ حقول المقال الستة بالضبط وبلا حقل زائد",
+              set(_props) == set(fixture_data("ar")) == set(fixture_data("en"))
+              and set(_schema.get("required") or []) == set(fixture_data("ar")))
+
+        def _items_of(name):
+            return ((_props.get(name) or {}).get("items") or {}).get("properties") or {}
+
+        check("Structured Outputs: البنية المتداخلة مطابقة للمقال (sections/faq/official_sources)",
+              (_props.get("sections") or {}).get("type") == "array"
+              and set(_items_of("sections")) == {"heading", "body", "bullets"}
+              and (_items_of("sections").get("body") or {}).get("type") == "string"
+              and (_props.get("faq") or {}).get("type") == "array"
+              and set(_items_of("faq")) == {"q", "a"}
+              and (_props.get("official_sources") or {}).get("type") == "array"
+              and set(_items_of("official_sources")) == {"title", "url"}
+              and all((_props.get(f) or {}).get("type") == "string"
+                      for f in ("title", "meta_description", "excerpt")))
+
+        # 3) استجابة JSON كاملة وصالحة تمرّ إلى بوابات الجودة الحالية بلا أي تيسير.
+        _schema_reqs.clear()
+        globals()["http_request_full"] = _fake_http(
+            [_groq_envelope(content=json.dumps(fixture_data("ar"), ensure_ascii=False))])[0]
+        ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY,
+                                           model=DEFAULT_GROQ_MODEL)
+        try:
+            _gate_art = validate_article(data, topic=topic, lang="ar",
+                                         published_at="2026-01-01")
+            _gate_ok = (_gate_art["word_count"] >= MIN_WORDS["ar"]
+                        and len(_gate_art["sections"]) >= MIN_SECTIONS
+                        and len(_gate_art["faq"]) >= 1)
+        except (Reject, TypeError, KeyError, AttributeError):
+            _gate_ok = False
+        check("Structured Outputs: استجابة كاملة وصالحة تمرّ إلى بوابات الجودة الحالية كما هي",
+              bool(ok) and msg == "ok" and _gate_ok
+              and isinstance(data, dict) and set(data) == set(fixture_data("ar")))
+
+        # 4) نقص الحقول أو الأنواع الخاطئة لا تتجاوز validate_article أبداً.
+        _bad = fixture_data("ar")
+        del _bad["title"]
+        check("بوابة الجودة: نقص الحقل title لا يتجاوز validate_article",
+              _rejects(lambda: validate_article(_bad, topic=topic, lang="ar",
+                                                published_at="2026-01-01")))
+        _bad = fixture_data("en")
+        del _bad["sections"]
+        check("بوابة الجودة: نقص الحقل sections لا يتجاوز validate_article",
+              _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
+                                                published_at="2026-01-01")))
+        _bad = fixture_data("ar")
+        _bad["sections"] = "ليست قائمة"
+        check("بوابة الجودة: نوع خاطئ في sections لا يتجاوز validate_article",
+              _rejects(lambda: validate_article(_bad, topic=topic, lang="ar",
+                                                published_at="2026-01-01")))
+        _bad = fixture_data("ar")
+        _bad["sections"][0]["body"] = 123
+        check("بوابة الجودة: نوع خاطئ في sections[0].body لا يتجاوز validate_article",
+              _rejects(lambda: validate_article(_bad, topic=topic, lang="ar",
+                                                published_at="2026-01-01")))
+        _bad = fixture_data("en")
+        _bad["official_sources"] = ["ليست كائناً"]
+        check("بوابة الجودة: نوع خاطئ في official_sources لا يتجاوز validate_article",
+              _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
+                                                published_at="2026-01-01")))
+
+        # 5) فشل المزوّد كما في التشغيل 38946220138 (http_400 json_validate_failed):
+        #    لا نشر ولا مسودة ولا أي كتابة في ملفات عامة، وبلا رجوع إلى وضع أضعف
+        #    وبلا إعادة لهذا الخطأ (غير قابل لإعادة المحاولة: محاولة واحدة لكل نسخة).
+        _fail_reqs, _fail_calls = [], {"ar": 0, "en": 0}
+
+        def _schema_400(url, **kwargs):
+            _fail_reqs.append(json.loads(kwargs["data"].decode("utf-8")))
+            prompt = _request_prompt(kwargs)
+            _fail_calls["en" if "لغة المخرجات: English" in prompt else "ar"] += 1
+            return (400, {},
+                    b'{"error":{"message":"Failed to validate JSON",'
+                    b'"code":"json_validate_failed"}}', url)
+
+        _sandbox()
+        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        globals()["http_request_full"] = _schema_400
+        rc, out = _capture_run(mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY)
+        st = load_state()["topics"][TOPICS[0]["id"]]
+        check("فشل المزوّد (http_400 json_validate_failed): لا نشر ولا أي كتابة في ملفات عامة",
+              rc == EXIT_GENERATION_FAILED and st.get("ar") == "error"
+              and st.get("en") == "error" and not DRAFTS_DIR.exists()
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
+        check("فشل المزوّد: يبقى الطلب صارماً بلا رجوع إلى وضع أضعف وبلا إعادة",
+              _fail_calls == {"ar": 1, "en": 1} and len(_fail_reqs) == 2
+              and all((r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}
+                           ).get("strict") is True
+                      for r in _fail_reqs)
+              and "json_validate_failed" in out
+              and "غير قابل لإعادة المحاولة" in out
+              and "json_object" not in out)
     finally:
         globals()["http_request_full"] = _real_http_full
         globals()["SLEEP"] = _real_sleep
