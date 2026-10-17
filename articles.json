@@ -44,5 +44,29 @@
     "updated_at": "2026-10-17",
     "status": "published",
     "published_at": "2026-10-17"
+  },
+  {
+    "translation_id": "salary-net-gosi-2026",
+    "lang": "ar",
+    "title": "حساب صافي الراتب والتأمينات في السعودية 2026",
+    "excerpt": "دليل لحساب صافي الراتب واستقطاع التأمينات للسعوديين والمقيمين، مع مثال ومصادر رسمية.",
+    "category": "salary-insurance",
+    "url": "/articles/ar/salary-net-gosi-2026-ar.html",
+    "alternate_url": "/articles/en/salary-net-gosi-2026-en.html",
+    "published_at": "2026-10-17",
+    "updated_at": "2026-10-17",
+    "status": "published"
+  },
+  {
+    "translation_id": "salary-net-gosi-2026",
+    "lang": "en",
+    "title": "Net Salary and GOSI Contributions in Saudi Arabia (2026)",
+    "excerpt": "A practical guide to net salary calculations and GOSI contributions in 2026, with examples and official sources.",
+    "category": "salary-insurance",
+    "url": "/articles/en/salary-net-gosi-2026-en.html",
+    "alternate_url": "/articles/ar/salary-net-gosi-2026-ar.html",
+    "published_at": "2026-10-17",
+    "updated_at": "2026-10-17",
+    "status": "published"
   }
 ]
