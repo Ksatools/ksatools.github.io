@@ -20,5 +20,29 @@
     "published_at": "2026-10-17",
     "updated_at": "2026-10-17",
     "status": "published"
+  },
+  {
+    "translation_id": "end-of-service-benefit",
+    "lang": "en",
+    "title": "End-of-Service Benefits in Saudi Arabia: Calculation and Employee Rights",
+    "excerpt": "A practical guide to Article 84 calculations, resignation proportions, statutory exceptions and final-settlement timelines.",
+    "category": "labor-law",
+    "url": "/articles/en/end-of-service-benefit-en.html",
+    "alternate_url": "/articles/ar/end-of-service-benefit-ar.html",
+    "updated_at": "2026-10-17",
+    "status": "published",
+    "published_at": "2026-10-17"
+  },
+  {
+    "translation_id": "end-of-service-benefit",
+    "lang": "ar",
+    "title": "مكافأة نهاية الخدمة في السعودية: طريقة الحساب وحقوق الموظف",
+    "excerpt": "دليل لطريقة حساب مكافأة نهاية الخدمة وفق المادة 84، ونسب الاستقالة والاستثناءات ومواعيد تصفية الحقوق.",
+    "category": "labor-law",
+    "url": "/articles/ar/end-of-service-benefit-ar.html",
+    "alternate_url": "/articles/en/end-of-service-benefit-en.html",
+    "updated_at": "2026-10-17",
+    "status": "published",
+    "published_at": "2026-10-17"
   }
 ]

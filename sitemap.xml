@@ -50,4 +50,24 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/labor-art81-ar.html" />
   </url>
 
+
+  <url>
+    <loc>https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/end-of-service-benefit-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html" />
+  </url>
+  <url>
+    <loc>https://ksatools.github.io/articles/en/end-of-service-benefit-en.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/end-of-service-benefit-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html" />
+  </url>
+
 </urlset>
