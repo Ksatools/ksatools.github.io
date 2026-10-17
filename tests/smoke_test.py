@@ -153,6 +153,15 @@ def has_num(text, expected):
     return expected.replace(",", "").replace(" ", "") in norm
 
 
+def parse_sar(text):
+    """يستخرج أول رقم من نصّ (يزيل رموز العملة والفواصل وعلامات الاتجاه)."""
+    if text is None:
+        return None
+    norm = text.replace("\u066b", ".").replace("\u066c", ",")
+    m = re.search(r"\d[\d,]*(?:\.\d+)?", norm)
+    return float(m.group(0).replace(",", "")) if m else None
+
+
 def cv_metric_state(pg, summary):
     """يعيد True إن كان فحص 'المقاييس' ناجحاً (غير موسوم missing)."""
     pg.evaluate(
@@ -258,9 +267,48 @@ def browser_checks(headless):
             ("مادة 80 → لا مكافأة",            "art80",        3,  0, 0, "0% (بدون استحقاق)"),
             ("قوة قاهرة (87) → 100%",          "force",        3,  0, 0, "100% (استحقاق كامل)"),
             ("العاملة: زواج خلال 6 أشهر (87) → 100%", "marriage", 3, 0, 0, "100% (استحقاق كامل)"),
+            ("مادة 81 (3س) → 100% لا استقالة",  "art81",        3,  0, 0, "100% (استحقاق كامل)"),
+            ("مادة 81 تحت سنتين → 100% بلا عتبة 85", "art81",    1, 11, 0, "100% (استحقاق كامل)"),
         ):
             _got = _ratio(_r, _y, _m, _d)
             check("EOS حدّ: " + _lbl, _got == _exp, "%r ≠ %r" % (_got, _exp))
+
+        # المادة 81 في المحرك: مكافأة كاملة مساوية لحالة انتهاء عادية، ومخالفة
+        # لحالة الاستقالة (صفر) عند المدة نفسها تحت السنتين — لا عتبة ولا نِسَب 85.
+        def _net(reason, y, m, d, salary=6500):
+            setv(pg, "eos-reason", reason)
+            setv(pg, "eos-salary", str(salary))
+            setv(pg, "eos-years", str(y))
+            setv(pg, "eos-months", str(m))
+            setv(pg, "eos-days", str(d))
+            click(pg, "eos-calc-btn")
+            return pg.text_content("#eos-net-gratuity").strip()
+
+        _n81 = _net("art81", 1, 11, 0)
+        _n_exp = _net("expiry", 1, 11, 0)
+        _n_res = _net("resignation", 1, 11, 0)
+        check("EOS: المادة 81 = استحقاق كامل لا نسب استقالة (1س11ش)",
+              (_n81 == _n_exp) and (_n81 != _n_res) and has_num(_n_res, "0.00"),
+              "art81=%r expiry=%r resignation=%r" % (_n81, _n_exp, _n_res))
+
+        # تعويض المادة 77: الأداة لا تُدخل ولا تُصدر أي تعويض منفصل، وإجمالي التصفية
+        # عند اختيار art81 = صافي المكافأة + بدل الإجازات فقط (بلا قيمة مضافة).
+        # نُعيد أساس الإجازة إلى "الأجر الكامل" (الافتراضي) لأن اختبارات سابقة
+        # تركت الأساس "basic" بقيمة أكبر من الأجر فلا يحسب المحرّك بدل الإجازة.
+        setv(pg, "eos-leave-basis", "full")
+        _net("art81", 1, 11, 0)  # يُعيد العرض إلى حالة art81 بأساس إجازة صالح
+        _tot81 = parse_sar(pg.text_content("#eos-total-val"))
+        _net81 = parse_sar(pg.text_content("#eos-net-gratuity"))
+        _lev81 = parse_sar(pg.text_content("#eos-leave-out"))
+        _art77_dom = pg.eval_on_selector_all(
+            "#eos-tool [id*='77'], #eos-tool [id*='judicial'], "
+            "#eos-tool [id*='compensation']",
+            "els=>els.length")
+        check("EOS: art81 لا يضيف تعويض مادة 77 — الإجمالي = مكافأة + إجازات",
+              (_tot81 is not None and _net81 is not None and _lev81 is not None
+               and abs(_tot81 - (_net81 + _lev81)) < 0.01) and _art77_dom == 0,
+              "total=%r net=%r leave=%r art77_dom=%r"
+              % (_tot81, _net81, _lev81, _art77_dom))
 
         # --- GOSI
         tab(pg, "salary")

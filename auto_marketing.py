@@ -12,6 +12,7 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     python auto_marketing.py --verify            # فحص ملفات الموقع/الأرشفة فقط
     python auto_marketing.py                     # دورة واحدة (الافتراضي: draft + groq)
     python auto_marketing.py --provider gemini   # اختيار صريح للمزوّد (بلا انتقال تلقائي)
+    python auto_marketing.py --topic labor-art81 --article-lang en  # توليد نسخة إنجليزية فقط
     PUBLISH_MODE=auto python auto_marketing.py   # نشر تلقائي بعد اجتياز كل البوابات
 
 متغيّرات البيئة (لا تُطبع قيمها في السجل أبداً):
@@ -737,6 +738,252 @@ def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, slee
 # 6) مزوّدو المحتوى (Groq افتراضياً، Gemini اختياري)
 # =====================================================================================
 
+# =====================================================================================
+# 6.1) قواعد قانونية لموضوعات مكافأة نهاية الخدمة (المواد 80 و81 و84 و85 و86 و87 و88)
+# =====================================================================================
+# المحفّز: أخطاء قانونية فعلية في مسودات التشغيل 38946220138/38954366741 — نسب عامة
+# مخترعة (21 يوماً عن كل سنة)، وقاعدة «نصف يوم عن كل شهر غير مكتمل» بدل احتساب
+# أجزاء السنة تناسبياً، وحدّ ثلاثة أشهر لاستحقاق الاستقالة، وسقوط عام للمكافأة
+# بأي إخلال بشروط الاستقالة، واستبعاد كامل للبدلات أو اعتماد الأجر الأساسي وحده،
+# وتسوية نهائية في 30 يوماً، وأمثلة رقمية غير متسقة مع المعادلة.
+# المرجع: نظام العمل السعودي — الفصل الرابع (نهاية الخدمة)، وفق النص الرسمي الحالي
+# لوزارة الموارد البشرية والتنمية الاجتماعية (صفحة «علاقات العمل»، hrsd.gov.sa،
+# تاريخ آخر تحديث 2026/10/14) — المادة 84 (الأساس: نصف شهر عن كل سنة من السنوات
+# الخمس الأولى ثم شهر عن كل سنة بعدها، والأجر الأخير أساساً، وأجزاء السنة بنسبة ما
+# قضاه منها)، والمادة 85 (الاستقالة: ثلث بعد سنتين متتاليتين إلى خمس سنوات، وثلثاها
+# إذا زادت على خمس ولم تبلغ عشر، والكاملة عند عشر فأكثر)، والمادة 86 (يجوز الاتفاق
+# على ألا تحسب العمولات ونِسَب المبيعات وما أشبهها القابلة للزيادة والنقص)، والمادة
+# 88 (تصفية حقوق من انتهت خدمته أسبوع، ومن أنهى العقد أسبوعين كحدّ أقصى)، والمادة
+# 87 (استثناء صريح من المادة 85: المكافأة كاملة عند ترك العمل لقوة قاهرة خارجة عن
+# إرادة العامل، أو إنهاء العاملة العقد خلال ستة أشهر من تاريخ عقد زواجها أو ثلاثة
+# أشهر من تاريخ وضعها)، والمادة 81 (يحق للعامل أن يترك العمل دون إشعار مع
+# احتفاظه بحقوقه النظامية كلها في الحالات المحددة فيها). وترك العمل وفق المادة 81
+# ليس استقالة؛ فالمادة 85 لا تُطبَّق إلا إذا كان انتهاء العلاقة بسبب استقالة العامل،
+# فتستحق فيه المكافأة كاملة وفق المادة 84. والمادتان 87 و81 أُضيفتا في جولة مراجعة
+# لاحقة لسدّ فجوتين مؤكَّدتين في وصف الاستحقاق الكامل وحقوق المادة 81.
+# فصل صريح: مكافأة نهاية الخدمة (المادة 84) لا يُدمج بها تعويض المادة 77 عن الإنهاء
+# لسبب غير مشروع؛ فلا يُضاف تلقائياً ولا يُفترض استحقاقه في جميع حالات المادة 81.
+# كل نصّ هنا مُقروء من المصدر الرسمي أعلاه — لا يُضف استثناء قانوني غير مثبت.
+EOSB_TOPIC_IDS = frozenset({
+    "eosb-basics", "eosb-resignation", "labor-art84", "labor-art85",
+    "eosb-full-entitlement", "rights-contract-end", "rights-employer-termination",
+    "labor-art81", "labor-art80", "contract-end-vs-resignation",
+    "final-settlement", "employee-exit-checklist",
+})
+
+EOSB_LEGAL_RULES = {
+    "ar": (
+        "قواعد قانونية إلزامية لمكافأة نهاية الخدمة (نظام العمل — الفصل الرابع، "
+        "وفق النص الرسمي الحالي للوزارة):\n"
+        "1) الأساس الحسابي (المادة 84): أجر نصف شهر عن كل سنة من السنوات الخمس "
+        "الأولى، وأجر شهر كامل عن كل سنة من السنوات التالية، ويُتخذ الأجر الأخير "
+        "أساساً للحساب. أجزاء السنة تُحتسب بنسبة ماقضى العامل منها فعلاً — لا "
+        "بقاعدة «21 يوماً عن كل سنة»، ولا بنصف يوم عن كل شهر غير مكتمل.\n"
+        "2) الاستحقاق عند الاستقالة (المادة 85): الاستقالة لا تستلزم مدة ثلاثة أشهر؛ "
+        "فحدّ الأدنى للاستحقاق هو خدمة متتالية لا تقل عن سنتين. فمن خدم سنتين إلى "
+        "خمس سنوات فله ثلث المكافأة، وما زاد على خمس سنوات ولم يبلغ عشر سنوات "
+        "ثلثاها، وما بلغ عشر سنوات فأكثر فالمكافأة كاملة. ومدة الإشعار بثلاثين "
+        "يوماً أو حسم طلب الاستقالة بعد ثلاثين يوماً (المادتان 75 و79 مكرر) ليسا "
+        "شرطاً للاستحقاق.\n"
+        "3) عناصر الأجر (المادة 86): لا تُستبعد من أساس الحساب إلا العمولات والنسب "
+        "المئوية عن ثمن المبيعات وما أشبهها من عناصر الأجر القابلة بطبيعتها للزيادة "
+        "والنقص، وذلك باتفاق صريح بين الطرفين. فلا تدّعِ أن الأجر الأساسي وحده يدخل "
+        "في الحساب في جميع الأحوال، ولا أن جميع البدلات مستبعدة بلا استثناء.\n"
+        "4) تصفية الحقوق (المادة 88): إذا انتهت الخدمة من جهة صاحب العمل وُفِّي الأجر "
+        "وصُفِّت الحقوق خلال أسبوع على الأكثر؛ وإذا أنهى العامل العقد صُفِّت حقوقه "
+        "خلال مدة لا تزيد على أسبوعين. لا تذكر أن التسوية النهائية تستغرق 30 يوماً "
+        "بصورة عامة.\n"
+        "5) حرمان المكافأة ليس عاماً: حالات الحرمان محددة في المادة 80 وتُطبَّق عند "
+        "فسخ العقد من صاحب العمل في الحالات المنصوص فيها؛ أما الاستقالة فتستحق وفق "
+        "المادة 85 ومدة الخدمة، ويستحق العامل الذي انتهى عقده بالاستقالة جميع حقوقه "
+        "المقررة في النظام. لا تزعم أن أي إخلال بشروط الاستقالة يسقط المكافأة.\n"
+        "6) المثال الرقمي: أي مثال حسابي يجب أن يلتزم المعادلة أعلاه بالحرف (نصف شهر "
+        "أو شهر عن كل سنة، وجزء السنة بنسبة ما قُضي منه)، ويُحسب بدقّة، ويُعلَّم "
+        "صراحةً بأنه مثال توضيحي؛ ولا تنشر رقماً مخالفاً لهذه المعادلة.\n"
+        "7) استثناءات الاستحقاق الكامل (المادة 87): تستحق المكافأة كاملة — "
+        "استثناءً صريحًا من أحكام المادة 85 — في حالتين: (أ) ترك العامل العمل "
+        "نتيجة لقوة قاهرة خارجة عن إرادته؛ (ب) إنهاء العاملة للعقد خلال ستة أشهر "
+        "من تاريخ عقد زواجها أو ثلاثة أشهر من تاريخ وضعها. على هاتين الحالتين لا "
+        "تُطبَّق نِسَب الاستقالة في المادة 85 ولا عتبة السنتين.\n"
+        "8) ترك العمل بحالات المادة 81: يحق للعامل أن يترك العمل دون إشعار، مع "
+        "احتفاظه بحقوقه النظامية كلها، في أي من الحالات المحددة في المادة 81 "
+        "(منها عدم وفاء صاحب العمل بالتزاماته العقدية أو النظامية الجوهرية إزاء "
+        "العامل). وترك العمل وفق المادة 81 ليس استقالة بالمعنى المقصود في المادة "
+        "85 — فهي تُطبَّق فقط إذا كان انتهاء علاقة العمل بسبب استقالة العامل — "
+        "بل تستحق فيه المكافأة كاملة وفق المادة 84. لا تصف هذه الحالات بأنها "
+        "استقالة عادية، ولا تُطبَّق عليها عتبة السنتين أو نِسَب المادة 85 "
+        "تعميمًا. ومكافأة نهاية الخدمة وحدها هي محلّ هذه القاعدة؛ فلا تُضِف "
+        "تعويضًا آخر كتعويض المادة 77، ولا تفترض استحقاقه في جميع حالات المادة "
+        "81، ولا تقدّمه كحقيقة مؤكدة دون سند نظامي أو قضائي موثّق.\n"
+        "9) تعويض المادة 77 (منفصل عن المكافأة): تعويض المادة 77 عن الإنهاء لسبب "
+        "غير مشروع منفصل تمامًا عن مكافأة نهاية الخدمة، ولا يدخل تلقائيًا في ناتج "
+        "المكافأة عند اختيار أي سبب — ولا في أي من حالات المادة 81 السبع. وعدم "
+        "الاحتساب التلقائي هو سياسة للبرنامج، وليس حكمًا بأنّ الحكم القضائي أو "
+        "الصلح الموثّق شرط نظامي مطلق لوجود التعويض. واستحقاق التعويض وتقديره "
+        "مسألة منفصلة تخضع للعقد وبنوده والوقائع والنظام؛ وأي احتساب مستقبلي يمكن "
+        "أن يستند إلى مدخل مستقل اسمه المقترح Has_Judicial_Ruling_Or_Settlement "
+        "وقيمته الافتراضية False، ولا يكفي المدخل وحده. وإذا لم تتوفر بيانات كافية "
+        "للحساب بدقة فلا تُخمّن المبلغ ولا تُضِف قيمة تقديرية إلى التصفية. وهذه "
+        "السياسة ليست نصًّا حرفيًا من المادة 77، ولا تنفي حقّ المطالبة القضائية "
+        "قبل صدور الحكم.\n"
+    ),
+    "en": (
+        "Mandatory legal rules for end-of-service benefits (Saudi Labour Law, "
+        "Chapter IV, per the Ministry's current official text):\n"
+        "1) Calculation basis (Article 84): half a month's wage for each of the "
+        "first five years, and one full month's wage for each subsequent year, "
+        "with the last wage as the basis of the calculation. Parts of a year are "
+        "counted in proportion to the time actually served — not by a flat "
+        "\"21 days per year\" rule, and not by half a day per incomplete month.\n"
+        "2) Entitlement on resignation (Article 85): resignation does not require "
+        "three months; the minimum threshold for entitlement is two consecutive "
+        "years of service. From two to five years the entitlement is one third of "
+        "the benefit; above five but below ten years it is two thirds; at ten "
+        "years or more it is the full benefit. The thirty-day notice period, or a "
+        "resignation request deemed accepted after thirty days (Articles 75 and "
+        "79-bis), is not an entitlement threshold.\n"
+        "3) Wage elements (Article 86): only commissions, sales percentages and "
+        "similar wage elements that are naturally subject to increase and "
+        "decrease may be excluded from the basis of the calculation, and only by "
+        "explicit agreement between the parties. Do not claim that the basic wage "
+        "alone always enters the calculation, nor that all allowances are always "
+        "excluded without exception.\n"
+        "4) Settlement of rights (Article 88): when the service ends at the "
+        "employer's side, wages are paid and rights settled within one week at "
+        "most; when the worker ends the contract, his rights are settled within "
+        "no more than two weeks. Do not state that the final settlement generally "
+        "takes 30 days.\n"
+        "5) Forfeiture is not general: forfeiture cases are exhaustively listed in "
+        "Article 80 and apply when the employer ends the contract in those listed "
+        "cases; resignation entitlement follows Article 85 and the length of "
+        "service, and a worker whose contract ends by resignation is entitled to "
+        "all rights stipulated by the Law. Do not claim that any breach of "
+        "resignation conditions forfeits the benefit.\n"
+        "6) Numeric examples: any worked example must follow the equation above "
+        "exactly (half a month or one month per year, and parts of a year in "
+        "proportion to time served), must be computed accurately, and must be "
+        "clearly labelled as illustrative; never publish a figure that "
+        "contradicts this equation.\n"
+        "7) Full-entitlement exceptions (Article 87): the benefit is payable in "
+        "full — as an express exception to Article 85 — in two cases: (a) the "
+        "worker leaves work as a result of force majeure beyond his control; "
+        "(b) the female worker ends the contract within six months of her "
+        "marriage contract date or three months of giving birth. The Article 85 "
+        "resignation ratios and the two-year threshold do not apply to these two "
+        "cases.\n"
+        "8) Leaving work under Article 81: the worker has the right to leave "
+        "work without notice, while retaining all of his statutory rights, in "
+        "any of the cases set out in Article 81 (including the employer's "
+        "failure to perform his essential contractual or statutory obligations "
+        "towards the worker). Leaving under Article 81 is not a resignation "
+        "within the meaning of Article 85 — which applies only where the "
+        "employment relationship ends because of the worker's resignation — and "
+        "the benefit is therefore payable in full under Article 84. Do not "
+        "describe these cases as ordinary resignation, and do not apply the "
+        "Article 85 two-year threshold or ratios to them as a general rule. "
+        "End-of-service benefit alone is the subject of this rule: do not add "
+        "any other compensation such as Article 77 compensation, do not assume "
+        "it is due in all Article 81 cases, and never state it as settled "
+        "without a documented statutory or judicial basis.\n"
+        "9) Article 77 compensation (separate from the benefit): Article 77 "
+        "compensation for termination without a lawful cause is entirely "
+        "separate from the end-of-service benefit and is never added "
+        "automatically to the benefit result for any reason — nor in any of the "
+        "seven Article 81 cases. Not computing it automatically is a program "
+        "policy, not a ruling that a final judicial ruling or a documented "
+        "settlement is an absolute statutory condition for the compensation. "
+        "Entitlement to and assessment of the compensation are a separate "
+        "matter, subject to the contract and its terms, the facts, and the law; "
+        "any future computation may rely on an independent input whose proposed "
+        "name is Has_Judicial_Ruling_Or_Settlement with a default value of "
+        "False, and that input alone is not sufficient. If the data needed for "
+        "an accurate calculation are unavailable, do not guess the amount and do "
+        "not add an estimated value to the settlement. This policy is not a "
+        "literal quotation of Article 77, nor does it deny any judicial claim "
+        "before a ruling is issued.\n"
+    ),
+}
+
+
+def legal_rules_for(topic, lang: str) -> str:
+    """قواعد المواد 80 و81 و84–88 لبرومبت الموضوع — لموضوعات المكافأة فقط وبلا تعميم."""
+    if topic.get("id") not in EOSB_TOPIC_IDS:
+        return ""
+    return EOSB_LEGAL_RULES["ar" if lang == "ar" else "en"]
+
+
+def eosb_reference_amount(total_years, monthly_wage, *, resigned: bool) -> float:
+    """مرجع حتمي لمكافأة نهاية الخدمة (المادتان 84 و85) — للاختبارات لا للإنتاج.
+
+    يطابق معادلة `calculateEOS()` في index.html بالحرف: نصف أجر عن كل سنة من
+    السنوات الخمس الأولى ثم أجر كامل عن كل سنة بعدها (المادة 84)، ونِسَب
+    الاستقالة (المادة 85): صفر أقل من سنتين، والثلث من سنتين إلى خمس سنوات
+    **بالضمن**، والثلثان إذا زادت على خمس ولم تبلغ عشر، والمكافأة كاملة عند
+    عشر سنوات فأكثر. لا يُستدعى في أي مسار نشر؛ وظيفته إثبات صحّة القواعد
+    المرسلة للنموذج ومنع انحراف الأمثلة العددية.
+    """
+    first5 = min(total_years, 5) * (monthly_wage / 2)
+    after5 = max(0.0, total_years - 5) * monthly_wage
+    full = first5 + after5
+    if not resigned:
+        return full
+    if total_years < 2:
+        return 0.0
+    if total_years <= 5:
+        return full / 3
+    if total_years < 10:
+        return full * 2 / 3
+    return full
+
+
+# --- سياسة تعويض المادة 77: منفصلة عن مكافأة نهاية الخدمة --------------------
+# المدخل المستقل الاختياري لأي احتساب مستقبلي للتعويض، وقيمته الافتراضية False.
+ARTICLE_77_FLAG_NAME = "Has_Judicial_Ruling_Or_Settlement"
+ARTICLE_77_FLAG_DEFAULT = False
+
+# مدخلات نموذج المادة 77 المطلوبة. غير مُعرَّفة في الواجهة بعد (تحقّق: لا حقل
+# `eos-*` لنوع العقد ولا لقيمة التعويض المنصوص عليه في العقد ولا لسند الحكم).
+# لذلك يبقى حساب التعويض مُعطَّلاً ولا يُفعَّل أي حساب مالي جديد بلا نموذج إدخال.
+ARTICLE_77_REQUIRED_INPUTS = (
+    ARTICLE_77_FLAG_NAME,
+    "contract_type",
+    "contract_compensation_amount",
+)
+
+
+def article_77_missing_inputs(*, has_judicial_ruling_or_settlement=False,
+                              contract_type=None,
+                              contract_compensation_amount=None):
+    """قائمة مدخلات المادة 77 الناقصة — لعرض الفجوة بلا اختراع قيم."""
+    missing = []
+    if not has_judicial_ruling_or_settlement:
+        missing.append(ARTICLE_77_FLAG_NAME)
+    if contract_type not in ("fixed", "unlimited"):
+        missing.append("contract_type")
+    if contract_compensation_amount in (None, ""):
+        missing.append("contract_compensation_amount")
+    return missing
+
+
+def article_77_compensation(*, has_judicial_ruling_or_settlement=False,
+                            contract_type=None,
+                            contract_compensation_amount=None):
+    """تعويض المادة 77 — يعيد `None` دائمًا: نموذج الإدخال غير مُعرَّف بعد.
+
+    السياسة (ملخّص): (١) منفصل تمامًا عن مكافأة نهاية الخدمة ولا يُضاف تلقائيًا
+    لأي سبب، ولا في أي من حالات المادة 81 السبع. (٢) عدم الاحتساب التلقائي سياسة
+    للبرنامج، وليس حكمًا بأنّ الحكم القضائي أو الصلح الموثّق شرط نظامي مطلق لوجود
+    التعويض؛ واستحقاق التعويض وتقديره مسألة منفصلة تخضع للعقد وبنوده والوقائع
+    والنظام. (٣) أي احتساب مستقبلي يستند إلى مدخل مستقل، والمدخل وحده لا يكفي؛
+    فطريقة الاحتساب تختلف بحسب نوع العقد والتعويض المنصوص عليه في العقد والبيانات
+    ذات الصلة. (٤) عند نقص بيانات الحساب لا يُخمَّن المبلغ ولا تُضاف قيمة تقديرية.
+    لذلك تعيد الدالة `None` دائمًا، ونتيجتها لا تُخلط بمكافأة نهاية الخدمة ولا
+    بنسبة `art81`. راجع `ARTICLE_77_REQUIRED_INPUTS` و`article_77_missing_inputs`.
+    """
+    # نموذج المادة 77 غير مُعرَّف بعد (لا حقول في الواجهة) ⇒ لا مبلغ وبلا تخمين.
+    return None
+
+
 def build_prompt(topic, lang: str) -> str:
     title = topic["title_ar"] if lang == "ar" else topic["title_en"]
     lang_name = "العربية" if lang == "ar" else "English"
@@ -761,6 +1008,9 @@ def build_prompt(topic, lang: str) -> str:
         f"{source_lines}"
         "   ممنوع تماماً استخدام النطاق المنتهي mol.gov.sa أو أي نطاق غير مذكور أعلاه.\n"
     )
+    legal_block = legal_rules_for(topic, lang)
+    if legal_block:
+        legal_block = f"قواعد قانونية إلزامية لهذا الموضوع:\n{legal_block}\n"
     return (
         "أنت محرّر محتوى إرشادي-عملي لمنصة أدوات سعودية. ما تكتبه إرشاد عام وليس استشارة قانونية.\n"
         f"الموضوع: {title}\n"
@@ -773,6 +1023,7 @@ def build_prompt(topic, lang: str) -> str:
         f"{source_rule}"
         "5) لا أسلوب دعائياً، ولا وعوداً بنتائج توظيف مضمونة، ولا ادّعاء بأن المحتوى مُراجَع قانونياً.\n"
         "6) لا تذكر أنك نموذج ذكاء اصطناعي.\n\n"
+        f"{legal_block}"
         "بنية JSON المطلوبة بالحرف:\n"
         "{\n"
         '  "title": "عنوان المقال",\n'
@@ -1741,8 +1992,14 @@ def resolve_provider(value=None) -> str:
     return DEFAULT_PROVIDER
 
 
-def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
+def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dry_run=False,
              skip_source_check=False, provider=None, api_key=None, model=None) -> int:
+    # لغة المقال مستقلة عن social_lang: تحدد أي نسخة لغوية تُولَّد في هذه الدورة.
+    # القيمة غير المعروفة تعود إلى "both" (نفس سلوك --social-lang و--mode).
+    if article_lang not in ("ar", "en", "both"):
+        article_lang = "both"
+    lang_order = ("ar", "en") if article_lang == "both" else (article_lang,)
+
     provider = resolve_provider(provider)
     key_env = PROVIDER_KEY_ENV[provider]
     model_env = PROVIDER_MODEL_ENV[provider]
@@ -1789,7 +2046,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
 
     results = {}
     attempted = False
-    for lang in ("ar", "en"):
+    for lang in lang_order:
         if (topic["id"], lang) in published_pairs:
             log(f"[SKIP] النسخة {lang} منشورة سابقاً — لا إعادة إنشاء.")
             continue
@@ -1819,13 +2076,13 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
         results[lang] = article
         log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
 
-    ready = [results[l] for l in ("ar", "en") if results.get(l)]
+    ready = [results[l] for l in lang_order if results.get(l)]
     if not ready:
         if not attempted:
             log("[SKIP] النسختان (ar/en) منشورتان سابقاً — لا شيء لتوليده في هذه الدورة.")
             return 0
         statuses = ", ".join(
-            f"{lang}={state['topics'][topic['id']].get(lang)}" for lang in ("ar", "en"))
+            f"{lang}={state['topics'][topic['id']].get(lang)}" for lang in lang_order)
         log("[FAIL] فشل توليد المحتوى: لم تنتج هذه الدورة أي نسخة صالحة "
             f"({statuses}). لم يُكتب أي ملف، ولم تُنشأ مسودة، ولم يُنشر شيء.")
         log("[FAIL] النتيجة: فشل توليد المحتوى (رمز خروج "
@@ -1876,8 +2133,9 @@ def run_once(*, mode, topic_id=None, social_lang="both", dry_run=False,
             return 0
 
     if len(ready) != 2:
-        missing = [l for l in ("ar", "en") if l not in results]
-        log(f"[WARN] نسخة واحدة فقط اجتازت هذه الدورة (الناقص: {', '.join(missing)}) — "
+        missing = [l for l in lang_order if l not in results]
+        _missing_txt = ", ".join(missing) if missing else "لا شيء (لغة واحدة مطلوبة)"
+        log(f"[WARN] نسخة واحدة فقط اجتازت هذه الدورة (الناقص: {_missing_txt}) — "
             "لا نشر مع نسخة واحدة، ولن يُعاد إنشاء النسخة المنشورة سابقاً.")
 
     if mode != "auto" or len(ready) != 2:
@@ -2968,6 +3226,482 @@ def selftest() -> int:
               and "json_validate_failed" in out
               and "غير قابل لإعادة المحاولة" in out
               and "json_object" not in out)
+
+        # (ض) دقة المحتوى القانوني لمكافأة نهاية الخدمة — إصلاح الأخطاء المكتشفة
+        #     فعلياً في مسودات التشغيل 38946220138 و38954366741: نسب عامة مخترعة
+        #     (21 يوماً عن كل سنة)، ونصف يوم عن الشهر غير المكتمل بدل النسبة،
+        #     وحدّ ثلاثة أشهر للاستحقاق، وسقوط عام بأي إخلال بشروط، واستبعاد كامل
+        #     للبدلات أو الأجر الأساسي وحده، وتسوية في 30 يوماً، وأمثلة رقمية
+        #     مخالفة للمعادلة. الفحوص تثبت: وصول القواعد (80 و81 و84–88) إلى بروموت
+        #     كل موضوعات المكافأة في اللغتين، ومنع الادعاءات السبعة صراحةً، والتمييز
+        #     بين الأساس والنِّسَب، وفصل استثناءات المادة 87 عن نِسَب المادة 85،
+        #     واستحقاق المادة 81 الكامل وفق المادة 84 بلا عتبة سنتين، وفصل تعويض
+        #     المادة 77 كقاعدة مستقلة (9) منفصلة تماماً لا تُضاف تلقائياً (بمدخل
+        #     مستقل اسمه Has_Judicial_Ruling_Or_Settlement افتراضياً False، وبلا
+        #     مبلغ مخمّن عند نقص البيانات)، وسلامة المعادلة حسابياً بمرجع حتمي
+        #     (لا بحساب يقدّمه النموذج)، وبلا أي ضعف لبوابات الجودة أو فحص المصادر.
+        _eosb_ar_markers = (
+            "أجر نصف شهر عن كل سنة",
+            "أجر شهر كامل عن كل سنة",
+            "الأجر الأخير أساساً",
+            "بنسبة ماقضى العامل منها فعلاً",
+            "لا بقاعدة «21 يوماً عن كل سنة»",
+            "ولا بنصف يوم عن كل شهر غير مكتمل",
+            "الاستقالة لا تستلزم مدة ثلاثة أشهر",
+            "خدمة متتالية لا تقل عن سنتين",
+            "فالمكافأة كاملة",
+            "المادتان 75 و79 مكرر",
+            "فلا تدّعِ أن الأجر الأساسي وحده",
+            "ولا أن جميع البدلات مستبعدة بلا استثناء",
+            "خلال أسبوع على الأكثر",
+            "لا تزيد على أسبوعين",
+            "لا تذكر أن التسوية النهائية تستغرق 30 يوماً بصورة عامة",
+            "حالات الحرمان محددة في المادة 80",
+            "لا تزعم أن أي إخلال بشروط الاستقالة يسقط المكافأة",
+            "يُعلَّم صراحةً بأنه مثال توضيحي",
+            "المادة 87",
+            "استثناءً صريحًا من أحكام المادة 85",
+            "قوة قاهرة خارجة عن إرادته",
+            "خلال ستة أشهر من تاريخ عقد زواجها",
+            "أو ثلاثة أشهر من تاريخ وضعها",
+            "لا تُطبَّق نِسَب الاستقالة في المادة 85 ولا عتبة السنتين",
+            "المادة 81",
+            "ترك العمل دون إشعار",
+            "بحقوقه النظامية كلها",
+            "لا تصف هذه الحالات بأنها استقالة عادية",
+            "ليس استقالة بالمعنى المقصود في المادة 85",
+            "تستحق فيه المكافأة كاملة وفق المادة 84",
+            "فلا تُضِف تعويضًا آخر كتعويض المادة 77",
+            "ولا تفترض استحقاقه في جميع حالات المادة 81",
+            "تعويض المادة 77 (منفصل عن المكافأة)",
+            "ولا يدخل تلقائيًا في ناتج المكافأة عند اختيار أي سبب",
+            "ولا في أي من حالات المادة 81 السبع",
+            "الاحتساب التلقائي هو سياسة للبرنامج",
+            "الصلح الموثّق شرط نظامي مطلق",
+            "Has_Judicial_Ruling_Or_Settlement",
+            "وقيمته الافتراضية False",
+            "فلا تُخمّن المبلغ ولا تُضِف قيمة تقديرية إلى التصفية",
+            "ليست نصًّا حرفيًا من المادة 77",
+        )
+        _eosb_en_markers = (
+            "half a month's wage for each of the first five years",
+            "one full month's wage for each subsequent year",
+            "the last wage as the basis",
+            "in proportion to the time actually served",
+            'not by a flat "21 days per year" rule',
+            "not by half a day per incomplete month",
+            "resignation does not require three months",
+            "two consecutive years of service",
+            "one third of the benefit",
+            "two thirds",
+            "the full benefit",
+            "Articles 75 and 79-bis",
+            "Do not claim that the basic wage alone",
+            "nor that all allowances are always excluded",
+            "within one week at most",
+            "no more than two weeks",
+            "Do not state that the final settlement generally takes 30 days",
+            "forfeiture cases are exhaustively listed in Article 80",
+            "Do not claim that any breach of resignation conditions forfeits the benefit",
+            "must follow the equation above exactly",
+            "clearly labelled as illustrative",
+            "Article 87",
+            "as an express exception to Article 85",
+            "force majeure beyond his control",
+            "within six months of her marriage contract date",
+            "three months of giving birth",
+            "do not apply to these two cases",
+            "Article 81",
+            "leave work without notice",
+            "retaining all of his statutory rights",
+            "Do not describe these cases as ordinary resignation",
+            "is not a resignation within the meaning of Article 85",
+            "payable in full under Article 84",
+            "do not add any other compensation such as Article 77 compensation",
+            "do not assume it is due in all Article 81 cases",
+            "Article 77 compensation (separate from the benefit)",
+            "is never added automatically to the benefit result for any reason",
+            "seven Article 81 cases",
+            "Not computing it automatically is a program policy",
+            "an absolute statutory condition",
+            "Has_Judicial_Ruling_Or_Settlement",
+            "default value of False",
+            "do not guess the amount and do not add an estimated value to the settlement",
+            "is not a literal quotation of Article 77",
+        )
+        _bad_eosb_prompts = []
+        for _tid in sorted(EOSB_TOPIC_IDS):
+            for _lang in ("ar", "en"):
+                _p = build_prompt(topic_by_id(_tid), _lang)
+                _markers = _eosb_ar_markers if _lang == "ar" else _eosb_en_markers
+                if any(_m not in _p for _m in _markers):
+                    _bad_eosb_prompts.append(f"{_tid}/{_lang}")
+        check("EOSB: قواعد المواد 84-88 تصل بروموت كل موضوعات المكافأة في اللغتين",
+              bool(EOSB_TOPIC_IDS) and not _bad_eosb_prompts)
+
+        # التمييز المنصوص عليه في التقرير: الأساس (84) قسم مستقل عن نِسَب
+        # الاستقالة (85)، ولا تُقدَّم نِسَب الاستقالة كأنها قاعدة الحساب الأساسية.
+        _p_res_ar = build_prompt(topic_by_id("eosb-resignation"), "ar")
+        _p_res_en = build_prompt(topic_by_id("eosb-resignation"), "en")
+        check("EOSB: التمييز بين أساس المادة 84 ونِسَب الاستقالة في المادة 85 (عربي)",
+              "المادة 84" in _p_res_ar and "المادة 85" in _p_res_ar
+              and "أجر نصف شهر" in _p_res_ar and "ثلث المكافأة" in _p_res_ar
+              and _p_res_ar.index("المادة 84") < _p_res_ar.index("المادة 85"))
+        check("EOSB: التمييز بين أساس المادة 84 ونِسَب الاستقالة في المادة 85 (إنجليزي)",
+              "Article 84" in _p_res_en and "Article 85" in _p_res_en
+              and "half a month's wage" in _p_res_en
+              and "one third of the benefit" in _p_res_en
+              and _p_res_en.index("Article 84") < _p_res_en.index("Article 85"))
+
+        # الفصل البنيوي: بند المادة 85 (الاستقالة) يبقى بنداً مستقلاً خالياً من
+        # استثناءات 87 ومن حقوق 81، وقاعدة 87 تُعرَّف صراحةً كاستثناء من 85 —
+        # فلا تُدمج نِسَب الاستقالة بالنِسَب الاستثنائية ولا تُعمَّم على المادة 81.
+        _seg85_ar = _p_res_ar[_p_res_ar.index("الاستحقاق عند الاستقالة (المادة 85)"):
+                              _p_res_ar.index("استثناءات الاستحقاق الكامل (المادة 87)")]
+        _seg85_en = _p_res_en[_p_res_en.index("Entitlement on resignation (Article 85)"):
+                              _p_res_en.index("Full-entitlement exceptions (Article 87)")]
+        check("EOSB: المادة 87 استثناء صريح من 85 وبند الاستقالة منفصل عن الاستثناءات",
+              "87" not in _seg85_ar and "81" not in _seg85_ar
+              and "استثناءً صريحًا من أحكام المادة 85" in _p_res_ar
+              and "87" not in _seg85_en
+              and "as an express exception to Article 85" in _p_res_en)
+
+        # جزء السنة: النصّ المُرسل يوجب النسبة ويمنع قاعدتَي 21 يوماً ونصف اليوم.
+        check("EOSB: قاعدة أجزاء السنة تناسبياً ومنع 21 يوماً ونصف اليوم (كلا اللغتين)",
+              "بنسبة ماقضى العامل منها فعلاً" in _p_res_ar
+              and "لا بقاعدة «21 يوماً عن كل سنة»" in _p_res_ar
+              and "ولا بنصف يوم عن كل شهر غير مكتمل" in _p_res_ar
+              and "in proportion to the time actually served" in _p_res_en
+              and 'not by a flat "21 days per year" rule' in _p_res_en
+              and "not by half a day per incomplete month" in _p_res_en)
+
+        # سلوكي: القواعد تصل فعلاً إلى جسم طلب المزوّد (دورة حقيقية بطلبات وهمية)،
+        # لا إلى build_prompt فقط — واللغة تُميَّز كما في بقية الفحوص.
+        _sandbox()
+        _schema_reqs.clear()
+        globals()["http_request_full"] = _fake_schema_run()
+        run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                 skip_source_check=True)
+        _live_prompts = [r["messages"][-1]["content"] for r in _schema_reqs]
+        check("EOSB: القواعد القانونية تصل جسم طلب المزوّد في النسختين فعلاً",
+              len(_live_prompts) == 2
+              and any("المادة 84" in p and "المادة 85" in p for p in _live_prompts)
+              and any("Article 84" in p and "Article 85" in p for p in _live_prompts))
+
+        # سلوكي مضبوط على موضوعَي الاستحقاق الكامل والمادة 81: كل موضوع بطلبيه
+        # (ar/en)، والعلامات المستخدمة من نصّ القاعدة نفسه لا من عنوان الموضوع
+        # (عنوان labor-art81 يحوي «المادة 81» أصلاً، فالعنوان لا يصلح دليلاً).
+        _focus_prompts = []
+        for _focus_tid in ("eosb-full-entitlement", "labor-art81"):
+            _sandbox()
+            _schema_reqs.clear()
+            globals()["http_request_full"] = _fake_schema_run()
+            run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                     skip_source_check=True, topic_id=_focus_tid)
+            _focus_prompts.extend(r["messages"][-1]["content"]
+                                  for r in _schema_reqs)
+        check("EOSB: قاعدتا 87 و81 في جسم الطلب لموضوعَي eosb-full-entitlement وlabor-art81",
+              len(_focus_prompts) == 4
+              and sum("قوة قاهرة خارجة عن إرادته" in p
+                      and "بحقوقه النظامية كلها" in p
+                      and "تستحق فيه المكافأة كاملة وفق المادة 84" in p
+                      for p in _focus_prompts) == 2
+              and sum("force majeure beyond his control" in p
+                      and "retaining all of his statutory rights" in p
+                      and "payable in full under Article 84" in p
+                      for p in _focus_prompts) == 2)
+
+        # المادة 81: استحقاق كامل وفق 84 (لا استقالة ولا عتبة سنتين)، مع فصل صريح
+        # عن تعويض المادة 77 كي لا يُقدَّم استحقاقه كحقيقة مؤكدة في الحالات كلها.
+        _seg81_ar = EOSB_LEGAL_RULES["ar"][
+            EOSB_LEGAL_RULES["ar"].index("8) ترك العمل بحالات المادة 81"):
+            EOSB_LEGAL_RULES["ar"].index("9) تعويض المادة 77 (منفصل عن المكافأة)")]
+        _seg81_en = EOSB_LEGAL_RULES["en"][
+            EOSB_LEGAL_RULES["en"].index("8) Leaving work under Article 81"):
+            EOSB_LEGAL_RULES["en"].index(
+                "9) Article 77 compensation (separate from the benefit)")]
+        check("EOSB: المادة 81 استحقاق كامل وفق 84 وفصل عن تعويض المادة 77 (كلا اللغتين)",
+              "المكافأة كاملة وفق المادة 84" in _seg81_ar
+              and "تعويض المادة 77" in _seg81_ar
+              and "لا تفترض استحقاقه في جميع حالات المادة 81" in _seg81_ar
+              and "is not a resignation within the meaning of Article 85" in _seg81_en
+              and "payable in full under Article 84" in _seg81_en
+              and "Article 77 compensation" in _seg81_en
+              and "do not assume it is due in all Article 81 cases" in _seg81_en)
+        check("EOSB: تعويض المادة 77 مذكور كحماية لا كاستحقاق مؤكد (كلا اللغتين)",
+              "فلا تُضِف تعويضًا آخر كتعويض المادة 77" in _seg81_ar
+              and "ولا تقدّمه كحقيقة مؤكدة دون سند نظامي أو قضائي موثّق" in _seg81_ar
+              and "do not add any other compensation such as Article 77 compensation"
+                  in _seg81_en
+              and "never state it as settled without a documented statutory or "
+                  "judicial basis" in _seg81_en)
+
+        # المادة 77: قاعدة مستقلة (9) توثّق الفصل، المدخل المستقل الافتراضي False،
+        # ومنع التخمين — وتُغطّى بالعلامات نفسها في اللغتين.
+        _seg77_ar = EOSB_LEGAL_RULES["ar"][
+            EOSB_LEGAL_RULES["ar"].index("9) تعويض المادة 77 (منفصل عن المكافأة)"):]
+        _seg77_en = EOSB_LEGAL_RULES["en"][
+            EOSB_LEGAL_RULES["en"].index(
+                "9) Article 77 compensation (separate from the benefit)"):]
+        check("EOSB: تعويض المادة 77 — فصل صريح وسياسة كاملة (كلا اللغتين)",
+              "منفصل تمامًا عن مكافأة نهاية الخدمة" in _seg77_ar
+              and "ولا يدخل تلقائيًا في ناتج المكافأة عند اختيار أي سبب" in _seg77_ar
+              and "ولا في أي من حالات المادة 81 السبع" in _seg77_ar
+              and "الاحتساب التلقائي هو سياسة للبرنامج" in _seg77_ar
+              and "شرط نظامي مطلق" in _seg77_ar
+              and "لا يُحتسب إلا بمدخل مستقل" not in _seg77_ar
+              and "Has_Judicial_Ruling_Or_Settlement" in _seg77_ar
+              and "ليست نصًّا حرفيًا من المادة 77" in _seg77_ar
+              and "entirely separate from the end-of-service benefit" in _seg77_en
+              and "is never added automatically to the benefit result for any reason"
+                  in _seg77_en
+              and "seven Article 81 cases" in _seg77_en
+              and "Not computing it automatically is a program policy" in _seg77_en
+              and "an absolute statutory condition" in _seg77_en
+              and "is computed only from an independent" not in _seg77_en
+              and "Has_Judicial_Ruling_Or_Settlement" in _seg77_en
+              and "is not a literal quotation of Article 77" in _seg77_en)
+
+        # المادة 77 ليست نصًّا منسوخًا ولا تنفي المطالبة القضائية، والقاعدة 9 مستقلة
+        # عن قاعدة 8 (لا تختلط نصوصها)، واسم المدخل ثابت افتراضيًا False.
+        check("EOSB: سياسة المادة 77 — مدخل مستقل افتراضيًا False ولا مبلغ مخمّن",
+              ARTICLE_77_FLAG_NAME == "Has_Judicial_Ruling_Or_Settlement"
+              and ARTICLE_77_FLAG_DEFAULT is False
+              and article_77_missing_inputs()
+                  == list(ARTICLE_77_REQUIRED_INPUTS)
+              and article_77_compensation() is None
+              and article_77_compensation(
+                  has_judicial_ruling_or_settlement=True,
+                  contract_type="unlimited",
+                  contract_compensation_amount=5000) is None
+              and "منفصل تمامًا عن مكافأة نهاية الخدمة" not in _seg81_ar
+              and "9) تعويض المادة 77" not in _seg81_ar
+              and "ترك العمل بحالات المادة 81" not in _seg77_ar
+              and "entirely separate from the end-of-service benefit" not in _seg81_en
+              and "9) Article 77 compensation" not in _seg81_en
+              and "8) Leaving work under Article 81" not in _seg77_en)
+
+        # لا اختلاط: مرجع المكافأة (84/85) لا يتغيّر بتفعيل مدخل المادة 77؛ فالتعويض
+        # لا يُمزج بناتج المكافأة ولا بنسبة art81 (الحالات السبعة تبقى بلا تعويض).
+        check("EOSB: تعويض المادة 77 لا يُخلط بمكافأة نهاية الخدمة ولا بنسبة art81",
+              eosb_reference_amount(3, 10000, resigned=False) == 15000.0
+              and eosb_reference_amount(1.9, 10000, resigned=True) == 0.0
+              and article_77_compensation(
+                  has_judicial_ruling_or_settlement=True,
+                  contract_type="unlimited",
+                  contract_compensation_amount=15000) is None)
+
+        # حواجز الموضوع: غير المكافأة لا تحمل هذه القواعد إطلاقاً (بلا تعميم ضار)،
+        # بما فيها تعويض المادة 77 كي لا يتسرّب إلى موضوعات لا تخصّ المكافأة.
+        check("EOSB: الموضوعات غير المرتبطة بالمكافأة بلا هذه القواعد",
+              all("المادة 84" not in build_prompt(t, "ar")
+                  and "المادة 87" not in build_prompt(t, "ar")
+                  and "المادة 81" not in build_prompt(t, "ar")
+                  and "المادة 77" not in build_prompt(t, "ar")
+                  and "Article 84" not in build_prompt(t, "en")
+                  and "Article 87" not in build_prompt(t, "en")
+                  and "Article 81" not in build_prompt(t, "en")
+                  and "Article 77" not in build_prompt(t, "en")
+                  for t in TOPICS if t["id"] not in EOSB_TOPIC_IDS))
+
+        # القرارات النهائية: وثيقة النظام بلا وسوم المراجعة القديمة الخاصة بالمادة 81/77،
+        # وتوثّق القاعدة الحسابية المعتمدة وإخلاء المسؤولية، ويبقى تنبيه المستخدم قائماً.
+        try:
+            _domain_md = (BASE_DIR / "docs" / "DOMAIN_RULES.md").read_text(
+                encoding="utf-8")
+        except OSError:
+            _domain_md = ""
+        check("DOCS: أُزيلت وسوم المراجعة القديمة بشأن المادة 81/77 من DOMAIN_RULES",
+              bool(_domain_md)
+              and "⚠️ يحتاج اعتمادًا واضحًا لتفسير المادة 81" not in _domain_md
+              and "[مراجعة بشرية: نموذج الإدخال غير مُعرَّف]" not in _domain_md
+              and "**[مراجعة بشرية]** المعالجة الحسابية أعلاه" not in _domain_md)
+        check("DOCS: DOMAIN_RULES يوثّق قاعدة المادة 81 الحسابية المعتمدة وإخلاء المسؤولية",
+              "قاعدة حسابية معتمدة في المنتج" in _domain_md
+              and "افتراض حسابي لتقدير الحقوق" in _domain_md
+              and "ليس إثباتًا قانونيًا لوقوع المخالفة" in _domain_md
+              and "إقرارًا بمسؤولية صاحب العمل" in _domain_md
+              and "بلا حدّ أدنى للخدمة" in _domain_md)
+        check("DOCS: DOMAIN_RULES يوضّح أن عدم احتساب المادة 77 سياسة برنامج لا شرط نظامي",
+              "عدم الاحتساب التلقائي سياسة للبرنامج" in _domain_md
+              and "شرط نظامي مطلق" in _domain_md
+              and "استحقاق التعويض وتقديره مسألة منفصلة" in _domain_md)
+        check("DOCS: إخلاء المسؤولية العام للمستخدم باقٍ (نصّ عربي وإنجليزي)",
+              bool(DISCLAIMER_AR) and bool(DISCLAIMER_EN)
+              and "استشارة قانونية" in DISCLAIMER_AR
+              and "not legal advice" in DISCLAIMER_EN)
+
+        # التحقق الحسابي بمرجع حتمي يطابق معادلة calculateEOS() في index.html —
+        # لا بحساب يقدّمه النموذج. الحدود محسوبة من النصّ: (84) نصف شهر ×5 ثم
+        # شهر كامل، و(85) صفر/ثلث/ثلثان/كاملة، والخمس بالضمن تبقى ثلثاً.
+        check("EOSB: مرجع المادة 84 — نصف شهر عن السنوات الخمس ثم شهر كامل بعدها",
+              eosb_reference_amount(4, 10000, resigned=False) == 20000.0
+              and eosb_reference_amount(5, 10000, resigned=False) == 25000.0
+              and eosb_reference_amount(7, 10000, resigned=False) == 45000.0
+              and eosb_reference_amount(2.5, 10000, resigned=False) == 12500.0
+              and eosb_reference_amount(0.5, 10000, resigned=False) == 2500.0)
+        check("EOSB: مرجع المادة 85 — نِسَب الاستقالة بحدودها الأربعة",
+              eosb_reference_amount(1.9, 10000, resigned=True) == 0.0
+              and abs(eosb_reference_amount(2, 9000, resigned=True) - 3000.0) < 1e-9
+              and abs(eosb_reference_amount(5, 9000, resigned=True) - 7500.0) < 1e-9
+              and abs(eosb_reference_amount(7.5, 12000, resigned=True) - 40000.0) < 1e-9
+              and eosb_reference_amount(10, 10000, resigned=True) == 75000.0
+              and eosb_reference_amount(12, 10000, resigned=True) == 95000.0)
+
+        # المرجع الحسابي لا يُستدعى في مسار الإنتاج: legal_rules_for تُعيد نصّ
+        # المواد 84-88 للمكافأة فقط، وفارغاً لكل ما عداها، ولغة غير معروفة ⇒ الإنجليزية.
+        check("EOSB: legal_rules_for مقيّدة بموضوعات المكافأة وبالمادتين (ar|en)",
+              set(EOSB_LEGAL_RULES) == {"ar", "en"}
+              and legal_rules_for(topic_by_id("eosb-resignation"), "ar")
+                  == EOSB_LEGAL_RULES["ar"]
+              and legal_rules_for(topic_by_id("labor-art85"), "en")
+                  == EOSB_LEGAL_RULES["en"]
+              and legal_rules_for(topic_by_id("cv-ats-optimization"), "ar") == ""
+              and legal_rules_for(topic_by_id("daily-monthly-wage"), "en") == ""
+              and legal_rules_for(topic_by_id("eosb-basics"), "fr")
+                  == EOSB_LEGAL_RULES["en"])
+
+        # البوابات لم تُضعّف: قيمها المرجعية كما هي (فحص حارس لا يعتمد على النصوص).
+        check("EOSB: بوابات الجودة ومصادر الرسمية لم تُضعّف (قيم مرجعية)",
+              MIN_WORDS == {"ar": 250, "en": 250} and MIN_SECTIONS == 3
+              and MIN_TOTAL_CHARS == 1200 and SOURCE_MIN_BYTES == 200
+              and ALLOWED_SOURCE_SUFFIXES == (".gov.sa",)
+              and BLOCKED_SOURCE_HOSTS == {"mol.gov.sa", "www.mol.gov.sa"})
+
+        # (ظ) لغة المقال: article_lang / --article-lang — عزل اللغة غير المختارة عن
+        #     التوليد والكتابة وتحديث الحالة، وحماية المسودة العربية المعتمدة.
+        #     كلها بمحاكاة كاملة بلا شبكة وبلا API وبمجلد مؤقّت معزول.
+        def _fake_groq_record():
+            """يسجّل عدد طلبات التوليد لكل لغة ويعيد ظرف Groq صالحاً للغة المطلوبة."""
+            _rec = {"ar": 0, "en": 0}
+
+            def _fn(url, **kwargs):
+                prompt = _request_prompt(kwargs)
+                _lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+                _rec[_lang] += 1
+                return _groq_envelope(lang=_lang) + (url,)
+
+            return _fn, _rec
+
+        def _capture(fn):
+            """يشغّل fn() مع التقاط stdout ويرجع (rc, out). لا يبتلع SystemExit."""
+            _saved = sys.stdout
+            _cap = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+            try:
+                sys.stdout = _cap
+                _rc = fn()
+                sys.stdout = _saved
+                _cap.seek(0)
+                return _rc, _cap.read()
+            finally:
+                sys.stdout = _saved
+                _cap.close()
+
+        check("article_lang: اختياري وافتراضيه both (توافق الاستدعاءات والاختبارات السابقة)",
+              run_once.__kwdefaults__.get("article_lang") == "both"
+              and run_once.__kwdefaults__.get("social_lang") == "both")
+
+        # (ظ-1) حماية المسودة العربية المعتمدة: الحالة ar=draft/en=error، وملف عربي
+        #       بعلامة مميزة؛ ثم دورة en فقط ⇒ لا يُمَس الملف العربي ولا تتغيّر حالته.
+        _sandbox()
+        _AR_MARK = b"<!-- APPROVED_AR_DRAFT_DO_NOT_OVERWRITE -->"
+        _seed = default_state()
+        _seed["topics"]["labor-art81"] = {"ar": "draft", "en": "error",
+                                          "published_at": None, "attempts": 1}
+        atomic_write_json(STATE_JSON, _seed)
+        _ar_path = DRAFTS_DIR / "ar" / "labor-art81-ar.html"
+        atomic_write_text(_ar_path, _AR_MARK.decode("ascii"))
+        _ar_before = _ar_path.read_bytes()
+        fake, _rec = _fake_groq_record()
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                      skip_source_check=True, topic_id="labor-art81",
+                      article_lang="en", social_lang="ar")
+        _st = load_state()["topics"]["labor-art81"]
+        _en_path = DRAFTS_DIR / "en" / "labor-art81-en.html"
+        check("article_lang=en: توليد إنجليزي واحد فقط (لا طلب عربي)",
+              rc == 0 and _rec == {"ar": 0, "en": 1})
+        check("article_lang=en: ملف المسودة العربية لم يتغيّر بايتاً واحداً",
+              _ar_path.read_bytes() == _ar_before)
+        check("article_lang=en: العربية بقيت draft والإنجليزية صارت draft",
+              _st["ar"] == "draft" and _st["en"] == "draft")
+        check("article_lang=en: المسودة الإنجليزية كُتبت في المسار المعزول فقط",
+              _en_path.exists() and _en_path.parent == DRAFTS_DIR / "en")
+
+        # (ظ-2) article_lang=ar: العربية فقط، بلا ملف إنجليزي وبلا تغيير لحالة en؛
+        #       ومع social_lang=en لإثبات الاستقلال بين الخيارين.
+        _sandbox()
+        fake, _rec = _fake_groq_record()
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                      skip_source_check=True, topic_id="labor-art81",
+                      article_lang="ar", social_lang="en")
+        _st = load_state()["topics"]["labor-art81"]
+        check("article_lang=ar: العربية فقط ولا ملف إنجليزي ولا تغيير لحالة en",
+              rc == 0 and _rec == {"ar": 1, "en": 0}
+              and (DRAFTS_DIR / "ar" / "labor-art81-ar.html").exists()
+              and not (DRAFTS_DIR / "en" / "labor-art81-en.html").exists()
+              and _st["ar"] == "draft" and _st["en"] == "pending")
+
+        # (ظ-3) الافتراضي both (بلا تمرير article_lang): اللغتان ومسودتان — سلوك محفوظ.
+        _sandbox()
+        fake, _rec = _fake_groq_record()
+        globals()["http_request_full"] = fake
+        rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                      skip_source_check=True, topic_id="labor-art81")
+        _st = load_state()["topics"]["labor-art81"]
+        check("بلا article_lang (افتراضي both): اللغتان ومسودتان — السلوك السابق محفوظ",
+              rc == 0 and _rec == {"ar": 1, "en": 1}
+              and (DRAFTS_DIR / "ar" / "labor-art81-ar.html").exists()
+              and (DRAFTS_DIR / "en" / "labor-art81-en.html").exists()
+              and _st["ar"] == "draft" and _st["en"] == "draft")
+
+        # (ظ-4) main() يمرّر --article-lang إلى run_once فعلاً (بمفتاح وهمي واستجابة محاكاة).
+        _sandbox()
+        fake, _rec = _fake_groq_record()
+        globals()["http_request_full"] = fake
+        _saved_gsk = os.environ.get("GROQ_API_KEY")
+        os.environ["GROQ_API_KEY"] = _FAKE_GROQ_KEY
+        try:
+            rc_main, _out_main = _capture(lambda: main([
+                "--topic", "labor-art81", "--mode", "draft", "--provider", "groq",
+                "--article-lang", "en", "--skip-source-check"]))
+        finally:
+            if _saved_gsk is None:
+                os.environ.pop("GROQ_API_KEY", None)
+            else:
+                os.environ["GROQ_API_KEY"] = _saved_gsk
+        check("main(): --article-lang en يصل إلى run_once (إنجليزي فقط بلا طلب عربي)",
+              rc_main == 0 and _rec == {"ar": 0, "en": 1}
+              and (DRAFTS_DIR / "en" / "labor-art81-en.html").exists()
+              and not (DRAFTS_DIR / "ar" / "labor-art81-ar.html").exists())
+
+        # (ظ-5) --help يعرض الخيار، وargparse يرفض قيمة غير مسموحة (بلا أي توليد).
+        _help_rc, _help_out = None, ""
+        _saved_hout = sys.stdout
+        _hcap = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        try:
+            sys.stdout = _hcap
+            try:
+                main(["--help"])
+            except SystemExit as _se:
+                _help_rc = _se.code
+            sys.stdout = _saved_hout
+            _hcap.seek(0)
+            _help_out = _hcap.read()
+        finally:
+            sys.stdout = _saved_hout
+            _hcap.close()
+        check("--help: يعرض --article-lang بخياراته {ar,en,both}",
+              _help_rc == 0 and "--article-lang" in _help_out
+              and "{ar,en,both}" in _help_out)
+
+        try:
+            main(["--article-lang", "fr"])
+            _bad_rejected = False
+        except SystemExit:
+            _bad_rejected = True
+        check("argparse: يرفض قيمة --article-lang غير مسموحة", _bad_rejected)
     finally:
         globals()["http_request_full"] = _real_http_full
         globals()["SLEEP"] = _real_sleep
@@ -3077,6 +3811,8 @@ def main(argv=None) -> int:
     parser.add_argument("--provider", choices=list(AI_PROVIDERS), default=None,
                         help="مزوّد المحتوى (الافتراضي من AI_PROVIDER أو groq؛ لا انتقال تلقائي)")
     parser.add_argument("--social-lang", choices=["ar", "en", "both"], default=None, help="لغة المنشور التسويقي")
+    parser.add_argument("--article-lang", choices=["ar", "en", "both"], default=None,
+                        help="لغة المقال المولَّد (ar|en|both، الافتراضي both؛ مستقلة عن --social-lang)")
     parser.add_argument("--skip-source-check", action="store_true",
                         help="تخطّي التحقّق الشبكي من المصادر الرسمية (استخدام يدوي فقط)")
     args = parser.parse_args(argv)
@@ -3100,9 +3836,13 @@ def main(argv=None) -> int:
     social_lang = args.social_lang or os.environ.get("SOCIAL_LANGUAGE") or "both"
     if social_lang not in ("ar", "en", "both"):
         social_lang = "both"
+    article_lang = args.article_lang or "both"
+    if article_lang not in ("ar", "en", "both"):
+        article_lang = "both"
 
     try:
         return run_once(mode=mode, topic_id=args.topic, social_lang=social_lang,
+                        article_lang=article_lang,
                         dry_run=args.dry_run, skip_source_check=args.skip_source_check,
                         provider=args.provider)
     except Exception as exc:  # noqa: BLE001
