@@ -70,4 +70,24 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/end-of-service-benefit-ar.html" />
   </url>
 
+
+  <url>
+    <loc>https://ksatools.github.io/articles/ar/salary-net-gosi-2026-ar.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/salary-net-gosi-2026-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/salary-net-gosi-2026-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/salary-net-gosi-2026-ar.html" />
+  </url>
+  <url>
+    <loc>https://ksatools.github.io/articles/en/salary-net-gosi-2026-en.html</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/salary-net-gosi-2026-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/salary-net-gosi-2026-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/salary-net-gosi-2026-ar.html" />
+  </url>
+
 </urlset>
