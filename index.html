@@ -3410,6 +3410,17 @@ function cvSharePayload() {
 
   function initTabs() {
     const tabs = Array.from(document.querySelectorAll('.tab-btn'));
+
+    // Activate the requested tool when arriving through an article's direct link.
+    const activateHashTool = () => {
+      const requestedTool = location.hash.slice(1);
+      if (!TOOL_IDS.includes(requestedTool)) return;
+      switchTool(requestedTool, false);
+      window.requestAnimationFrame(() => $('main-tabs').scrollIntoView({ block: 'start' }));
+    };
+    activateHashTool();
+    window.addEventListener('hashchange', activateHashTool);
+
     tabs.forEach(btn => btn.addEventListener('click', () => { switchTool(btn.dataset.tool); btn.focus(); }));
        $('main-tabs').addEventListener('keydown', (e) => {
       if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
