@@ -1,5 +1,29 @@
 [
   {
+    "translation_id": "probation-period",
+    "lang": "ar",
+    "title": "فترة التجربة في نظام العمل السعودي: المدة والإنهاء وحقوق الطرفين",
+    "excerpt": "دليل عملي لفترة التجربة في نظام العمل السعودي: الحد الأقصى 180 يومًا، الإجازات المستثناة، شروط تكرار التجربة، وآثار إنهاء العقد خلالها.",
+    "category": "labor-law",
+    "url": "/articles/ar/probation-period-ar.html",
+    "alternate_url": "/articles/en/probation-period-en.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
+    "translation_id": "probation-period",
+    "lang": "en",
+    "title": "Probation Period in Saudi Labour Law: Duration, Termination and Rights",
+    "excerpt": "A practical guide to probation under Saudi Labour Law: the 180-day maximum, excluded leave days, repeat-probation exceptions and termination effects.",
+    "category": "labor-law",
+    "url": "/articles/en/probation-period-en.html",
+    "alternate_url": "/articles/ar/probation-period-ar.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
     "translation_id": "annual-leave",
     "lang": "ar",
     "title": "الإجازة السنوية في السعودية 2026: عدد الأيام والتأجيل والتعويض",
