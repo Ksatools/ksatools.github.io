@@ -2002,6 +2002,9 @@
       text-decoration: none;
     }
     .guide-alt:hover { text-decoration: underline; }
+    .guides-library-cta { margin: -4px 0 16px; }
+    .guides-library-link { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:1px solid var(--border); border-radius:10px; color:var(--primary); font-weight:700; text-decoration:none; background:var(--card); }
+    .guides-library-link:hover { text-decoration:underline; }
     .guides-status {
       margin: 6px 0 18px;
       color: var(--muted);
@@ -2496,6 +2499,7 @@
 <section class="guides-section" id="guides" aria-labelledby="guides-heading">
     <h2 class="guides-heading" id="guides-heading" data-i18n="guidesHeading">أحدث الأدلة العمالية في السعودية</h2>
     <p class="guides-intro" data-i18n="guidesIntro">أدلة ثنائية اللغة عن نظام العمل السعودي والتأمينات والسيرة الذاتية، تُحدَّث دورياً.</p>
+    <p class="guides-library-cta"><a class="guides-library-link" href="/articles/" data-i18n="guidesAllLink">عرض جميع المقالات والأدلة</a></p>
     <div id="guides-list" aria-live="polite"></div>
   </section>
 
@@ -2831,6 +2835,7 @@
       guidesError: 'تعذّر تحميل قائمة الأدلة حالياً. يمكنك استخدام الأدوات أعلاه كما هي.',
       guidesUpdated: 'آخر تحديث',
       guidesOther: 'اقرأ النسخة الإنجليزية',
+      guidesAllLink: 'عرض جميع المقالات والأدلة',
       atsNeeds: 'يحتاج عملاً — راجع العناصر الناقصة أدناه قبل التقديم.'
     },
     en: {
@@ -3053,6 +3058,7 @@
       guidesError: 'The guides list could not be loaded right now. The tools above still work normally.',
       guidesUpdated: 'Last updated',
       guidesOther: 'Read the Arabic version',
+      guidesAllLink: 'Browse all guides and articles',
       atsNeeds: 'Needs work — review the missing items below before applying.'
     }
   };

@@ -22,6 +22,16 @@
   </url>
 
   <url>
+    <loc>https://ksatools.github.io/articles/</loc>
+    <lastmod>2026-10-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/?lang=ar" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/?lang=en" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/" />
+  </url>
+
+  <url>
     <loc>https://ksatools.github.io/articles/ar/labor-art81-ar.html</loc>
     <lastmod>2026-10-17</lastmod>
     <changefreq>monthly</changefreq>
