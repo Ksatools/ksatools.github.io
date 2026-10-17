@@ -1,5 +1,29 @@
 [
   {
+    "translation_id": "annual-leave",
+    "lang": "ar",
+    "title": "الإجازة السنوية في السعودية 2026: عدد الأيام والتأجيل والتعويض",
+    "excerpt": "دليل عملي لحق الإجازة السنوية في نظام العمل السعودي: الحد الأدنى للأيام، إشعار موعد الإجازة، التأجيل، وتسوية الرصيد المستحق عند انتهاء العمل.",
+    "category": "labor-law",
+    "url": "/articles/ar/annual-leave-ar.html",
+    "alternate_url": "/articles/en/annual-leave-en.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
+    "translation_id": "annual-leave",
+    "lang": "en",
+    "title": "Annual Leave in Saudi Arabia (2026): Entitlement, Postponement and Pay",
+    "excerpt": "A practical guide to Saudi Labour Law annual leave: minimum days, scheduling notice, postponement rules and payment for accrued unused leave when employment ends.",
+    "category": "labor-law",
+    "url": "/articles/en/annual-leave-en.html",
+    "alternate_url": "/articles/ar/annual-leave-ar.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
     "translation_id": "labor-art81",
     "lang": "en",
     "title": "Leaving Work Under Article 81 of the Saudi Labour Law",
