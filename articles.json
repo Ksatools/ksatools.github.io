@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "translation_id": "labor-art81",
+    "lang": "en",
+    "title": "Leaving Work Under Article 81 of the Saudi Labour Law",
+    "excerpt": "Guide on rights and benefits for employees leaving work under Article 81 of the Saudi Labour Law, covering full end-of-service benefits and steps.",
+    "url": "/articles/en/labor-art81-en.html",
+    "alternate_url": "/articles/ar/labor-art81-ar.html",
+    "published_at": "2026-10-17",
+    "updated_at": "2026-10-17",
+    "status": "published"
+  },
+  {
+    "translation_id": "labor-art81",
+    "lang": "ar",
+    "title": "ترك العمل وفق المادة 81: دليل عملي للعاملين في السعودية",
+    "excerpt": "دليل عملي لترك العمل وفق المادة 81 في نظام العمل السعودي، مع خطوات واضحة ومثال حسابي لتقدير مكافأة نهاية الخدمة.",
+    "url": "/articles/ar/labor-art81-ar.html",
+    "alternate_url": "/articles/en/labor-art81-en.html",
+    "published_at": "2026-10-17",
+    "updated_at": "2026-10-17",
+    "status": "published"
+  }
+]
