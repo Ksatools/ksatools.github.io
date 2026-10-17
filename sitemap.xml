@@ -23,7 +23,7 @@
 
   <url>
     <loc>https://ksatools.github.io/articles/</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/?lang=ar" />
@@ -126,6 +126,27 @@
     <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/probation-period-ar.html" />
     <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/probation-period-en.html" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/probation-period-ar.html" />
+  </url>
+
+
+
+  <url>
+    <loc>https://ksatools.github.io/articles/ar/overtime-pay-ar.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/overtime-pay-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/overtime-pay-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/overtime-pay-ar.html" />
+  </url>
+  <url>
+    <loc>https://ksatools.github.io/articles/en/overtime-pay-en.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ksatools.github.io/articles/ar/overtime-pay-ar.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://ksatools.github.io/articles/en/overtime-pay-en.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/articles/ar/overtime-pay-ar.html" />
   </url>
 
 </urlset>
