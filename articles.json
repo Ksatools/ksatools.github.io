@@ -1,5 +1,29 @@
 [
   {
+    "translation_id": "overtime-pay",
+    "lang": "ar",
+    "title": "حساب ساعات العمل الإضافية في السعودية 2026: الطريقة والحقوق",
+    "excerpt": "دليل حساب أجر ساعات العمل الإضافية في السعودية، مع مثال بالأرقام وشروط الإجازة التعويضية والمصادر الرسمية.",
+    "category": "labor-law",
+    "url": "/articles/ar/overtime-pay-ar.html",
+    "alternate_url": "/articles/en/overtime-pay-en.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
+    "translation_id": "overtime-pay",
+    "lang": "en",
+    "title": "Overtime Pay in Saudi Arabia (2026): Calculation, Rules and Compensatory Leave",
+    "excerpt": "A practical guide to Saudi overtime pay, with a worked calculation example, compensatory-leave rules and official sources.",
+    "category": "labor-law",
+    "url": "/articles/en/overtime-pay-en.html",
+    "alternate_url": "/articles/ar/overtime-pay-ar.html",
+    "published_at": "2026-10-18",
+    "updated_at": "2026-10-18",
+    "status": "published"
+  },
+  {
     "translation_id": "probation-period",
     "lang": "ar",
     "title": "فترة التجربة في نظام العمل السعودي: المدة والإنهاء وحقوق الطرفين",
