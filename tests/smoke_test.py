@@ -98,7 +98,7 @@ def static_checks():
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
-    sar_formatters = re.search(r"const SAR_FORMATTERS = \\{.*?^\\s*\\};", text, re.S | re.M)
+    sar_formatters = re.search(r"const SAR_FORMATTERS = \{.*?^\s*\};", text, re.S | re.M)
     check("مهيئات تنسيق SAR محفوظة مرة لكل لغة",
           bool(sar_formatters)
           and sar_formatters.group(0).count("new Intl.NumberFormat(") == 2
