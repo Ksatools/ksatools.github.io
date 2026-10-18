@@ -98,12 +98,12 @@ def static_checks():
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
-    store_match = re.search(r"const store = \\{.*?^\\s*\\};", text, re.S | re.M)
+    store_match = re.search(r"const store = \{.*?^\s*\};", text, re.S | re.M)
     store_body = store_match.group(0) if store_match else ""
-    storage_outside_store = re.sub(r"const store = \\{.*?^\\s*\\};", "", text,
+    storage_outside_store = re.sub(r"const store = \{.*?^\s*\};", "", text,
                                    count=1, flags=re.S | re.M)
     direct_storage_calls = re.findall(
-        r"\\blocalStorage\\.(?:getItem|setItem|removeItem|clear)\\s*\\(",
+        r"\blocalStorage\.(?:getItem|setItem|removeItem|clear)\s*\(",
         storage_outside_store)
     check("عمليات localStorage محصورة في الغلاف store",
           bool(store_match)
