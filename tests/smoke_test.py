@@ -675,6 +675,7 @@ def browser_checks(headless):
             'eos-salary': '4321',
             'cv-data': 'STORE-REMOVE-BLOCKED'
           }));
+          window.__clearFailurePageToken = 'no-reload';
           window.__nativeStorageRemoveItem = Storage.prototype.removeItem;
           Storage.prototype.removeItem = function (key) {
             if (key === 'seh_inputs_v2') throw new Error('simulated storage denial');
@@ -687,12 +688,12 @@ def browser_checks(headless):
         failed_clear = pg.evaluate("""() => ({
           saved: localStorage.getItem('seh_inputs_v2') || '',
           toast: document.getElementById('toast')?.textContent || '',
-          navigationType: performance.getEntriesByType('navigation')[0]?.type || ''
+          navigationToken: window.__clearFailurePageToken || ''
         })""")
         check("clear-data storage failure shows fallback without deleting values",
               "STORE-REMOVE-BLOCKED" in failed_clear["saved"]
               and bool(failed_clear["toast"].strip())
-              and failed_clear["navigationType"] != "reload",
+              and failed_clear["navigationToken"] == "no-reload",
               repr(failed_clear))
         pg.evaluate("""() => {
           if (window.__nativeStorageRemoveItem) {
