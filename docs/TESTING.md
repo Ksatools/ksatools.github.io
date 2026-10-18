@@ -88,6 +88,8 @@ python auto_marketing.py --verify
 
 ## 5) حالة آخر تشغيل (متحقّق)
 
+**تحقّق إضافي على فرع PR #24 (2026-10-18؛ قبل الدمج):** نجح CI على الالتزام `b6bc21a359ec8364fdbab6a404af777306c400cb` ([سجل CI](https://github.com/Ksatools/ksatools.github.io/actions/runs/39131034471)). أُزيل إعفاء `known=3` من اختبار رابط التذييل؛ بعد النقر على `#eos-tool` من تبويب السيرة، تحقّق الاختبار من القسم النشط وحالة `aria-selected`، وكانت النتيجة `active=eos-tool selected=eos-tool hash=#eos-tool`. ملخص الاختبار: `PASS=102 · FAIL=0 · FAIL(known)=0`. لا يتضمّن هذا الفرع تغييراً على `index.html`؛ مستمع `hashchange` كان موجوداً، والتصحيح كان في الاختبار وتوثيق الحالة.
+
 **آخر تحقق موثّق بعد PR #22 (2026-10-18):** رُفع الالتزام `340d3def77a9467dad59caef2db20e68932fb874` في [PR #22](https://github.com/Ksatools/ksatools.github.io/pull/22)، ونجح CI قبل دمج الطلب. دُمج الطلب في `main` بالالتزام `6f4a53c72c3c96f91f91621cdd21f9ef322e147a`.
 
 نتائج الاختبار المحلي قبل الدمج:
