@@ -315,8 +315,8 @@ def browser_checks(headless):
               repr(eos_restored))
         stored_eos = share_page.evaluate(
             "()=>JSON.parse(localStorage.getItem('seh_inputs_v2') || '{}')")
-        check("اختبار الحفظ يمنع مهلة 300ms فعلياً",
-              share_page.evaluate("()=>window.__blocked300Timers") >= 1)
+        check("استعادة الرابط لا تجدول مؤقت الحفظ 300ms",
+              share_page.evaluate("()=>window.__blocked300Timers") == 0)
         check("رابط EOS يحفظ القيم المستعادة فوراً قبل مهلة الحفظ",
               stored_eos.get("eos-salary") == "6500"
               and stored_eos.get("eos-reason") == "resignation",
