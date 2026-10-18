@@ -98,6 +98,12 @@ def static_checks():
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
+    sar_formatters = re.search(r"const SAR_FORMATTERS = \{.*?^\s*\};", text, re.S | re.M)
+    check("مهيئات تنسيق SAR محفوظة مرة لكل لغة",
+          bool(sar_formatters)
+          and sar_formatters.group(0).count("new Intl.NumberFormat(") == 2
+          and "currentLang === 'ar' ? SAR_FORMATTERS.ar : SAR_FORMATTERS.en" in text,
+          "متوقع مهيئان ثابتان واختيار وفق اللغة الحالية")
     store_match = re.search(r"const store = \{.*?^\s*\};", text, re.S | re.M)
     store_body = store_match.group(0) if store_match else ""
     storage_outside_store = re.sub(r"const store = \{.*?^\s*\};", "", text,
@@ -278,6 +284,32 @@ def browser_checks(headless):
         ctx = browser.new_context(viewport={"width": 1440, "height": 1000})
         ctx.route("**/*", stub_third_party)
         pg = setup_page(ctx, errors)
+
+        # --- تنسيق SAR: يجب أن يتبع لغة الواجهة عند التبديل، حتى مع تخزين المهيئات مؤقتاً.
+        fmt_ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        fmt_ctx.route("**/*", stub_third_party)
+        fmt_pg = fmt_ctx.new_page()
+        fmt_pg.goto(INDEX.as_uri(), wait_until="load")
+        setv(fmt_pg, "sal-basic", "5000")
+        setv(fmt_pg, "sal-housing", "1250")
+        setv(fmt_pg, "sal-transport", "0")
+        setv(fmt_pg, "sal-obligations", "0")
+        click(fmt_pg, "sal-calc-btn")
+        ar_gross = fmt_pg.text_content("#sal-gross-out")
+        ar_expected = fmt_pg.evaluate(
+            "n=>new Intl.NumberFormat('ar-SA-u-nu-latn',{style:'currency',currency:'SAR'}).format(n)",
+            6250)
+        check("تنسيق SAR يطابق العربية قبل تبديل اللغة",
+              ar_gross == ar_expected, repr({"actual": ar_gross, "expected": ar_expected}))
+        click(fmt_pg, "lang-btn")
+        en_gross = fmt_pg.text_content("#sal-gross-out")
+        en_expected = fmt_pg.evaluate(
+            "n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'SAR'}).format(n)",
+            6250)
+        check("تنسيق SAR يتبدل إلى الإنجليزية بعد تبديل اللغة",
+              en_gross == en_expected and en_gross != ar_gross,
+              repr({"actual": en_gross, "expected": en_expected, "before": ar_gross}))
+        fmt_ctx.close()
 
         # --- روابط المشاركة: استعادة القيم ثم إزالة معاملات الحساب الحساسة من العنوان.
         share_page = ctx.new_page()
