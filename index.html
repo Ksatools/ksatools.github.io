@@ -9,7 +9,7 @@
      GitHub Pages حتى لو كان الموقع منشوراً على مسار فرعي مثل username.github.io/repo/
   3) للحصول على أفضل فهرسة: انشر الملف على مسارين /ar/ و /en/ مع تعديل القيمة
      الافتراضية للغة في السطر الأخير من السكربت (initLang)
-  4) كل بيانات المستخدمين تُعالج داخل المتصفح فقط — لا يوجد أي إرسال لخادم
+  4) تُجرى الحسابات داخل المتصفح؛ وقد تعالج الخدمات الخارجية معلومات تقنية أو استخدامية عن الزيارة.
 ============================================================ -->
 <html lang="ar" dir="rtl" id="html-root" data-theme="light">
 <head>
@@ -979,6 +979,21 @@
     .footer-links span {
       color: var(--muted);
     }
+    .footer-clear-btn {
+      display: inline-flex;
+      align-items: center;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--primary-text);
+      font: inherit;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+    .footer-clear-btn:hover { color: var(--accent-deep); }
+
 
     /* ==================== تحسين الوضع الليلي (Dark Mode) ==================== */
     /* رفع البطاقات عن الخلفية بخط إضاءة علوي رقيق + ظل أعمق */
@@ -2023,7 +2038,7 @@
       </div>
     </div>
     <h1 data-i18n="siteTitle">منصة خدمات الموظف والمقيم في السعودية</h1>
-    <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — كل بياناتك تُعالج في متصفحك فقط</p>
+    <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، والراتب الصافي والتأمينات، وصِغ خطاباتك الرسمية ونسّق سيرتك الذاتية باللغتين. تُجرى الحسابات داخل متصفحك؛ وقد تعالج خدمات التحليلات والإعلانات معلومات تقنية أو استخدامية عن زيارتك.</p>
   </header>
 
   <nav class="nav-tabs" role="tablist" aria-label="أدوات المنصة" id="main-tabs">
@@ -2299,7 +2314,7 @@
         <h2 data-i18n="cvHeading">منسق السيرة الذاتية للسوق السعودي</h2>
         <span class="section-tag" data-i18n="cvTag">منسّق على خطوات + تقييم ATS فوري</span>
       </div>
-      <p class="tool-intro no-print" data-i18n="cvIntro">املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت — وكل بياناتك تبقى في متصفحك.</p>
+      <p class="tool-intro no-print" data-i18n="cvIntro">املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت. تُبنى السيرة داخل متصفحك، وقد تعالج الخدمات الخارجية معلومات تقنية عن الزيارة؛ راجع سياسة الخصوصية.</p>
 
       <div class="cv-quickbar no-print">
         <div class="cv-quick-actions">
@@ -2503,7 +2518,7 @@
 
   <div class="disclaimer-banner">
     <div class="inner" data-i18n-html="disclaimer">
-      ⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات في هذه المنصة تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة (وزارة الموارد البشرية، التأمينات الاجتماعية، البنك المركزي). لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.
+      ⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات في هذه المنصة تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة (وزارة الموارد البشرية، التأمينات الاجتماعية، البنك المركزي). تُعالَج القيم التي تدخلها الأدوات داخل متصفحك، ولا ترسل وظائف الحاسبات هذه القيم إلى خوادم KSA Tools. وقد تعالج خدمات خارجية للتحليلات والإعلانات معلومات تقنية أو استخدامية عن زيارتك؛ راجع سياسة الخصوصية.
     </div>
   </div>
 
@@ -2529,6 +2544,8 @@
       <a href="privacy.html#ads" data-i18n="footerAdDisclosure">الإعلانات وملفات تعريف الارتباط</a>
       <span aria-hidden="true">•</span>
       <a href="#eos-tool" data-i18n="footerTools">الأدوات</a>
+      <span aria-hidden="true">•</span>
+      <button type="button" class="footer-clear-btn" id="clear-local-data" data-i18n="clearLocalData">مسح بياناتي المحفوظة</button>
     </nav>
   </footer>
 
@@ -2569,7 +2586,7 @@
       </div>
 
       <pre class="share-preview" id="share-preview" dir="auto"></pre>
-      <p class="share-note" data-i18n="shareNote">لا تُرسل أي بيانات إلى أي خادم — المشاركة تتم من جهازك مباشرة.</p>
+      <p class="share-note" data-i18n="shareNote">تُجرى الحسابات داخل متصفحك. رابط المشاركة يتضمن القيم اللازمة لإعادة فتح الحساب؛ لذلك لا تشاركه إلا مع من تثق به. وقد تعالج خدمات الاستضافة أو المشاركة أو التحليلات والإعلانات معلومات مرتبطة بفتح الرابط؛ راجع سياسة الخصوصية.</p>
     </div>
   </div>
 
@@ -2614,7 +2631,7 @@
       badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
       siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
       printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
-      siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
+      siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، والراتب الصافي والتأمينات، وصِغ خطاباتك الرسمية ونسّق سيرتك الذاتية باللغتين. تُجرى الحسابات داخل متصفحك؛ وقد تعالج خدمات التحليلات والإعلانات معلومات تقنية أو استخدامية عن زيارتك.',
       adLabel: 'إعلان | Advertisement',
       t1Num: 'الأداة 1', t1Title: 'حاسبة نهاية الخدمة والإجازات',
       t2Num: 'الأداة 2', t2Title: 'حاسبة الراتب الصافي والتمويل',
@@ -2706,14 +2723,14 @@
       letReasonPh: 'مثال: ظروف عائلية / طلب موجه لمصرف الراجحي',
       cvHeading: 'منسق وفاحص السيرة الذاتية للسوق السعودي',
       cvTag: 'منسّق على خطوات + تقييم ATS فوري',
-      cvIntro: 'املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت — وكل بياناتك تبقى في متصفحك.',
+      cvIntro: 'املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت. تُبنى السيرة داخل متصفحك، وقد تعالج الخدمات الخارجية معلومات تقنية عن الزيارة؛ راجع سياسة الخصوصية.',
       cvSumLabel: 'الملخص المهني',
       cvSumPh: 'اكتب نبذة مركزة: سنوات الخبرة + التخصص + أهم إنجاز رقمي…',
       cvSkillsLabel: 'المهارات (اكتب ثم اضغط فاصلة ،)',
       cvSkillsPh: 'مثال: ZATCA, E-Invoicing, SAP, Excel متقدم, منصة مدد, منصة قوى',
       cvTagHint: 'افصل بين العناصر بفاصلة ،',
       cvScoreTitle: 'جاهزية السيرة الذاتية:',
-      disclaimer: '⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.',
+      disclaimer: '⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. تُعالَج القيم التي تدخلها الأدوات داخل متصفحك، ولا ترسل وظائف الحاسبات هذه القيم إلى خوادم KSA Tools. وقد تعالج خدمات خارجية للتحليلات والإعلانات معلومات تقنية أو استخدامية عن زيارتك؛ راجع سياسة الخصوصية.',
       faqHeading: 'الأسئلة الشائعة | Frequently Asked Questions',
       faqQ1: 'كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?',
       faqA1: 'بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.',
@@ -2723,6 +2740,9 @@
       footerPrivacy: 'سياسة الخصوصية',
       footerAdDisclosure: 'الإعلانات وملفات تعريف الارتباط',
       footerTools: 'الأدوات',
+      clearLocalData: 'مسح بياناتي المحفوظة',
+      clearDataConfirm: 'سيحذف هذا قيم النماذج المحفوظة محليًا ويعيد تحميل الأدوات بالقيم الافتراضية. سيبقى إعداد اللغة والمظهر. لن يحذف ملفات تعريف الارتباط أو معلومات ربما عالجتها الخدمات الخارجية سابقًا. هل تريد المتابعة؟',
+      clearDataFail: 'تعذر حذف المدخلات المحفوظة. امسح بيانات هذا الموقع من إعدادات المتصفح.',
       btnPrint: 'طباعة / حفظ PDF', btnCopy: 'نسخ النص', btnShare: 'مشاركة النتيجة',
       btnShareLetter: 'مشاركة الخطاب',
       btnShareCv: 'مشاركة السيرة',
@@ -2734,7 +2754,7 @@
       shareNative: 'مشاركة…',
       shareCopyText: 'نسخ النص',
       shareCopyLink: 'نسخ الرابط',
-      shareNote: 'لا تُرسل أي بيانات إلى أي خادم — المشاركة تتم من جهازك مباشرة، والرابط لا يحتوي إلا على الأرقام التي أدخلتها.',
+      shareNote: 'تُجرى الحسابات داخل متصفحك. رابط المشاركة يتضمن القيم اللازمة لإعادة فتح الحساب؛ لذلك لا تشاركه إلا مع من تثق به. وقد تعالج خدمات الاستضافة أو المشاركة أو التحليلات والإعلانات معلومات مرتبطة بفتح الرابط؛ راجع سياسة الخصوصية.',
       shareNothing: 'أدخل الأرقام أولاً لعرض النتيجة ثم شاركها.',
       shareCopiedLink: 'تم نسخ الرابط',
       sharePopBlocked: 'المتصفح منع فتح نافذة المشاركة — نسخنا النص بدلاً من ذلك',
@@ -2835,7 +2855,7 @@
       badge: 'Free Smart Tools • Compliant with Saudi Labor Law',
       siteTitle: 'Saudi Employee & Expat Services Hub',
       printHeadSub: 'Indicative report issued by KSA Tools',
-      siteSubtitle: 'Calculate End of Service gratuity and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic & English — all data stays in your browser',
+      siteSubtitle: 'Calculate end-of-service benefits and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic and English. Calculations run in your browser; third-party analytics and advertising services may process technical or usage information about your visit.',
       adLabel: 'إعلان | Advertisement',
       t1Num: 'Tool 1', t1Title: 'End of Service (EOSB) Calculator',
       t2Num: 'Tool 2', t2Title: 'Net Salary, GOSI & Finance',
@@ -2927,14 +2947,14 @@
       letReasonPh: 'e.g. family circumstances / addressed to Al-Rajhi Bank',
       cvHeading: 'Saudi Market Resume Builder & Completeness Checker',
       cvTag: 'A step-by-step builder with live ATS scoring',
-      cvIntro: 'Fill in the steps one by one and your resume is built in front of you. Each step is its own section and you can go back and edit anything at any time — all data stays in your browser.',
+      cvIntro: 'Fill in the steps one by one and your resume is built in your browser. Each step is its own section, and you can return to edit any field. Third-party services may process technical visit information; see the Privacy Policy.',
       cvSumLabel: 'Professional Summary',
       cvSumPh: 'Write a focused pitch: years of experience + specialism + your best measurable result…',
       cvSkillsLabel: 'Skills (type then press comma ,)',
       cvSkillsPh: 'e.g. ZATCA, E-Invoicing, SAP, Advanced Excel, Mudad, Qiwa',
       cvTagHint: 'Separate each item with a comma ,',
       cvScoreTitle: 'Resume readiness:',
-      disclaimer: '⚖️ <strong>Disclaimer:</strong> All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. None of your data is sent to any server — all processing happens in your browser.',
+      disclaimer: '⚖️ <strong>Disclaimer:</strong> All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. The tools process the values you enter in your browser, and their calculator functions do not send those values to KSA Tools servers. Third-party analytics and advertising services may process technical or usage information about your visit; see our Privacy Policy.',
       faqHeading: 'Frequently Asked Questions',
       faqQ1: 'How is Saudi End of Service Benefit (EOSB) calculated?',
       faqA1: 'Half a month’s wage for each of the first five years, one month’s wage for each subsequent year, and a pro-rata amount for a fraction of a year. Upon resignation: one-third after continuous service of two to five years inclusive; two-thirds if service exceeds five years but is under ten; and the full award at ten years or more.',
@@ -2944,6 +2964,9 @@
       footerPrivacy: 'Privacy Policy',
       footerAdDisclosure: 'Ads & Cookies',
       footerTools: 'Tools',
+      clearLocalData: 'Clear my saved data',
+      clearDataConfirm: 'This deletes locally saved form values and reloads the tools with default values. Your language and appearance settings will be kept. It does not delete cookies or information third-party services may already have processed. Continue?',
+      clearDataFail: 'Could not delete saved inputs. Clear this site data in your browser settings.',
       btnPrint: 'Print / Save PDF', btnCopy: 'Copy Text', btnShare: 'Share Result',
       btnShareLetter: 'Share Letter',
       btnShareCv: 'Share Resume',
@@ -2955,7 +2978,7 @@
       shareNative: 'Share…',
       shareCopyText: 'Copy text',
       shareCopyLink: 'Copy link',
-      shareNote: 'Nothing is sent to any server — sharing happens straight from your device, and the link contains only the numbers you entered.',
+      shareNote: 'Calculations run in your browser. A share link contains the values needed to reopen the calculation, so share it only with people you trust. Hosting, sharing, analytics, or advertising services may process information associated with opening the link; see the Privacy Policy.',
       shareNothing: 'Enter your numbers first, then share the result.',
       shareCopiedLink: 'Link copied',
       sharePopBlocked: 'The browser blocked the share window — we copied the text instead',
@@ -4562,6 +4585,23 @@ const GUIDES_JSON = 'articles.json';
     $('theme-btn').addEventListener('click', () =>
       applyTheme($('html-root').dataset.theme === 'dark' ? 'light' : 'dark'));
     $('lang-btn').addEventListener('click', toggleLanguage);
+
+    const clearLocalDataButton = $('clear-local-data');
+    if (clearLocalDataButton) {
+      clearLocalDataButton.addEventListener('click', () => {
+        if (!window.confirm(t('clearDataConfirm'))) return;
+        try {
+          localStorage.removeItem(PERSIST_KEY);
+          if (localStorage.getItem(PERSIST_KEY) !== null) {
+            throw new Error('Saved inputs remain');
+          }
+          window.location.reload();
+        } catch (e) {
+          showToast(t('clearDataFail'));
+        }
+      });
+    }
+
 
     initTabs();
 

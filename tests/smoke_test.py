@@ -75,6 +75,26 @@ def static_checks():
 
     check("index.html غير فارغ", len(raw) > 150000, "%d بايت" % len(raw))
     check("لا BOM", raw[:3] != b"\xef\xbb\xbf")
+    check("clear local data control and bilingual messages",
+          'id="clear-local-data"' in text
+          and text.count("clearLocalData:") == 2
+          and text.count("clearDataConfirm:") == 2
+          and text.count("clearDataFail:") == 2
+          and "localStorage.removeItem(PERSIST_KEY)" in text
+          and "window.location.reload()" in text)
+
+    check("privacy wording covers browser calculations and external services",
+          "تُجرى الحسابات داخل متصفحك" in text
+          and "قد تعالج خدمات التحليلات والإعلانات معلومات تقنية أو استخدامية" in text
+          and "Calculations run in your browser" in text
+          and "third-party analytics and advertising services may process technical or usage information" in text
+          and "رابط المشاركة يتضمن القيم اللازمة" in text
+          and "A share link contains the values needed" in text
+          and "كل بياناتك تُعالج في متصفحك فقط" not in text
+          and "all data stays in your browser" not in text
+          and "لا تُرسل أي بيانات إلى أي خادم" not in text
+          and "Nothing is sent to any server" not in text)
+
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
@@ -591,6 +611,47 @@ def browser_checks(headless):
               "links=%d" % guides["links"])
 
         # --- الأخطاء في الكونسول (يُسمح بأخطاء الشبكة المحجوبة فقط)
+        # --- clear local data: cancel, then confirm
+        pg.evaluate("""() => {
+          localStorage.setItem('seh_lang', 'en');
+          localStorage.setItem('seh_theme', 'dark');
+          localStorage.setItem('seh_inputs_v2', JSON.stringify({
+            'eos-salary': '987654',
+            'cv-data': 'CLEAR-TEST-SENTINEL'
+          }));
+        }""")
+
+        pg.once("dialog", lambda d: d.dismiss())
+        click(pg, "clear-local-data")
+        pg.wait_for_timeout(100)
+        cancel_state = pg.evaluate("""() => {
+          const s = localStorage.getItem('seh_inputs_v2') || '';
+          return s.includes('CLEAR-TEST-SENTINEL');
+        }""")
+        check("clear-data cancellation preserves saved inputs",
+              cancel_state is True, repr(cancel_state))
+
+        pg.once("dialog", lambda d: d.accept())
+        with pg.expect_navigation(wait_until="load", timeout=10000):
+            click(pg, "clear-local-data")
+
+        cleared = pg.evaluate("""() => ({
+          inputs: localStorage.getItem('seh_inputs_v2'),
+          lang: localStorage.getItem('seh_lang'),
+          theme: localStorage.getItem('seh_theme'),
+          salary: document.getElementById('eos-salary').value,
+          cvData: document.getElementById('cv-data').value
+        })""")
+        check("clear-data confirmation removes saved form values",
+              cleared["inputs"] is None, repr(cleared))
+        check("clear-data preserves language and appearance settings",
+              cleared["lang"] == "en" and cleared["theme"] == "dark",
+              repr(cleared))
+        check("clear-data does not restore prior sensitive values",
+              cleared["salary"] != "987654"
+              and "CLEAR-TEST-SENTINEL" not in (cleared["cvData"] or ""),
+              repr(cleared))
+
         real = [e for e in errors if "ERR_FAILED" not in e and "ERR_BLOCKED" not in e
                 and "Failed to load resource" not in e]
         check("لا أخطاء جافاسكربت في الكونسول", not real, repr(real[:3]))
