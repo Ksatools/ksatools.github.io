@@ -87,9 +87,12 @@ def static_checks():
           and "history.replaceState(null, '', cleanUrl.pathname" in text)
     privacy_text = PRIVACY.read_text(encoding="utf-8") if PRIVACY.exists() else ""
     check("privacy.html موجود", PRIVACY.exists())
+    check("تاريخ تحديث سياسة الخصوصية الحالي ظاهر باللغتين",
+          "آخر تحديث: أكتوبر 2026" in privacy_text
+          and "Last updated: October 2026" in privacy_text)
     check("سياسة الخصوصية تصرّح باستخدام GA4 باللغتين",
-          "نستخدم Google Analytics 4 (GA4)" in privacy_text
-          and "We use Google Analytics 4 (GA4)" in privacy_text)
+          "تستخدم الصفحة الرئيسية التي تضم الأدوات Google Analytics 4 (GA4)" in privacy_text
+          and "The main tools page uses Google Analytics 4 (GA4)" in privacy_text)
     check("أزيلت عبارة التحليلات القديمة غير المطابقة",
           "لا نستخدم حالياً أدوات تحليل سلوكية خاصة بنا" not in privacy_text
           and "We currently use no behavioral analytics of our own." not in privacy_text)
