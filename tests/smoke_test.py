@@ -287,8 +287,12 @@ def browser_checks(headless):
         share_ctx.add_init_script("""
           (() => {
             const nativeSetTimeout = window.setTimeout.bind(window);
+            window.__blocked300Timers = 0;
             window.setTimeout = (callback, delay, ...args) => {
-              if (Number(delay) === 300) return 0;
+              if (Number(delay) === 300) {
+                window.__blocked300Timers += 1;
+                return 0;
+              }
               return nativeSetTimeout(callback, delay, ...args);
             };
           })();
@@ -311,6 +315,8 @@ def browser_checks(headless):
               repr(eos_restored))
         stored_eos = share_page.evaluate(
             "()=>JSON.parse(localStorage.getItem('seh_inputs_v2') || '{}')")
+        check("اختبار الحفظ يمنع مهلة 300ms فعلياً",
+              share_page.evaluate("()=>window.__blocked300Timers") >= 1)
         check("رابط EOS يحفظ القيم المستعادة فوراً قبل مهلة الحفظ",
               stored_eos.get("eos-salary") == "6500"
               and stored_eos.get("eos-reason") == "resignation",
