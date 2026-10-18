@@ -93,6 +93,24 @@ def static_checks():
     check("أزيلت عبارة التحليلات القديمة غير المطابقة",
           "لا نستخدم حالياً أدوات تحليل سلوكية خاصة بنا" not in privacy_text
           and "We currently use no behavioral analytics of our own." not in privacy_text)
+    # الصفحة القانونية لها JavaScript مستقل عن index.html؛ افحصه أيضاً.
+    privacy_scripts = re.findall(r"<script>(.*?)</script>", privacy_text, re.S)
+    privacy_js = max(privacy_scripts, key=len) if privacy_scripts else ""
+    if privacy_js:
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                             encoding="utf-8") as fh:
+                fh.write(privacy_js)
+                privacy_js_path = fh.name
+            privacy_proc = subprocess.run(["node", "--check", privacy_js_path],
+                                          capture_output=True, text=True)
+            check("node --check لجافاسكربت privacy.html",
+                  privacy_proc.returncode == 0,
+                  (privacy_proc.stderr or "").strip()[:200])
+        except FileNotFoundError:
+            print("[SKIP] node غير متوفّر — تخطّي فحص privacy.html", flush=True)
+    elif PRIVACY.exists():
+        record(FAIL, "العثور على جافاسكربت privacy.html", "لم يُعثر على <script>…</script>")
     check("سكربت Social Bar موجود مرة واحدة",
           text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3") == 1,
           "count=%d" % text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"))
