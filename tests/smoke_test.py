@@ -279,14 +279,26 @@ def browser_checks(headless):
         ctx.route("**/*", stub_third_party)
         pg = setup_page(ctx, errors)
 
-        # --- روابط المشاركة: استعادة القيم ثم إزالة معاملات الحساب الحساسة من العنوان.
-        share_page = ctx.new_page()
+        # --- روابط المشاركة: استعادة القيم ثم حفظها قبل تنظيف العنوان.
+        # أوقف مؤقت saveInputs ذي 300ms في هذا السياق حتى يثبت الاختبار أن
+        # الاستعادة لا تعتمد على مرور المهلة قبل إعادة التحميل.
+        share_ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        share_ctx.route("**/*", stub_third_party)
+        share_ctx.add_init_script("""
+          (() => {
+            const nativeSetTimeout = window.setTimeout.bind(window);
+            window.setTimeout = (callback, delay, ...args) => {
+              if (Number(delay) === 300) return 0;
+              return nativeSetTimeout(callback, delay, ...args);
+            };
+          })();
+        """)
+        share_page = share_ctx.new_page()
         share_page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         share_page.on("pageerror", lambda e: errors.append("pageerror: %s" % e))
         share_page.goto(INDEX.as_uri() +
                         "?tool=eos&s=6500&y=2&m=0&d=0&ld=0&lb=full&r=resignation#eos-tool",
                         wait_until="load")
-        share_page.wait_for_timeout(350)
         eos_restored = share_page.evaluate(
             "()=>({salary:document.getElementById('eos-salary').value,"
             "reason:document.getElementById('eos-reason').value,"
@@ -297,6 +309,21 @@ def browser_checks(headless):
         check("رابط EOS يحذف معاملات الحساب بعد الاستعادة",
               eos_restored["search"] == "" and eos_restored["hash"] == "#eos-tool",
               repr(eos_restored))
+        stored_eos = share_page.evaluate(
+            "()=>JSON.parse(localStorage.getItem('seh_inputs_v2') || '{}')")
+        check("رابط EOS يحفظ القيم المستعادة فوراً قبل مهلة الحفظ",
+              stored_eos.get("eos-salary") == "6500"
+              and stored_eos.get("eos-reason") == "resignation",
+              repr({k: stored_eos.get(k) for k in ("eos-salary", "eos-reason")}))
+        share_page.reload(wait_until="load")
+        eos_after_reload = share_page.evaluate(
+            "()=>({salary:document.getElementById('eos-salary').value,"
+            "reason:document.getElementById('eos-reason').value,search:location.search})")
+        check("القيم المستعادة تبقى بعد إعادة تحميل العنوان المنظّف",
+              eos_after_reload["salary"] == "6500"
+              and eos_after_reload["reason"] == "resignation"
+              and eos_after_reload["search"] == "",
+              repr(eos_after_reload))
 
         share_page.goto(INDEX.as_uri() +
                         "?tool=sal&b=8500&h=1200&t=500&o=80#salary-tool",
@@ -314,7 +341,7 @@ def browser_checks(headless):
         check("رابط الراتب يحذف معاملات الحساب بعد الاستعادة",
               sal_restored["search"] == "" and sal_restored["hash"] == "#salary-tool",
               repr(sal_restored))
-        share_page.close()
+        share_ctx.close()
 
         # --- بنية
         dups = pg.evaluate(
