@@ -2596,7 +2596,15 @@
   'use strict';
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+    remove: k => {
+      try {
+        localStorage.removeItem(k);
+        return localStorage.getItem(k) === null;
+      } catch (e) {
+        return false;
+      }
+    }
   };
   /* ==================== ثوابت قابلة للتحديث المركزي ==================== */
   const CONFIG = {
@@ -3407,7 +3415,7 @@
   }, 300);
   function restoreInputs() {
     try {
-      const d = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}');
+      const d = JSON.parse(store.get(PERSIST_KEY) || '{}');
       for (const id in d) { const el = $(id); if (el) el.value = d[id]; }
     } catch (e) { /* تجاهل */ }
   }
@@ -3420,7 +3428,7 @@
     const darkMeta = $('theme-color-dark');
     if (lightMeta) lightMeta.media = theme === 'light' ? 'all' : 'not all';
     if (darkMeta) darkMeta.media = theme === 'dark' ? 'all' : 'not all';
-    localStorage.setItem('seh_theme', theme);
+    store.set('seh_theme', theme);
   }
 
   /* ==================== تطبيق اللغة ==================== */
@@ -3469,7 +3477,7 @@ function cvSharePayload() {
   function toggleLanguage() {
     closeShareSheet();
     currentLang = currentLang === 'ar' ? 'en' : 'ar';
-    localStorage.setItem('seh_lang', currentLang);
+    store.set('seh_lang', currentLang);
     applyI18n();
     renderGuides();
     calculateEOS(); calculateSalary(); generateLetter(); cvRenderAll();
@@ -4579,7 +4587,7 @@ const GUIDES_JSON = 'articles.json';
 
   /* ==================== التهيئة ==================== */
   document.addEventListener('DOMContentLoaded', () => {
-    const savedTheme = localStorage.getItem('seh_theme')
+    const savedTheme = store.get('seh_theme')
       || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     applyTheme(savedTheme);
     $('theme-btn').addEventListener('click', () =>
@@ -4591,8 +4599,7 @@ const GUIDES_JSON = 'articles.json';
       clearLocalDataButton.addEventListener('click', () => {
         if (!window.confirm(t('clearDataConfirm'))) return;
         try {
-          localStorage.removeItem(PERSIST_KEY);
-          if (localStorage.getItem(PERSIST_KEY) !== null) {
+          if (!store.remove(PERSIST_KEY)) {
             throw new Error('Saved inputs remain');
           }
           window.location.reload();
@@ -4610,7 +4617,7 @@ const GUIDES_JSON = 'articles.json';
     if (!$('let-doc-lang').value) $('let-doc-lang').value = currentLang;
     // لغة مستند السيرة: تتبع لغة الواجهة فقط إن لم يختر المستخدم لغة سابقة
     try {
-      const saved = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}');
+      const saved = JSON.parse(store.get(PERSIST_KEY) || '{}');
       if (!saved['cv-doc-lang']) $('cv-doc-lang').value = currentLang;
     } catch (e) { $('cv-doc-lang').value = currentLang; }
 
