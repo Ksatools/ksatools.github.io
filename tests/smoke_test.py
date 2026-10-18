@@ -80,7 +80,7 @@ def static_checks():
           and text.count("clearLocalData:") == 2
           and text.count("clearDataConfirm:") == 2
           and text.count("clearDataFail:") == 2
-          and "localStorage.removeItem(PERSIST_KEY)" in text
+          and "store.remove(PERSIST_KEY)" in text
           and "window.location.reload()" in text)
 
     check("privacy wording covers browser calculations and external services",
@@ -98,6 +98,19 @@ def static_checks():
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
+    store_match = re.search(r"const store = \\{.*?^\\s*\\};", text, re.S | re.M)
+    store_body = store_match.group(0) if store_match else ""
+    storage_outside_store = re.sub(r"const store = \\{.*?^\\s*\\};", "", text,
+                                   count=1, flags=re.S | re.M)
+    direct_storage_calls = re.findall(
+        r"\\blocalStorage\\.(?:getItem|setItem|removeItem|clear)\\s*\\(",
+        storage_outside_store)
+    check("عمليات localStorage محصورة في الغلاف store",
+          bool(store_match)
+          and all(("localStorage." + method + "(") in store_body
+                  for method in ("getItem", "setItem", "removeItem"))
+          and not direct_storage_calls,
+          "calls outside store=%d" % len(direct_storage_calls))
     check("معرّف GA4 موجود مرة واحدة لكل من src وconfig", text.count("G-HGMS3MZ27P") == 2,
           "المعرّف متوقع في سكربت التحميل وفي التهيئة فقط")
     check("عنوان الصفحة المرسل إلى GA4 يخلو من query وfragment",
@@ -654,6 +667,40 @@ def browser_checks(headless):
               cleared["salary"] != "987654"
               and "CLEAR-TEST-SENTINEL" not in (cleared["cvData"] or ""),
               repr(cleared))
+
+        # Simulate a browser storage deletion failure: the wrapper must report failure,
+        # and the UI should show its fallback message rather than reloading.
+        pg.evaluate("""() => {
+          localStorage.setItem('seh_inputs_v2', JSON.stringify({
+            'eos-salary': '4321',
+            'cv-data': 'STORE-REMOVE-BLOCKED'
+          }));
+          window.__nativeStorageRemoveItem = Storage.prototype.removeItem;
+          Storage.prototype.removeItem = function (key) {
+            if (key === 'seh_inputs_v2') throw new Error('simulated storage denial');
+            return window.__nativeStorageRemoveItem.call(this, key);
+          };
+        }""")
+        pg.once("dialog", lambda d: d.accept())
+        click(pg, "clear-local-data")
+        pg.wait_for_timeout(150)
+        failed_clear = pg.evaluate("""() => ({
+          saved: localStorage.getItem('seh_inputs_v2') || '',
+          toast: document.getElementById('toast')?.textContent || '',
+          navigationType: performance.getEntriesByType('navigation')[0]?.type || ''
+        })""")
+        check("clear-data storage failure shows fallback without deleting values",
+              "STORE-REMOVE-BLOCKED" in failed_clear["saved"]
+              and bool(failed_clear["toast"].strip())
+              and failed_clear["navigationType"] != "reload",
+              repr(failed_clear))
+        pg.evaluate("""() => {
+          if (window.__nativeStorageRemoveItem) {
+            Storage.prototype.removeItem = window.__nativeStorageRemoveItem;
+            delete window.__nativeStorageRemoveItem;
+          }
+          localStorage.removeItem('seh_inputs_v2');
+        }""")
 
         real = [e for e in errors if "ERR_FAILED" not in e and "ERR_BLOCKED" not in e
                 and "Failed to load resource" not in e]
