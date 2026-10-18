@@ -3193,7 +3193,7 @@
     const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
     const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
     const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
-    const leaveDays = numVal('eos-leave-days');
+    const leaveDays = clamp(numVal('eos-leave-days'), 0, 365);
     const link = buildShareLink('eos-tool', {
       tool: 'eos', s: salary, y: years, m: months, d: days,
       ld: leaveDays, lb: leaveBasis, bs: $('eos-basic').value, r: reasonSel.value,
@@ -3447,7 +3447,7 @@ function cvSharePayload() {
     const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
     const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
     const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
-    const leaveDays = numVal('eos-leave-days');
+    const leaveDays = clamp(numVal('eos-leave-days'), 0, 365);
     const leaveBasis = $('eos-leave-basis').value;
     const basicField = $('eos-basic').value.trim();
 
