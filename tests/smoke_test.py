@@ -528,9 +528,12 @@ def browser_checks(headless):
         tab(pg, "cv")
         pg.evaluate("document.querySelector('footer a[href=\"#eos-tool\"]').click()")
         pg.wait_for_timeout(250)
-        check("رابط التذييل #eos-tool يبدّل التبويب",
-              pg.eval_on_selector(".tool-section.active", "e=>e.id") == "eos-tool",
-              "hash=%s" % pg.evaluate("location.hash"), known=3)
+        footer_active = pg.eval_on_selector(".tool-section.active", "e=>e.id")
+        footer_selected = pg.eval_on_selector(".tab-btn[aria-selected='true']", "e=>e.dataset.tool")
+        check("رابط التذييل #eos-tool يبدّل التبويب وحالة ARIA",
+              footer_active == "eos-tool" and footer_selected == "eos-tool",
+              "active=%s selected=%s hash=%s"
+              % (footer_active, footer_selected, pg.evaluate("location.hash")))
 
         # --- الإتاحة/السيو المعلّقة
         pg.evaluate("document.getElementById('lang-btn').click()"); pg.wait_for_timeout(300)
