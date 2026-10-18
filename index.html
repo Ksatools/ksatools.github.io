@@ -3354,7 +3354,9 @@
     } else {
       return;
     }
-    saveInputs();
+    // The share parameters are removed below; persist restored values before a reload
+    // can lose them. Input handlers are wired later and won't observe these assignments.
+    persistInputsNow();
     // Inputs have been restored; remove share payload values from the address bar.
     // This protects later history-based pageviews if GA4 enhanced measurement is enabled.
     const shareKeys = ['tool', 's', 'y', 'm', 'd', 'ld', 'lb', 'bs', 'r', 'c', 'b', 'h', 't', 'o'];
@@ -3408,11 +3410,12 @@
 
   /* ==================== حفظ المدخلات محلياً ==================== */
   const PERSIST_KEY = 'seh_inputs_v2';
-  const saveInputs = debounce(() => {
+  function persistInputsNow() {
     const d = {};
     document.querySelectorAll('[data-persist]').forEach(el => { d[el.id] = el.value; });
     store.set(PERSIST_KEY, JSON.stringify(d));
-  }, 300);
+  }
+  const saveInputs = debounce(persistInputsNow, 300);
   function restoreInputs() {
     try {
       const d = JSON.parse(store.get(PERSIST_KEY) || '{}');
