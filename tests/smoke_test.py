@@ -405,7 +405,7 @@ def browser_checks(headless):
         setv(pg, "eos-reason", "resignation")
         setv(pg, "eos-salary", "6500")
         setv(pg, "eos-leave-basis", "basic"); setv(pg, "eos-basic", "5000")
-        click(pg, "eos-calc-btn"); click(pg, "eos-share")
+        click(pg, "eos-calc-btn"); pg.locator("#eos-share").click()
         pg.wait_for_timeout(250)
         preview = pg.text_content("#share-preview") or ""
         check("شيت المشاركة يبدأ بالتركيز على أول إجراء ظاهر",
