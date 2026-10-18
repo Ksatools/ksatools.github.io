@@ -405,10 +405,21 @@ def browser_checks(headless):
         setv(pg, "eos-reason", "resignation")
         setv(pg, "eos-salary", "6500")
         setv(pg, "eos-leave-basis", "basic"); setv(pg, "eos-basic", "5000")
-        click(pg, "eos-calc-btn"); click(pg, "eos-share")
+        click(pg, "eos-calc-btn"); pg.locator("#eos-share").click()
         pg.wait_for_timeout(250)
         preview = pg.text_content("#share-preview") or ""
+        check("شيت المشاركة يبدأ بالتركيز على أول إجراء ظاهر",
+              pg.evaluate("()=>document.activeElement === document.querySelector('#share-targets button:not([hidden])')"))
+        pg.eval_on_selector("#share-close", "e=>e.focus()")
+        pg.keyboard.press("Shift+Tab")
+        check("شيت المشاركة يحصر Shift+Tab داخل النافذة",
+              pg.evaluate("()=>{const xs=Array.from(document.querySelectorAll('#share-targets button:not([hidden])')).filter(e=>e.getClientRects().length);return xs.length>0&&document.activeElement===xs[xs.length-1];}"))
+        pg.keyboard.press("Tab")
+        check("شيت المشاركة يحصر Tab داخل النافذة",
+              pg.evaluate("document.activeElement.id") == "share-close")
         pg.keyboard.press("Escape"); pg.wait_for_timeout(120)
+        check("شيت المشاركة يعيد التركيز إلى الزر الذي فتحها",
+              pg.evaluate("document.activeElement.id") == "eos-share")
         m = re.search(r"file:///\S+", preview)
         link = m.group(0) if m else ""
         check("رابط المشاركة يحمل bs=5000", "bs=5000" in preview)
