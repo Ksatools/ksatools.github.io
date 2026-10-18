@@ -3129,6 +3129,7 @@
   /* ==================== مشاركة النتيجة (نص غني + رابط يستعيد الأرقام) ==================== */
   const SHARE_BASE = location.origin + location.pathname;
   let sharePayload = null;
+  let shareReturnFocus = null;
 
   function buildShareLink(toolId, params) {
     return SHARE_BASE + '?' + new URLSearchParams(params).toString() + '#' + toolId;
@@ -3144,6 +3145,7 @@
     sharePayload = payload;
     $('share-preview').textContent = payload.text + '\n\n' + payload.link;
     const modal = $('share-modal');
+    if (modal.hidden) shareReturnFocus = document.activeElement;
     modal.hidden = false;
     document.body.style.overflow = 'hidden';
     const first = $('share-targets').querySelector('button:not([hidden])');
@@ -3156,6 +3158,20 @@
     modal.hidden = true;
     document.body.style.overflow = '';
     sharePayload = null;
+    const returnFocus = shareReturnFocus;
+    shareReturnFocus = null;
+    if (returnFocus && returnFocus.isConnected && !returnFocus.disabled
+        && typeof returnFocus.focus === 'function') {
+      returnFocus.focus();
+    }
+  }
+
+  function getShareFocusableElements() {
+    const modal = $('share-modal');
+    return Array.from(modal.querySelectorAll(
+      'button:not([disabled]):not([hidden]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(el => el.getClientRects().length > 0
+      && getComputedStyle(el).visibility !== 'hidden');
   }
 
   function openExternal(url) {
@@ -3332,7 +3348,30 @@
       if (e.target === $('share-modal')) closeShareSheet();
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeShareSheet();
+      const modal = $('share-modal');
+      if (e.key === 'Escape') {
+        if (!modal.hidden) closeShareSheet();
+        return;
+      }
+      if (e.key !== 'Tab' || modal.hidden) return;
+
+      const focusable = getShareFocusableElements();
+      if (!focusable.length) {
+        e.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && (document.activeElement === first
+          || !modal.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last
+          || !modal.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
     });
   }
 
