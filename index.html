@@ -129,8 +129,6 @@
       --accent-deep: #92400e;
       --accent-soft: #fef3c7;
       --gold: #fde68a;
-      /* زر الإعلان (خلفية داكنة تحفظ تباين النص الأبيض في الوضعين) */
-      --ad-gradient: linear-gradient(135deg, #92400e 0%, #78350f 100%);
       /* ——— المحايدات ——— */
       --dark: #0f172a;
       --slate: #334155;
@@ -196,7 +194,6 @@
       --accent-deep: #fde68a;
       --danger: #fca5a5;
       --danger-soft: #3b1717;
-      --ad-gradient: linear-gradient(135deg, #92400e 0%, #b45309 100%);
       --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
       --shadow-accent: 0 6px 16px rgba(0, 0, 0, 0.5);
       /* إطار ورقة السيرة في الليلي: حدّ خفيف + ظل يفصلها عن الخلفية الداكنة دون وهج */
@@ -591,24 +588,6 @@
       background: var(--border);
       border-color: var(--primary-light);
       color: var(--primary-text);
-    }
-
-    .btn-ad {
-      background: var(--ad-gradient);
-      color: #ffffff;
-      border: none;
-      padding: 10px 14px;
-      min-height: 44px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      flex: 1 1 100%;
     }
 
     /* ==================== بطاقة النتائج والجداول ==================== */
@@ -2026,13 +2005,6 @@
     <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — كل بياناتك تُعالج في متصفحك فقط</p>
   </header>
 
-  <!-- ====== Adsterra: Banner 728x90 / Native — الصق الكود داخل هذا الحاوي ====== -->
-  <div class="ad-slot" id="ad-top" style="display:none;">
-    <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
-    <!-- PASTE ADSTERRA TOP BANNER SCRIPT HERE -->
-    <strong data-i18n="adTopTitle">مساحة إعلانية علوية (Banner 728x90 / Native)</strong>
-  </div>
-
   <nav class="nav-tabs" role="tablist" aria-label="أدوات المنصة" id="main-tabs">
     <button class="tab-btn" role="tab" id="tab-eos" aria-selected="true" aria-controls="eos-tool" data-tool="eos-tool">
       <span class="tab-num" data-i18n="t1Num">الأداة 1</span>
@@ -2150,7 +2122,6 @@
           <div class="action-row no-print">
             <button class="btn-secondary" id="eos-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
             <button class="btn-secondary" id="eos-share" data-i18n="btnShare">مشاركة النتيجة</button>
-            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
           </div>
         </div>
       </div>
@@ -2223,7 +2194,6 @@
           <div class="action-row no-print">
             <button class="btn-secondary" id="sal-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
             <button class="btn-secondary" id="sal-share" data-i18n="btnShare">مشاركة النتيجة</button>
-            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
           </div>
         </div>
       </div>
@@ -2624,8 +2594,6 @@
       printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
       siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
       adLabel: 'إعلان | Advertisement',
-      adTopTitle: 'مساحة إعلانية علوية (Banner 728x90 / Native)',
-      adBotTitle: 'مساحة إعلانية سفلية (Native Banner)',
       t1Num: 'الأداة 1', t1Title: 'حاسبة نهاية الخدمة والإجازات',
       t2Num: 'الأداة 2', t2Title: 'حاسبة الراتب الصافي والتمويل',
       t3Num: 'الأداة 3', t3Title: 'صانع الخطابات الرسمية (عربي/EN)',
@@ -2734,7 +2702,6 @@
       footerAdDisclosure: 'الإعلانات وملفات تعريف الارتباط',
       footerTools: 'الأدوات',
       btnPrint: 'طباعة / حفظ PDF', btnCopy: 'نسخ النص', btnShare: 'مشاركة النتيجة',
-      btnDirectLink: 'عروض وظيفية وتمويلية مقترحة (إعلان)',
       btnShareLetter: 'مشاركة الخطاب',
       btnShareCv: 'مشاركة السيرة',
       toastCopied: 'تم النسخ بنجاح', toastCopyFail: 'تعذر النسخ — حدد النص يدوياً',
@@ -2847,8 +2814,6 @@
       printHeadSub: 'Indicative report issued by KSA Tools',
       siteSubtitle: 'Calculate End of Service gratuity and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic & English — all data stays in your browser',
       adLabel: 'إعلان | Advertisement',
-      adTopTitle: 'Top ad unit (Banner 728x90 / Native)',
-      adBotTitle: 'Bottom ad unit (Native Banner)',
       t1Num: 'Tool 1', t1Title: 'End of Service (EOSB) Calculator',
       t2Num: 'Tool 2', t2Title: 'Net Salary, GOSI & Finance',
       t3Num: 'Tool 3', t3Title: 'Official Letters (AR/EN)',
@@ -2957,7 +2922,6 @@
       footerAdDisclosure: 'Ads & Cookies',
       footerTools: 'Tools',
       btnPrint: 'Print / Save PDF', btnCopy: 'Copy Text', btnShare: 'Share Result',
-      btnDirectLink: 'Career & Finance Offers (Ad)',
       btnShareLetter: 'Share Letter',
       btnShareCv: 'Share Resume',
       toastCopied: 'Copied to clipboard', toastCopyFail: 'Copy failed — select the text manually',
