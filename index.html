@@ -3106,9 +3106,13 @@
     return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
   }
 
+  // Reuse one formatter per UI language; formatSAR is called repeatedly while calculating.
+  const SAR_FORMATTERS = {
+    ar: new Intl.NumberFormat('ar-SA-u-nu-latn', { style: 'currency', currency: 'SAR' }),
+    en: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'SAR' })
+  };
   function formatSAR(n) {
-    return new Intl.NumberFormat(currentLang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US',
-      { style: 'currency', currency: 'SAR' }).format(n);
+    return (currentLang === 'ar' ? SAR_FORMATTERS.ar : SAR_FORMATTERS.en).format(n);
   }
 
   function showToast(msg) {
