@@ -1,0 +1,4569 @@
+<!DOCTYPE html>
+<!-- ============================================================
+  منصة خدمات الموظف والمقيم في السعودية — النسخة المطوّرة v2.1 (2026-10)
+  ملاحظات النشر:
+  1) ✅ ads.txt جاهز في جذر المستودع:  adsterra.com, ksatools.github.io, DIRECT
+     (وقد أُبقي سطر إضافي بصيغة رقم الناشر — IAB ads.txt يسمح بأكثر من سطر لنفس الشبكة)
+  2) ✅ صفحة الخصوصية جاهزة: privacy.html — وهي مرتبطة من فوتر الصفحة الرئيسة (رابط نسبي)
+     ملاحظة: استخدم روابط نسبية (privacy.html) لا مطلقة (/privacy.html) لتعمل على
+     GitHub Pages حتى لو كان الموقع منشوراً على مسار فرعي مثل username.github.io/repo/
+  3) للحصول على أفضل فهرسة: انشر الملف على مسارين /ar/ و /en/ مع تعديل القيمة
+     الافتراضية للغة في السطر الأخير من السكربت (initLang)
+  4) كل بيانات المستخدمين تُعالج داخل المتصفح فقط — لا يوجد أي إرسال لخادم
+============================================================ -->
+<html lang="ar" dir="rtl" id="html-root" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <!-- كود التحقق من ملكية الموقع في Google Search Console -->
+  <meta name="google-site-verification" content="vM56TDi16_7j6fP74MzDA_A6fBWHv8-0-8WDzOYG0gk" />
+
+  <!-- أكواد تحسين محركات البحث للسوق السعودي (SEO) -->
+  <meta name="description" content="منصة خدمات الموظف والمقيم في السعودية (KSA Tools): حاسبة مكافأة نهاية الخدمة، حاسبة الراتب والتأمينات 2026، صانع الخطابات الرسمية، وفاحص السيرة الذاتية مجاناً باللغتين العربية والإنجليزية." />
+  <meta name="keywords" content="حاسبة نهاية الخدمة, حساب مكافأة نهاية الخدمة, حاسبة التأمينات الاجتماعية 2026, حاسبة الراتب الصافي, صانع خطابات رسمية, فحص السيرة الذاتية ATS, خدمات المقيمين في السعودية, KSA Tools" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://ksatools.github.io/" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • ATS</title>
+  <meta name="theme-color" content="#075135" />
+  <!-- الأيقونة (هوية الموقع: أخضر سعودي + ذهبي) -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png" />
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
+  <!-- hreflang (روابط مطلقة — عدّلها إذا تغيّر الدومين) — الوسم الأساسي canonical مُعرّف في أعلى الرأس -->
+  <link rel="alternate" hreflang="ar" href="https://ksatools.github.io/?lang=ar" />
+  <link rel="alternate" hreflang="en" href="https://ksatools.github.io/?lang=en" />
+  <link rel="alternate" hreflang="x-default" href="https://ksatools.github.io/" />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="منصة خدمات الموظف والمقيم في السعودية" />
+  <meta property="og:url" content="https://ksatools.github.io/" />
+  <meta property="og:title" content="منصة خدمات الموظف والمقيم في السعودية" />
+  <meta property="og:description" content="حاسبات نهاية الخدمة والرواتب والتأمينات + خطابات رسمية + سيرة ATS — بالعربية والإنجليزية" />
+  <meta property="og:image" content="https://ksatools.github.io/og-image.png" />
+  <meta property="og:image:secure_url" content="https://ksatools.github.io/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="منصة خدمات الموظف والمقيم في السعودية — أدوات مجانية" />
+  <meta property="og:locale" content="ar_SA" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="منصة خدمات الموظف والمقيم في السعودية" />
+  <meta name="twitter:description" content="حاسبات نهاية الخدمة والراتب والتأمينات (GOSI) + خطابات رسمية + سيرة ذاتية ATS — مجاناً وبدون تسجيل." />
+  <meta name="twitter:image" content="https://ksatools.github.io/og-image.png" />
+  <!-- خطوط عربية محسّنة -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- بيانات منظمة: التطبيق + الأسئلة الشائعة بكلا اللغتين -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "name": "منصة خدمات الموظف والمقيم في السعودية | Saudi Employee & Expat Hub",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "inLanguage": ["ar-SA", "en-US"],
+        "description": "Free bilingual Arabic & English calculators and career tools for employees and expats in Saudi Arabia: EOSB Gratuity, Net Salary & GOSI (legacy and new 2026 rates), Official Letters, and ATS Resume Builder.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "SAR" }
+      },
+      {
+        "@type": "FAQPage",
+        "inLanguage": "ar-SA",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "كيف تُحسب مكافأة نهاية الخدمة في السعودية؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "تُحسب المكافأة على أساس آخر أجر: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. عند الاستقالة يستحق العامل ثلث المكافأة بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، وثلثيها إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات، وكاملها عند عشر سنوات فأكثر." }
+          },
+          {
+            "@type": "Question",
+            "name": "هل يُخصم من راتب المقيم للتأمينات الاجتماعية؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "لا يُخصم أي مبلغ من راتب المقيم غير السعودي؛ يدفع صاحب العمل وحده 2% لفرع الأخطار المهنية. أما المواطن السعودي فيُستقطع 9.75% (النظام القديم) أو 10.75% (النظام الجديد من يوليو 2026) حسب تاريخ أول تسجيل في التأمينات." }
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "inLanguage": "en-US",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How is Saudi End of Service Benefit (EOSB) calculated?",
+            "acceptedAnswer": { "@type": "Answer", "text": "The award is based on the last wage: half a month’s wage for each of the first five years, one month’s wage for each subsequent year, with fractions of a year prorated. Upon resignation, the worker receives one-third after continuous service of two to five years inclusive, two-thirds if service exceeds five years but is under ten years, and the full award at ten years or more." }
+          },
+          {
+            "@type": "Question",
+            "name": "Is GOSI deducted from expat salaries in Saudi Arabia?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Non-Saudi employees pay 0%; the employer pays 2% for occupational hazards. Saudi nationals pay 9.75% (legacy system) or 10.75% (new system from July 2026) depending on their first GOSI registration date." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- ====== ملاحظة: سكربت Adsterra Social Bar يوضع في نهاية <body> قبل </body> وليس في <head> (لا يوجد سكربت إعلان هنا) ====== -->
+  <style>
+    :root {
+      /* ——— الهوية الأساسية: عائلة أخضر واحدة (زمردي) مشتقة من #0a6847 (H≈159°) ——— */
+      --primary: #0a6847;
+      --primary-dark: #075135;
+      --primary-light: #12966a;
+      --primary-soft: #e9f7f1;
+      --primary-text: #0a6847;
+      --primary-border: #a2ddc5;
+      --primary-gradient: linear-gradient(135deg, #075135 0%, #0f8459 100%);
+      --primary-gradient-strong: linear-gradient(135deg, #0a6847 0%, #0d7f57 100%);
+      --glow-green: rgba(18, 150, 106, 0.22);
+      --glow-amber: rgba(217, 119, 6, 0.10);
+      /* ——— اللون الثانوي (ذهبي/كهرماني) ——— */
+      --accent: #b45309;
+      --accent-deep: #92400e;
+      --accent-soft: #fef3c7;
+      --gold: #fde68a;
+      /* زر الإعلان (خلفية داكنة تحفظ تباين النص الأبيض في الوضعين) */
+      --ad-gradient: linear-gradient(135deg, #92400e 0%, #78350f 100%);
+      /* ——— المحايدات ——— */
+      --dark: #0f172a;
+      --slate: #334155;
+      --muted: #475569;
+      --bg: #f1f5f9;
+      --bg-gradient: linear-gradient(180deg, #eaf0f6 0%, #f8fafc 45%, #f1f5f9 100%);
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --input-bg: #f8fafc;
+      --header-text: #ffffff;
+      /* ——— أسطح مصاعدة (نفس تدرّج المحايدات في الوضعين) ——— */
+      --surface-2: #f8fafc;
+      --surface-3: #eef2f7;
+      /* ——— أوراق المستندات: ثابتة في الوضعين (لا يغيّرها الوضع الليلي) ——— */
+      --paper: #ffffff;
+      --paper-ink: #0f172a;
+      --paper-text: #334155;
+      --paper-sub: #475569;
+      --paper-muted: #64748b;
+      --paper-border: #cbd5e1;
+      --paper-line: #e2e8f0;
+      --paper-soft: #e9f7f1;
+      --paper-fill: #f8fafc;
+      --paper-warn: #b45309;
+      --paper-accent: #0a6847;
+      /* ——— إطار ورقة السيرة: قيم منفصلة للوضعين (الورقة نفسها تبقى بيضاء) ——— */
+      --cv-frame-border: #cbd5e1;
+      --cv-frame-shadow: 0 1px 3px rgba(15, 23, 42, 0.10), 0 10px 26px rgba(15, 23, 42, 0.07);
+      /* ——— التنبيهات ——— */
+      --danger: #b91c1c;
+      --danger-soft: #fef2f2;
+      /* ——— الشكل العام ——— */
+      --radius: 14px;
+      --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+      --shadow-accent: 0 6px 16px rgba(10, 104, 71, 0.22);
+    }
+    html[data-theme="dark"] {
+      --dark: #e2e8f0;
+      --slate: #cbd5e1;
+      --muted: #94a3b8;
+      --bg: #0b1220;
+      --bg-gradient:
+        radial-gradient(950px 460px at 50% -10%, var(--glow-green), transparent 62%),
+        radial-gradient(700px 400px at 100% 110%, var(--glow-amber), transparent 65%),
+        linear-gradient(180deg, #0a111d 0%, #0b1220 40%, #0e1728 100%);
+      --card: #111c2e;
+      --border: #24344d;
+      --border-strong: #334155;
+      --input-bg: #0d1626;
+      --surface-2: #16233a;
+      --surface-3: #1c2c47;
+      --primary-soft: #0e3226;
+      --primary-text: #5fd6a8;
+      --primary-light: #12966a;
+      --primary-border: #1c5c45;
+      --primary-gradient: linear-gradient(135deg, #043f29 0%, #0a6847 100%);
+      --primary-gradient-strong: linear-gradient(135deg, #0a6847 0%, #0d7f57 100%);
+      --glow-green: rgba(18, 150, 106, 0.24);
+      --glow-amber: rgba(180, 83, 9, 0.10);
+      --accent-soft: #2a2113;
+      --accent: #fbbf24;
+      --accent-deep: #fde68a;
+      --danger: #fca5a5;
+      --danger-soft: #3b1717;
+      --ad-gradient: linear-gradient(135deg, #92400e 0%, #b45309 100%);
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      --shadow-accent: 0 6px 16px rgba(0, 0, 0, 0.5);
+      /* إطار ورقة السيرة في الليلي: حدّ خفيف + ظل يفصلها عن الخلفية الداكنة دون وهج */
+      --cv-frame-border: rgba(255, 255, 255, 0.12);
+      --cv-frame-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      font-family: 'Cairo', 'Inter', 'Segoe UI', Tahoma, sans-serif;
+      background-color: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+      color: var(--dark);
+      line-height: 1.65;
+    }
+
+    input, select, textarea, button {
+      font-family: inherit;
+      max-width: 100%;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    /* ==================== الهيدر المتجاوب ==================== */
+    /* القواعد مقصورة على body > header: الوسم <header> يُولَّد أيضاً داخل مستند السيرة (cvd-head) */
+    body > header {
+      background-image:
+        radial-gradient(120% 140% at 50% -30%, rgba(253, 230, 138, 0.20) 0%, rgba(253, 230, 138, 0) 55%),
+        var(--primary-gradient);
+      color: #ffffff;
+      padding: clamp(16px, 3vw, 26px) 16px clamp(16px, 2.5vw, 22px);
+      text-align: center;
+      border-bottom: 4px solid var(--accent);
+      box-shadow: 0 6px 22px rgba(7, 81, 53, 0.22);
+    }
+
+    .top-bar {
+      max-width: 1080px;
+      margin: 0 auto 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .header-badge {
+      display: inline-block;
+      background: rgba(0, 0, 0, 0.30);
+      color: var(--gold);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: clamp(0.75rem, 2vw, 0.85rem);
+      font-weight: 700;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .lang-switch-btn, .theme-toggle-btn {
+      background: #ffffff;
+      color: var(--primary);
+      border: 2px solid var(--gold);
+      padding: 6px 14px;
+      min-height: 40px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    .lang-switch-btn:hover, .theme-toggle-btn:hover {
+      background: var(--gold);
+      color: var(--primary-dark);
+    }
+
+    body > header h1 {
+      font-size: clamp(1.3rem, 4vw, 1.85rem);
+      margin-bottom: 8px;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+    body > header p {
+      font-size: clamp(0.85rem, 2.2vw, 0.96rem);
+      color: var(--header-text);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    /* ==================== مساحات الإعلانات المتجاوبة ==================== */
+    .ad-slot {
+      max-width: 960px;
+      width: calc(100% - 32px);
+      margin: 14px auto;
+      min-height: 95px;
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.84rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .ad-slot.ad-native {
+      min-height: 180px;
+    }
+    .ad-slot .ad-label {
+      position: absolute;
+      top: 6px;
+      inset-inline-start: 10px;
+      font-size: 0.68rem;
+      color: var(--muted);
+      opacity: 0.8;
+      letter-spacing: 0.5px;
+    }
+    .ad-slot strong {
+      color: var(--accent-deep);
+      display: block;
+      margin: 14px 0 4px;
+    }
+
+    /* ==================== شريط التبويبات المتجاوب ==================== */
+    .nav-tabs {
+      max-width: 1080px;
+      margin: 16px auto 0;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .tab-btn {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 10px;
+      min-height: 68px;
+      cursor: pointer;
+      text-align: center;
+      font-weight: 700;
+      font-size: clamp(0.82rem, 2vw, 0.93rem);
+      line-height: 1.35;
+      color: var(--slate);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: border-color 0.2s, transform 0.2s;
+      word-break: break-word;
+    }
+    .tab-btn span.tab-num {
+      background: var(--primary-soft);
+      color: var(--primary-text);
+      font-size: 0.74rem;
+      padding: 2px 10px;
+      border-radius: 99px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      border-color: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(10, 104, 71, 0.12);
+    }
+    .tab-btn[aria-selected="true"] {
+      background-image: var(--primary-gradient);
+      color: #ffffff;
+      border-color: var(--primary);
+      box-shadow: var(--shadow-accent);
+    }
+    .tab-btn[aria-selected="true"] span.tab-num {
+      background: var(--accent);
+      color: #ffffff;
+    }
+    html[data-theme="dark"] .tab-btn[aria-selected="true"] span.tab-num {
+      color: var(--primary-dark);
+    }
+
+    /* ==================== المحتوى والأقسام ==================== */
+    main {
+      max-width: 1080px;
+      margin: 18px auto 32px;
+      padding: 0 16px;
+    }
+
+    .tool-section {
+      display: none;
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: clamp(16px, 3vw, 26px);
+      box-shadow: var(--shadow);
+    }
+    .tool-section.active {
+      display: block;
+    }
+
+    .section-header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .section-header h2 {
+      color: var(--primary-text);
+      font-size: clamp(1.1rem, 3vw, 1.32rem);
+      line-height: 1.4;
+      position: relative;
+      padding-inline-start: 15px;
+    }
+    .section-header h2::before {
+      content: "";
+      position: absolute;
+      inset-inline-start: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 1.05em;
+      border-radius: 3px;
+      background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-light) 100%);
+    }
+    .section-tag {
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: inline-block;
+    }
+    .tool-intro {
+      font-size: clamp(0.84rem, 2vw, 0.92rem);
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+      align-items: start;
+    }
+    .grid-2 > * {
+      min-width: 0;
+    }
+
+    /* ==================== الحقول والنماذج ==================== */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 700;
+      font-size: 0.88rem;
+      margin-bottom: 6px;
+      color: var(--slate);
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      min-width: 0;
+      padding: 11px 12px;
+      min-height: 44px;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      font-size: 16px; /* يمنع التكبير التلقائي المزعج في آيفون وأندرويد */
+      background: var(--input-bg);
+      color: var(--dark);
+    }
+    html[data-theme="dark"] .form-group input,
+    html[data-theme="dark"] .form-group select,
+    html[data-theme="dark"] .form-group textarea {
+      border-color: var(--border);
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--primary-light);
+      background: var(--card);
+      box-shadow: 0 0 0 3px rgba(18, 150, 106, 0.16);
+      outline: none;
+    }
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+      color: var(--muted);
+      opacity: 0.75;
+      font-size: 0.88rem;
+    }
+
+    .inline-inputs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .inline-inputs > div,
+    .inline-2 > div {
+      min-width: 0;
+    }
+    .inline-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .field-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .field-hint.count-ok {
+      color: var(--primary-text);
+      font-weight: 700;
+    }
+
+    /* ==================== الأزرار ==================== */
+    .btn-primary {
+      background-image: var(--primary-gradient-strong);
+      color: #fff;
+      border: none;
+      padding: 12px 18px;
+      min-height: 46px;
+      border-radius: 10px;
+      font-size: 0.96rem;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(18, 150, 106, 0.28);
+      transition: transform 0.18s, box-shadow 0.2s, filter 0.2s;
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 8px 20px rgba(18, 150, 106, 0.38);
+    }
+    .btn-primary:active {
+      transform: translateY(0);
+      filter: brightness(0.97);
+    }
+
+    .btn-secondary {
+      background: var(--input-bg);
+      color: var(--slate);
+      border: 1px solid var(--border-strong);
+      padding: 10px 14px;
+      min-height: 44px;
+      border-radius: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex: 1 1 auto;
+      text-align: center;
+    }
+    html[data-theme="dark"] .btn-secondary {
+      border-color: var(--border);
+    }
+    .btn-secondary:hover {
+      background: var(--border);
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+
+    .btn-ad {
+      background: var(--ad-gradient);
+      color: #ffffff;
+      border: none;
+      padding: 10px 14px;
+      min-height: 44px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      flex: 1 1 100%;
+    }
+
+    /* ==================== بطاقة النتائج والجداول ==================== */
+    .result-card {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-inline-start: 5px solid var(--primary-light);
+      border-radius: 12px;
+      padding: clamp(14px, 2.5vw, 20px);
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    .result-total {
+      background-image: linear-gradient(135deg, var(--primary-soft) 0%, var(--input-bg) 100%);
+      border: 1px solid var(--border);
+      border-inline-start: 4px solid var(--primary-light);
+      padding: 14px 12px;
+      border-radius: 10px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .result-total span.label {
+      display: block;
+      font-size: 0.84rem;
+      color: var(--primary-text);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .result-total span.value {
+      font-size: clamp(1.4rem, 5vw, 1.85rem);
+      font-weight: 900;
+      color: var(--primary-text);
+      display: block;
+      word-break: break-word;
+    }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      font-size: clamp(0.82rem, 2vw, 0.9rem);
+    }
+    .breakdown-table td {
+      padding: 9px 6px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .breakdown-table td:first-child {
+      padding-inline-end: 8px;
+    }
+    .breakdown-table td:last-child {
+      font-weight: 700;
+      color: var(--dark);
+      text-align: end;
+      white-space: nowrap;
+    }
+
+    .warn-note {
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      color: var(--accent-deep);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.8rem;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+    .legal-note {
+      background: var(--primary-soft);
+      border: 1px solid var(--primary-light);
+      color: var(--primary-text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.78rem;
+      margin-top: 12px;
+      line-height: 1.55;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .action-row .btn-primary {
+      width: auto;
+      flex: 1 1 140px;
+    }
+
+    .letter-preview {
+      background: var(--card);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: clamp(14px, 2.5vw, 20px);
+      min-height: 250px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      font-size: clamp(0.86rem, 2vw, 0.94rem);
+      line-height: 1.8;
+      color: var(--dark);
+    }
+    html[data-theme="dark"] .letter-preview {
+      border-color: var(--border);
+    }
+
+    .ats-meter {
+      background: var(--border);
+      height: 12px;
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 10px 0 12px;
+    }
+    .ats-fill {
+      height: 100%;
+      background: var(--primary-light);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .ats-checks {
+      list-style: none;
+      margin-top: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 4px 12px;
+    }
+    .ats-checks li::before {
+      content: "✓ ";
+      color: var(--primary-light);
+      font-weight: 800;
+    }
+    .ats-checks li.missing::before {
+      content: "✗ ";
+      color: var(--accent);
+    }
+
+    /* إشعار Toast */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--dark);
+      color: var(--bg);
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      max-width: 90vw;
+      text-align: center;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 999;
+      pointer-events: none;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ==================== لوحة مشاركة النتيجة (Share Sheet) ==================== */
+    .share-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(6, 12, 22, 0.6);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      animation: shareFade 0.18s ease;
+    }
+    .share-modal[hidden] {
+      display: none;
+    }
+    @keyframes shareFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes shareRise { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .share-sheet {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 16px;
+      box-shadow: 0 22px 60px rgba(2, 8, 20, 0.45);
+      animation: shareRise 0.22s ease;
+    }
+    html[data-theme="dark"] .share-sheet {
+      border-color: var(--border-strong);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 24px 64px rgba(0, 0, 0, 0.62);
+    }
+    .share-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .share-head h3 {
+      font-size: 1rem;
+      color: var(--dark);
+      font-family: 'Cairo', 'Inter', sans-serif;
+    }
+    .share-close {
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--muted);
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 0.95rem;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .share-close:hover {
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    .share-sub {
+      font-size: 0.78rem;
+      line-height: 1.7;
+      color: var(--muted);
+      margin: 6px 0 12px;
+    }
+    .share-targets {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 8px;
+    }
+    .share-target {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 8px;
+      min-height: 78px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      color: var(--slate);
+      font-family: inherit;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.18s, background 0.18s, color 0.18s;
+    }
+    .share-target:hover {
+      transform: translateY(-2px);
+      background: var(--primary-soft);
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    html[data-theme="dark"] .share-target {
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+    }
+    html[data-theme="dark"] .share-target:hover {
+      background: var(--surface-3);
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    .share-ico {
+      font-size: 1.4rem;
+      line-height: 1;
+    }
+    .share-preview {
+      margin-top: 12px;
+      padding: 10px 12px;
+      max-height: 190px;
+      overflow-y: auto;
+      background: var(--input-bg);
+      border: 1px dashed var(--border-strong);
+      border-radius: 10px;
+      color: var(--slate);
+      font-family: 'Cairo', 'Inter', system-ui, sans-serif;
+      font-size: 0.74rem;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+      text-align: start;
+    }
+    html[data-theme="dark"] .share-preview {
+      background: var(--input-bg);
+      border-color: var(--border);
+    }
+    .share-note {
+      margin-top: 10px;
+      font-size: 0.72rem;
+      line-height: 1.7;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .disclaimer-banner {
+      max-width: 1080px;
+      margin: 0 auto 20px;
+      padding: 0 16px;
+    }
+    .disclaimer-banner .inner {
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.8rem;
+      color: var(--accent-deep);
+    }
+
+    .seo-faq {
+      max-width: 1080px;
+      margin: 20px auto;
+      padding: 0 16px;
+    }
+    .faq-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--primary-light);
+      border-radius: var(--radius);
+      padding: clamp(16px, 3vw, 24px);
+      box-shadow: var(--shadow);
+    }
+    .faq-card h3 {
+      color: var(--primary-text);
+      margin-bottom: 12px;
+      font-size: clamp(1.05rem, 2.5vw, 1.18rem);
+    }
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+    }
+    .faq-item:last-child {
+      border-bottom: none;
+    }
+    .faq-item h4 {
+      font-size: 0.92rem;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+    .faq-item p {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    body > footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+    }
+    body > footer a {
+      color: var(--primary-text);
+      text-decoration: none;
+      font-weight: 700;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    body > footer a:hover {
+      border-bottom-color: currentColor;
+    }
+    .footer-links {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .footer-links span {
+      color: var(--muted);
+    }
+
+    /* ==================== تحسين الوضع الليلي (Dark Mode) ==================== */
+    /* رفع البطاقات عن الخلفية بخط إضاءة علوي رقيق + ظل أعمق */
+    html[data-theme="dark"] .tool-section,
+    html[data-theme="dark"] .faq-card,
+    html[data-theme="dark"] .ad-slot,
+    html[data-theme="dark"] .result-card {
+      border-color: var(--border);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 26px rgba(0, 0, 0, 0.42);
+    }
+    html[data-theme="dark"] body > footer {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    /* معاينة الخطاب/السيرة أغمق قليلاً من البطاقة لتفصلها بصرياً */
+    html[data-theme="dark"] .letter-preview {
+      background: var(--input-bg);
+      border-color: var(--border);
+    }
+    /* التبويب المحدد أوضح في الليلي (الأخضر الغامق جداً كان يذوب في الخلفية) */
+    html[data-theme="dark"] .tab-btn[aria-selected="true"] {
+      background-image: var(--primary-gradient-strong);
+      border-color: var(--primary-light);
+      color: #ffffff;
+    }
+    /* أزرار ثانوية أوضح */
+    html[data-theme="dark"] .btn-secondary {
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+      color: var(--slate);
+    }
+    html[data-theme="dark"] .btn-secondary:hover {
+      background: var(--surface-3);
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    /* حلقة تركيز خضراء واضحة على الحقول */
+    html[data-theme="dark"] .form-group input:focus,
+    html[data-theme="dark"] .form-group select:focus,
+    html[data-theme="dark"] .form-group textarea:focus {
+      border-color: var(--primary-text);
+      box-shadow: 0 0 0 3px rgba(95, 214, 168, 0.22);
+    }
+    /* الهيدر: وهج ذهبي أقوى ليعكس الهوية في الليلي */
+    html[data-theme="dark"] body > header {
+      border-bottom-color: var(--gold);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+    /* ألوان النجاح/التحذير في الليلي */
+    html[data-theme="dark"] .ats-fill {
+      background: linear-gradient(90deg, var(--primary-light), var(--primary-text));
+    }
+    html[data-theme="dark"] .result-card {
+      border-inline-start-color: var(--primary-light);
+    }
+
+    /* ==================== نقاط التجاوب مع الشاشات (تابلت وجوال) ==================== */
+    @media (max-width: 860px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+      .nav-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+    }
+
+    @media (max-width: 540px) {
+      body > header {
+        padding: 14px 12px 16px;
+      }
+      .top-bar {
+        flex-direction: column;
+        justify-content: center;
+        gap: 8px;
+      }
+      .nav-tabs,
+      main,
+      .disclaimer-banner,
+      .seo-faq {
+        padding: 0 12px;
+      }
+      .ad-slot {
+        width: calc(100% - 24px);
+        padding: 10px;
+      }
+      .tab-btn {
+        padding: 10px 6px;
+        min-height: 62px;
+        font-size: 0.8rem;
+      }
+      .tool-section {
+        padding: 16px 14px;
+      }
+      .inline-2 {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .breakdown-table td {
+        padding: 8px 4px;
+      }
+      .breakdown-table td:last-child {
+        white-space: normal;
+        word-break: break-word;
+      }
+      .action-row .btn-secondary {
+        flex: 1 1 calc(50% - 6px);
+      }
+    }
+
+    @media print {
+      body > header, body > footer, .nav-tabs, .ad-slot, .seo-faq, .no-print, .disclaimer-banner, #toast, .share-modal {
+        display: none !important;
+      }
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+      .ats-panel {
+        display: none !important;
+      }
+      .tool-section {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+      }
+      .letter-preview {
+        border: none;
+      }
+    }
+    /* ==================== منسق السيرة الذاتية: تصميم جديد (خطوات مرتبة) ==================== */
+    .cv-quickbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      background: var(--input-bg);
+      border: 1px dashed var(--border-strong);
+      border-radius: 12px;
+    }
+    .cv-quick-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .cv-quickbar-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .cv-mini-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      min-height: 36px;
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
+      background: var(--card);
+      color: var(--primary-text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    }
+    .cv-mini-btn:hover {
+      background: var(--primary-soft);
+      border-color: var(--primary-light);
+      transform: translateY(-1px);
+    }
+    .cv-lang-pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--slate);
+    }
+    .cv-lang-pick select {
+      padding: 7px 10px;
+      min-height: 36px;
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
+      background: var(--input-bg);
+      color: var(--dark);
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+
+    /* ——— شريط الأقسام ——— */
+    .cv-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .cv-nav-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 13px 8px 9px;
+      min-height: 40px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--slate);
+      font-family: inherit;
+      font-size: 0.79rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .cv-nav-chip:hover {
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    .cv-nav-chip.active {
+      border-color: var(--primary-light);
+      background: var(--primary-soft);
+      color: var(--primary-text);
+    }
+    .cv-nav-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 21px;
+      height: 21px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--slate);
+      font-size: 0.72rem;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    .cv-nav-chip.done .cv-nav-num {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* ——— التخطيط: نموذج + معاينة ——— */
+    .cv-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .cv-side {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .cv-score-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    #ats-score-text {
+      color: var(--primary-text);
+      font-weight: 900;
+    }
+    .cv-side .action-row button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ——— الأقسام القابلة للفتح ——— */
+    .cv-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .cv-acc {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      overflow: hidden;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .cv-acc.open {
+      border-color: var(--primary-light);
+      box-shadow: var(--shadow);
+    }
+    .cv-acc-head {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 13px 14px;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      text-align: start;
+      color: var(--dark);
+      font-family: inherit;
+    }
+    .cv-acc-head:hover {
+      background: var(--input-bg);
+    }
+    .cv-acc-num {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: var(--primary-soft);
+      color: var(--primary-text);
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+    .cv-acc-titles {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .cv-acc-titles strong {
+      font-size: 0.94rem;
+      font-weight: 800;
+    }
+    .cv-acc-titles small {
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .cv-acc-status {
+      flex: 0 0 auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+      font-size: 0.71rem;
+      font-weight: 800;
+    }
+    .cv-acc-status.done {
+      background: var(--primary-soft);
+      color: var(--primary-text);
+    }
+    .cv-acc-chevron {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 0.85rem;
+      transition: transform 0.2s ease;
+    }
+    .cv-acc.open .cv-acc-chevron {
+      transform: rotate(180deg);
+    }
+    .cv-acc-body {
+      display: none;
+      padding: 2px 14px 14px;
+    }
+    .cv-acc.open .cv-acc-body {
+      display: block;
+    }
+    .cv-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 12px;
+    }
+    .cv-span2 {
+      grid-column: 1 / -1;
+    }
+    .cv-subhead {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 2px 0 8px;
+      font-size: 0.83rem;
+      font-weight: 800;
+      color: var(--slate);
+    }
+    .cv-subhead::after {
+      content: '';
+      flex: 1 1 auto;
+      height: 1px;
+      background: var(--border);
+    }
+    .cv-hintrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 5px;
+    }
+    .cv-hintrow .field-hint {
+      margin-top: 0;
+    }
+
+    /* ——— بطاقات الخبرات والمؤهلات ——— */
+    .cv-rep-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .cv-rep {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--input-bg);
+    }
+    .cv-rep-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .cv-rep-title {
+      flex: 1 1 auto;
+      font-size: 0.81rem;
+      font-weight: 800;
+      color: var(--primary-text);
+    }
+    .cv-rep-tools {
+      display: flex;
+      gap: 4px;
+    }
+    .cv-icon-btn {
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .cv-icon-btn:hover:not([disabled]) {
+      border-color: var(--primary-light);
+      color: var(--primary-text);
+    }
+    .cv-icon-btn[disabled] {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .cv-icon-btn.danger:hover:not([disabled]) {
+      border-color: var(--danger);
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .cv-add-btn {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 44px;
+      border: 1.5px dashed var(--border-strong);
+      border-radius: 11px;
+      background: transparent;
+      color: var(--primary-text);
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .cv-add-btn:hover {
+      border-color: var(--primary-light);
+      background: var(--primary-soft);
+    }
+    .cv-year-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .cv-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 7px;
+      font-size: 0.77rem;
+      font-weight: 700;
+      color: var(--slate);
+      cursor: pointer;
+    }
+    .cv-check input {
+      width: 17px;
+      height: 17px;
+      min-height: 17px;
+      accent-color: var(--primary-light);
+      cursor: pointer;
+    }
+
+    /* ——— المهارات كوسوم ——— */
+    .cv-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .cv-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px 4px 10px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary-text);
+      font-size: 0.77rem;
+      font-weight: 700;
+    }
+    .cv-tag button {
+      width: 19px;
+      height: 19px;
+      min-height: 19px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.09);
+      color: inherit;
+      font-size: 0.66rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .cv-tag button:hover {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .cv-tags-empty {
+      font-size: 0.73rem;
+      color: var(--muted);
+    }
+
+    /* ——— حالة فارغة للمعاينة ——— */
+    /* رسالة «لا توجد بيانات» داخل مستند أبيض دائماً — ألوان ثابتة */
+    .cv-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 220px;
+      text-align: center;
+      color: var(--paper-muted);
+      font-size: 0.85rem;
+    }
+    .cv-empty-ico {
+      font-size: 2rem;
+    }
+    .cv-empty strong {
+      color: var(--paper-sub);
+      font-size: 0.92rem;
+    }
+
+    /* ——— الوضع الليلي ——— */
+    html[data-theme="dark"] .cv-quickbar,
+    html[data-theme="dark"] .cv-rep {
+      background: var(--input-bg);
+      border-color: var(--border);
+    }
+    html[data-theme="dark"] .cv-acc,
+    html[data-theme="dark"] .cv-nav-chip,
+    html[data-theme="dark"] .cv-mini-btn,
+    html[data-theme="dark"] .cv-icon-btn,
+    html[data-theme="dark"] .cv-lang-pick select {
+      border-color: var(--border);
+    }
+    html[data-theme="dark"] .cv-acc.open {
+      border-color: var(--primary-light);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 26px rgba(0, 0, 0, 0.42);
+    }
+    html[data-theme="dark"] .cv-acc-num,
+    html[data-theme="dark"] .cv-acc-status.done,
+    html[data-theme="dark"] .cv-tag {
+      background: var(--primary-soft);
+    }
+    html[data-theme="dark"] .cv-tag {
+      border-color: var(--primary-border);
+    }
+    html[data-theme="dark"] .cv-tag button {
+      background: rgba(255, 255, 255, 0.13);
+    }
+    html[data-theme="dark"] .cv-tag button:hover {
+      background: rgba(255, 255, 255, 0.26);
+    }
+    html[data-theme="dark"] .cv-nav-num {
+      background: var(--surface-3);
+      color: var(--slate);
+    }
+    html[data-theme="dark"] .cv-acc-status {
+      background: var(--accent-soft);
+    }
+    html[data-theme="dark"] .cv-add-btn:hover,
+    html[data-theme="dark"] .cv-mini-btn:hover,
+    html[data-theme="dark"] .cv-icon-btn:hover:not([disabled]) {
+      background: var(--primary-soft);
+    }
+
+    /* ——— التجاوب ——— */
+    @media (min-width: 901px) {
+      /* لا تُقيَّد لوحة السيرة بـsticky/max-height: القيد يقصّ معاينة السيرة
+         ويدفع أزرار النسخ/المشاركة/الطباعة خارج نطاق الوصول.
+         الطباعة تعطّل القيد بنفس الطريقة (انظر docs/DECISIONS.md). */
+      .cv-side {
+        position: static;
+        max-height: none;
+        overflow: visible;
+      }
+    }
+    @media (max-width: 900px) {
+      .cv-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .cv-side {
+        position: static;
+        max-height: none;
+        overflow: visible;
+      }
+    }
+    @media (max-width: 560px) {
+      .cv-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .cv-acc-titles small {
+        display: none;
+      }
+      .cv-quickbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .cv-lang-pick {
+        justify-content: space-between;
+      }
+      .cv-nav-chip {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding: 8px 10px;
+      }
+    }
+
+    /* ==================== مستند السيرة: ورقة رسمية (أبيض دائماً — لا تتأثر بالوضع الليلي) ==================== */
+    /* الألوان ثابتة (الوضع النهاري) ليكون المستند مطابقاً تماماً في المعاينة والطباعة */
+    .cv-doc {
+      background: var(--paper);
+      background-clip: padding-box;
+      border: 1px solid var(--cv-frame-border);
+      border-radius: 8px;
+      padding: clamp(18px, 3vw, 32px);
+      color: var(--paper-text);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      min-height: 240px;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      box-shadow: var(--cv-frame-shadow);
+    }
+    .cv-doc .cvd-head {
+      text-align: center;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--paper-accent);
+      margin-bottom: 16px;
+    }
+    .cv-doc .cvd-name {
+      margin: 0;
+      font-size: 1.58rem;
+      font-weight: 800;
+      line-height: 1.25;
+      color: var(--paper-ink);
+    }
+    .cv-doc .cvd-role {
+      margin: 5px 0 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--paper-accent);
+    }
+    /* بيانات التواصل: صفّ مرن (flex) حتى تُحفظ ترتيب العناصر ولا يعيد المتصفح ترتيبها */
+    .cv-doc .cvd-contact {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 2px 0;
+      margin: 9px 0 0;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      color: var(--paper-sub);
+    }
+    .cv-doc .cvd-ci { display: inline-block; }
+    /* الأرقام والبريد تُعزل باتجاه LTR حتى لا يقلبها النظام (+966 لا تصبح 966+) */
+    .cv-doc .cvd-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      white-space: nowrap;
+    }
+    .cv-doc .cvd-sep {
+      color: var(--paper-muted);
+      padding: 0 7px;
+      user-select: none;
+    }
+    .cv-doc .cvd-sec { margin: 0 0 15px; }
+    .cv-doc .cvd-sec:last-child { margin-bottom: 0; }
+    .cv-doc .cvd-h {
+      margin: 0 0 9px;
+      font-size: 0.86rem;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: var(--paper-accent);
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--paper-line);
+    }
+    .cv-doc .cvd-p { margin: 0; }
+    .cv-doc .cvd-plain { margin: 0; font-size: 0.86rem; }
+    .cv-doc .cvd-item { margin-bottom: 12px; }
+    .cv-doc .cvd-item:last-child { margin-bottom: 0; }
+    .cv-doc .cvd-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cv-doc .cvd-job {
+      margin: 0;
+      font-size: 0.96rem;
+      font-weight: 700;
+      color: var(--paper-ink);
+    }
+    .cv-doc .cvd-date {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--paper-muted);
+      white-space: nowrap;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    .cv-doc .cvd-org {
+      margin: 2px 0 0;
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--paper-sub);
+    }
+    .cv-doc .cvd-list {
+      margin: 6px 0 0;
+      padding-inline-start: 19px;
+    }
+    .cv-doc .cvd-list li { margin-bottom: 3px; }
+    .cv-doc .cvd-list li:last-child { margin-bottom: 0; }
+
+    /* ترويسة رسمية تظهر في الطباعة فقط (لكل الأدوات عدا السيرة) */
+    .print-head { display: none; }
+
+    /* ==================== الطباعة: مخرجات رسمية احترافية لكل الأدوات ==================== */
+    /* ألوان ثابتة (قيم الوضع النهاري) حتى تطبع بنفس الشكل في الوضعين */
+    @media print {
+      html {
+        /* يجبر المتصفح على طباعة الألوان والخلفيات دون الحاجة لتفعيل "رسومات الخلفية" */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html, body {
+        background: #ffffff !important;
+        background-image: none !important;
+        color: #0f172a !important;
+      }
+      main {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      /* ضمان: لا يُطبع إلا محتوى الأداة نفسه (يمنع أي طبقة إعلانية محقونة) */
+      body > *:not(main),
+      html > *:not(body),
+      body :not(main):not(main *),
+      main > *:not(.print-head):not(.tool-section),
+      iframe {
+        display: none !important;
+      }
+      .tool-section {
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+      .grid-2 { grid-template-columns: 1fr !important; }
+
+      /* ——— ترويسة رسمية للمستند ——— */
+      .print-head {
+        display: block !important;
+        text-align: center;
+        margin: 0 0 14px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid var(--paper-accent);
+      }
+      .print-head strong {
+        display: block;
+        font-size: 13pt;
+        font-weight: 800;
+        color: var(--paper-accent);
+        line-height: 1.4;
+      }
+      .print-head span {
+        display: block;
+        margin-top: 2px;
+        font-size: 9pt;
+        color: var(--paper-sub);
+      }
+      body[data-print-tool="cv-tool"] .print-head,
+      main:has(.tool-section.active#cv-tool) .print-head { display: none !important; }
+
+      /* ——— عنوان الأداة ——— */
+      .section-header { margin-bottom: 10px; }
+      .section-header h2 { color: var(--paper-accent) !important; font-size: 15pt; }
+      .section-header h2::before { display: none !important; }
+      .section-tag {
+        background: var(--paper-soft) !important;
+        color: var(--paper-accent) !important;
+        border: 1px solid var(--paper-border) !important;
+        font-size: 9pt !important;
+      }
+      .tool-intro {
+        color: var(--paper-sub) !important;
+        font-size: 9.5pt !important;
+        margin-bottom: 12px !important;
+      }
+
+      /* ——— بطاقة النتيجة ——— */
+      .result-card {
+        background: var(--paper) !important;
+        border: 1px solid var(--paper-border) !important;
+        border-inline-start: 4px solid var(--paper-accent) !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+        padding: 14px 16px !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .result-total {
+        background: var(--paper-soft) !important;
+        background-image: none !important;
+        border: 1px solid var(--paper-border) !important;
+        border-inline-start: 4px solid var(--paper-accent) !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+        margin-bottom: 12px !important;
+      }
+      .result-total span.label { color: var(--paper-text) !important; font-size: 10pt !important; }
+      .result-total span.value { color: var(--paper-accent) !important; font-size: 19pt !important; }
+
+      /* ——— جدول التفاصيل ——— */
+      .breakdown-table {
+        font-size: 10.5pt !important;
+        margin-bottom: 12px !important;
+      }
+      .breakdown-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .breakdown-table td {
+        padding: 8px 10px !important;
+        border-bottom: 1px solid var(--paper-line) !important;
+        color: var(--paper-ink) !important;
+      }
+      .breakdown-table td:last-child {
+        color: var(--paper-accent) !important;
+        font-weight: 700 !important;
+        text-align: end !important;
+        white-space: nowrap !important;
+      }
+
+      .warn-note, .legal-note {
+        background: var(--paper-fill) !important;
+        border: 1px solid var(--paper-border) !important;
+        border-inline-start: 4px solid var(--paper-warn) !important;
+        color: var(--paper-text) !important;
+        border-radius: 6px !important;
+        font-size: 9pt !important;
+      }
+
+      /* ——— الخطاب: ورقة رسمية نظيفة ——— */
+      .letter-preview {
+        border: none !important;
+        background: var(--paper) !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        color: var(--paper-ink) !important;
+        font-size: 11.5pt !important;
+        line-height: 1.9 !important;
+        white-space: pre-wrap !important;
+      }
+
+      /* ——— السيرة الذاتية: ورقة رسمية متوافقة مع أنظمة التوظيف ——— */
+      .cv-layout { display: block !important; }
+      .cv-form, .cv-nav, .cv-quickbar, .ats-panel { display: none !important; }
+      .cv-side {
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      .cv-doc {
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: var(--paper) !important;
+        color: var(--paper-text) !important;
+        font-size: 11pt;
+        line-height: 1.5;
+        min-height: 0;
+      }
+      .cv-doc .cvd-head { border-bottom: 2px solid var(--paper-accent); }
+      .cv-doc .cvd-name { color: var(--paper-ink) !important; font-size: 20pt !important; }
+      .cv-doc .cvd-role { color: var(--paper-accent) !important; font-size: 11.5pt !important; }
+      .cv-doc .cvd-contact { color: var(--paper-sub) !important; font-size: 9.5pt !important; }
+      .cv-doc .cvd-sep { color: var(--paper-muted) !important; }
+      .cv-doc .cvd-h {
+        color: var(--paper-accent) !important;
+        font-size: 10.5pt !important;
+        border-bottom: 1px solid var(--paper-line) !important;
+      }
+      .cv-doc .cvd-job { color: var(--paper-ink) !important; }
+      .cv-doc .cvd-org { color: var(--paper-sub) !important; }
+      .cv-doc .cvd-date { color: var(--paper-muted) !important; }
+      .cv-doc .cvd-plain { color: var(--paper-text) !important; }
+      .cv-doc .cvd-item,
+      .cv-doc .cvd-item-head {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* ——— تذييل الصفحة بتوقيع المنصة (يُستثنى من السيرة الذاتية) ——— */
+      .tool-section.active::after {
+        content: "ksatools.github.io";
+        display: block;
+        margin-top: 18px;
+        padding-top: 6px;
+        border-top: 1px solid var(--paper-border);
+        font-size: 8.5pt;
+        color: var(--paper-muted);
+        text-align: center;
+      }
+      #cv-tool::after { content: none !important; }
+    }
+    @page { margin: 12mm 13mm; }
+
+  .guides-section {
+      max-width: 1080px;
+      margin: 10px auto 26px;
+      padding: 22px 18px 4px;
+    }
+    .guides-heading {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      color: var(--dark);
+    }
+    .guides-intro {
+      margin: 0 0 16px;
+      color: var(--slate);
+      font-size: 0.92rem;
+    }
+    .guides-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+      gap: 14px;
+    }
+    .guide-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .guide-title {
+      margin: 0;
+      font-size: 1.03rem;
+      line-height: 1.55;
+    }
+    .guide-title a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .guide-title a:hover { text-decoration: underline; }
+    .guide-excerpt {
+      margin: 0;
+      color: var(--slate);
+      font-size: 0.88rem;
+    }
+    .guide-meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .guide-alt {
+      margin-top: auto;
+      padding-top: 6px;
+      color: var(--primary);
+      font-size: 0.8rem;
+      text-decoration: none;
+    }
+    .guide-alt:hover { text-decoration: underline; }
+    .guides-library-cta { margin: -4px 0 16px; }
+    .guides-library-link { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:1px solid var(--border); border-radius:10px; color:var(--primary); font-weight:700; text-decoration:none; background:var(--card); }
+    .guides-library-link:hover { text-decoration:underline; }
+    .guides-status {
+      margin: 6px 0 18px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="top-bar">
+      <div class="header-badge" data-i18n="badge">أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي</div>
+      <div class="top-actions">
+        <button class="theme-toggle-btn" id="theme-btn" aria-label="تبديل المظهر">🌙</button>
+        <button class="lang-switch-btn" id="lang-btn">🌐 English</button>
+      </div>
+    </div>
+    <h1 data-i18n="siteTitle">منصة خدمات الموظف والمقيم في السعودية</h1>
+    <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — كل بياناتك تُعالج في متصفحك فقط</p>
+  </header>
+
+  <!-- ====== Adsterra: Banner 728x90 / Native — الصق الكود داخل هذا الحاوي ====== -->
+  <div class="ad-slot" id="ad-top" style="display:none;">
+    <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
+    <!-- PASTE ADSTERRA TOP BANNER SCRIPT HERE -->
+    <strong data-i18n="adTopTitle">مساحة إعلانية علوية (Banner 728x90 / Native)</strong>
+  </div>
+
+  <nav class="nav-tabs" role="tablist" aria-label="أدوات المنصة" id="main-tabs">
+    <button class="tab-btn" role="tab" id="tab-eos" aria-selected="true" aria-controls="eos-tool" data-tool="eos-tool">
+      <span class="tab-num" data-i18n="t1Num">الأداة 1</span>
+      <span data-i18n="t1Title">حاسبة نهاية الخدمة والإجازات</span>
+    </button>
+    <button class="tab-btn" role="tab" id="tab-salary" aria-selected="false" aria-controls="salary-tool" data-tool="salary-tool" tabindex="-1">
+      <span class="tab-num" data-i18n="t2Num">الأداة 2</span>
+      <span data-i18n="t2Title">حاسبة الراتب الصافي والتمويل</span>
+    </button>
+    <button class="tab-btn" role="tab" id="tab-letter" aria-selected="false" aria-controls="letter-tool" data-tool="letter-tool" tabindex="-1">
+      <span class="tab-num" data-i18n="t3Num">الأداة 3</span>
+      <span data-i18n="t3Title">صانع الخطابات الرسمية (عربي/EN)</span>
+    </button>
+    <button class="tab-btn" role="tab" id="tab-cv" aria-selected="false" aria-controls="cv-tool" data-tool="cv-tool" tabindex="-1">
+      <span class="tab-num" data-i18n="t4Num">الأداة 4</span>
+      <span data-i18n="t4Title">منسق السيرة الذاتية</span>
+    </button>
+  </nav>
+
+  <main>
+    <!-- ترويسة رسمية تظهر في الطباعة فقط (تُخفى في السيرة الذاتية) -->
+    <div class="print-head" aria-hidden="true">
+      <strong data-i18n="siteTitle">منصة خدمات الموظف والمقيم في السعودية</strong>
+      <span data-i18n="printHeadSub">تقرير استرشادي صادر عن منصة KSA Tools</span>
+      <span id="print-head-date"></span>
+    </div>
+    <!-- ==================== الأداة 1: نهاية الخدمة ==================== -->
+    <section id="eos-tool" class="tool-section active" role="tabpanel" aria-labelledby="tab-eos">
+      <div class="section-header">
+        <h2 data-i18n="eosHeading">حاسبة مكافأة نهاية الخدمة ومستحقات الإجازات</h2>
+        <span class="section-tag" data-i18n="eosTag">المواد 84 و85 و87 من نظام العمل السعودي</span>
+      </div>
+      <p class="tool-intro" data-i18n="eosIntro">أدخل آخر أجر معتمد ومدة الخدمة لحساب مكافأة نهاية الخدمة وفق المادة 84، ونسب الاستحقاق عند الاستقالة وفق المادة 85، إضافة إلى تعويض رصيد الإجازات غير المستنفدة. تحقق من سبب انتهاء العلاقة والشروط النظامية قبل الاعتماد على النتيجة.</p>
+
+      <div class="grid-2">
+        <div class="no-print">
+          <div class="form-group">
+            <label for="eos-reason" data-i18n="eosReasonLabel">سبب انتهاء العلاقة العمالية</label>
+            <select id="eos-reason" data-persist>
+              <option value="expiry" data-i18n="eosReason1">انتهاء مدة العقد أو اتفاق الطرفين المستوفي للشروط (استحقاق كامل)</option>
+              <option value="termination" data-i18n="eosReason2">إنهاء العقد من قِبل صاحب العمل (استحقاق كامل للمكافأة وفق الأصل العام)</option>
+              <option value="resignation" data-i18n="eosReason3">استقالة العامل (تُطبق نسب المادة 85)</option>
+              <option value="force" data-i18n="eosReason4">ترك العمل بسبب قوة قاهرة خارجة عن إرادة العامل (المادة 87)</option>
+              <option value="marriage" data-i18n="eosReason6">العاملة: إنهاء العقد خلال 6 أشهر من عقد الزواج (المادة 87)</option>
+              <option value="childbirth" data-i18n="eosReason7">العاملة: إنهاء العقد خلال 3 أشهر من الوضع/الولادة (المادة 87)</option>
+              <option value="art81" data-i18n="eosReason8">ترك العمل وفق المادة 81 مع تحقق إحدى حالاتها (الحقوق النظامية)</option>
+              <option value="art80" data-i18n="eosReason5">إنهاء وفق المادة 80 بعد تحقق شروطها النظامية (لا مكافأة)</option>
+            </select>
+            <small class="field-hint" data-i18n="eosReasonHint">المادة 87: القوة القاهرة يجب أن تكون خارجة عن إرادة العامل. خيارا الزواج والوضع خاصان بالعاملة وضمن المدد النظامية. لا تختر المادة 81 أو 80 إلا إذا انطبقت شروطها فعلًا.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="eos-salary" data-i18n="eosSalaryLabel">آخر أجر شهري فعلي معتمد لحساب مكافأة نهاية الخدمة</label>
+            <input type="number" id="eos-salary" data-persist value="6500" min="0" step="100" inputmode="decimal" />
+            <small class="field-hint" data-i18n="eosSalaryHint">استخدم آخر أجر معتمد للمكافأة. قد تُستبعد العمولات أو النسب المتغيرة وفق اتفاق مستوفٍ للمادة 86؛ لا تعتمد على الأساسي والبدلات الثابتة وحدهما دون مراجعة حالتك.</small>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="eosDurationLabel">مدة الخدمة (سنوات / أشهر / أيام)</label>
+            <div class="inline-inputs">
+              <div>
+                <input type="number" id="eos-years" data-persist value="4" min="0" max="50" inputmode="numeric" aria-label="سنوات" />
+                <small class="field-hint" data-i18n="lblYears">سنوات</small>
+              </div>
+              <div>
+                <input type="number" id="eos-months" data-persist value="6" min="0" max="11" inputmode="numeric" aria-label="أشهر" />
+                <small class="field-hint" data-i18n="lblMonths">أشهر</small>
+              </div>
+              <div>
+                <input type="number" id="eos-days" data-persist value="0" min="0" max="30" inputmode="numeric" aria-label="أيام" />
+                <small class="field-hint" data-i18n="lblDays">أيام</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="eos-leave-days" data-i18n="eosLeaveLabel">رصيد أيام الإجازة السنوية غير المستنفدة</label>
+            <input type="number" id="eos-leave-days" data-persist value="15" min="0" max="365" inputmode="numeric" />
+          </div>
+
+          <div class="form-group">
+            <label for="eos-leave-basis" data-i18n="eosLeaveBasisLabel">أساس احتساب أجر اليوم الواحد للإجازة</label>
+            <select id="eos-leave-basis" data-persist>
+              <option value="full" data-i18n="eosBasisFull">الأجر الكامل (الأساسي + البدلات الثابتة)</option>
+              <option value="basic" data-i18n="eosBasisBasic">الأساسي فقط</option>
+            </select>
+            <small class="field-hint" data-i18n="eosBasisHint">راجع عقدك أو اسأل الموارد البشرية لمعرفة الأساس المعتمد في منشأتك</small>
+          </div>
+          <div class="form-group" id="eos-basic-group" hidden>
+            <label for="eos-basic" data-i18n="eosBasicLabel">الراتب الأساسي الشهري (يُستخدم لحساب أجر الإجازة)</label>
+            <input type="number" id="eos-basic" data-persist min="0" step="100" inputmode="decimal" />
+          </div>
+          <button class="btn-primary" id="eos-calc-btn" data-i18n="eosCalcBtn">احسب المستحقات النهائية الآن</button>
+        </div>
+
+        <div class="result-card" aria-live="polite">
+          <div class="result-total">
+            <span class="label" data-i18n="eosTotalLabel">إجمالي التصفية النهائية المستحقة (نهاية الخدمة + الإجازات)</span>
+            <span class="value" id="eos-total-val">—</span>
+          </div>
+
+          <table class="breakdown-table">
+            <tbody>
+              <tr><td data-i18n="eosRow1">إجمالي مدة الخدمة بالسنوات</td><td id="eos-duration-out">—</td></tr>
+              <tr><td data-i18n="eosRow2">مكافأة السنوات الخمس الأولى (نصف راتب لكل سنة)</td><td id="eos-first5-out">—</td></tr>
+              <tr><td data-i18n="eosRow3">مكافأة ما بعد 5 سنوات (راتب كامل لكل سنة)</td><td id="eos-after5-out">—</td></tr>
+              <tr><td data-i18n="eosRow4">نسبة الاستحقاق النظامية حسب سبب الترك</td><td id="eos-ratio-out">—</td></tr>
+              <tr><td data-i18n="eosRow5">صافي مكافأة نهاية الخدمة</td><td id="eos-net-gratuity">—</td></tr>
+              <tr><td data-i18n="eosRow6">تعويض رصيد الإجازات غير المستنفدة</td><td id="eos-leave-out">—</td></tr>
+            </tbody>
+          </table>
+
+          <div class="legal-note" data-i18n="eosNote">الحساب يتم على أساس السنوات الفعلية بكسرها وفق المواد 84 و85 و87 من نظام العمل السعودي. هذا تقدير استرشادي وليس حكماً قضائياً.</div>
+
+          <div class="action-row no-print">
+            <button class="btn-secondary" id="eos-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
+            <button class="btn-secondary" id="eos-share" data-i18n="btnShare">مشاركة النتيجة</button>
+            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== الأداة 2: الراتب والتمويل ==================== -->
+    <section id="salary-tool" class="tool-section" role="tabpanel" aria-labelledby="tab-salary">
+      <div class="section-header">
+        <h2 data-i18n="salHeading">حاسبة الراتب الصافي والتأمينات والحد الأقصى للتمويل</h2>
+        <span class="section-tag" data-i18n="salTag">GOSI بالنظامين القديم والجديد • حد الاستقطاع الثلث</span>
+      </div>
+      <p class="tool-intro" data-i18n="salIntro">تحسب الاستقطاعات وفق نظامي التأمينات الاجتماعية المتعاملين بالتوازي: القديم (9.75% للموظف) للمسجلين قبل 3 يوليو 2024، والجديد (10.75% ابتداءً من يوليو 2026) لمن سُجّل لأول مرة بعد ذلك التاريخ، مع القدرة التمويلية وفق حد الاستقطاع النظامي.</p>
+
+      <div class="grid-2">
+        <div class="no-print">
+          <div class="form-group">
+            <label for="sal-category" data-i18n="salCatLabel">فئة الموظف ونظام التأمينات</label>
+            <select id="sal-category" data-persist>
+              <option value="expat" data-i18n="salCatRes">مقيم غير سعودي (استقطاع الموظف 0%)</option>
+              <option value="legacy" data-i18n="salCatOld">سعودي — نظام قديم (مسجّل قبل 3 يوليو 2024) 9.75%</option>
+              <option value="new2026" data-i18n="salCatNew">سعودي — نظام جديد (مسجّل من 3 يوليو 2024 فصاعداً) 10.75%</option>
+            </select>
+            <small class="field-hint" data-i18n="salCatHint">تحقق من نظامك عبر تاريخ أول تسجيل في التأمينات (gosi.gov.sa) — الانتقال لصاحب عمل جديد لا يغيّر نظامك</small>
+          </div>
+
+          <div class="form-group">
+            <label for="sal-basic" data-i18n="salBasicLabel">الراتب الأساسي الشهري</label>
+            <input type="number" id="sal-basic" data-persist value="5000" min="0" step="100" inputmode="decimal" />
+          </div>
+
+          <div class="form-group">
+            <label for="sal-housing" data-i18n="salHousingLabel">بدل السكن الشهري (يُحتسب ضمن أجر التأمينات)</label>
+            <input type="number" id="sal-housing" data-persist placeholder="1250" min="0" step="50" inputmode="decimal" />
+            <small class="field-hint" data-i18n="salHousingHint">اتركه فارغاً إذا كان بدل السكن 25% من الأساسي ضمن العقد</small>
+          </div>
+
+          <div class="form-group">
+            <label for="sal-transport" data-i18n="salTransLabel">بدل النقل وبدلات أخرى (لا تدخل في التأمينات)</label>
+            <input type="number" id="sal-transport" data-persist value="500" min="0" step="50" inputmode="decimal" />
+          </div>
+
+          <div class="form-group">
+            <label for="sal-obligations" data-i18n="salObligLabel">الأقساط والالتزامات الشهرية الحالية</label>
+            <input type="number" id="sal-obligations" data-persist value="500" min="0" step="50" inputmode="decimal" />
+          </div>
+
+          <button class="btn-primary" id="sal-calc-btn" data-i18n="salCalcBtn">احسب صافي الراتب والقدرة التمويلية</button>
+        </div>
+
+        <div class="result-card" aria-live="polite">
+          <div class="result-total">
+            <span class="label" data-i18n="salTotalLabel">الراتب الصافي المودع شهرياً</span>
+            <span class="value" id="sal-net-val">—</span>
+          </div>
+
+          <table class="breakdown-table">
+            <tbody>
+              <tr><td data-i18n="salRow1">إجمالي الراتب بالبدلات</td><td id="sal-gross-out">—</td></tr>
+              <tr><td data-i18n="salRow2">خصم التأمينات على الموظف (GOSI)</td><td id="sal-gosi-out">—</td></tr>
+              <tr><td data-i18n="salRowEr">حصة صاحب العمل في التأمينات (لا تُخصم من راتبك)</td><td id="sal-gosi-er-out">—</td></tr>
+              <tr><td data-i18n="salRow3">الحد الأقصى للاستقطاع الشهري (الثُّلث)</td><td id="sal-max-deduct">—</td></tr>
+              <tr><td data-i18n="salRow4">الرصيد المتاح لقسط تمويل جديد</td><td id="sal-avail-installment">—</td></tr>
+              <tr><td data-i18n="salRow5">المتبقي للمعيشة بعد الالتزامات</td><td id="sal-disposable-out">—</td></tr>
+            </tbody>
+          </table>
+
+          <div class="warn-note" id="sal-cap-warn" hidden data-i18n="salCapWarn">تجاوز (الأساسي + السكن) سقف التأمينات 45,000 ر.س — تم الحساب على السقف فقط.</div>
+          <div class="legal-note" data-i18n="salNote">حد الاستقطاع الثلث يُطبق عادة على صافي الراتب بعد التأمينات، وقد تختلف شروط التمويل حسب نوع المنتج ومتطلبات البنك المركزي. آخر تحديث للنسب: يوليو 2026.</div>
+
+          <div class="action-row no-print">
+            <button class="btn-secondary" id="sal-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
+            <button class="btn-secondary" id="sal-share" data-i18n="btnShare">مشاركة النتيجة</button>
+            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== الأداة 3: الخطابات ==================== -->
+    <section id="letter-tool" class="tool-section" role="tabpanel" aria-labelledby="tab-letter">
+      <div class="section-header">
+        <h2 data-i18n="letHeading">صانع الخطابات الرسمية والمعاريض (عربي / إنجليزي)</h2>
+        <span class="section-tag" data-i18n="letTag">6 نماذج جاهزة بالتاريخين الميلادي والهجري</span>
+      </div>
+      <p class="tool-intro" data-i18n="letIntro">اختر النموذج واملأ الحقول — الخطاب يُصاغ فوراً بصيغة رسمية قابلة للنسخ أو الطباعة، مع التاريخ الميلادي والهجري في النسخة العربية.</p>
+
+      <div class="grid-2">
+        <div class="no-print">
+          <div class="form-group">
+            <label for="let-type" data-i18n="letTypeLabel">نوع الخطاب المطلوب</label>
+            <select id="let-type" data-persist>
+              <option value="resign" data-i18n="letOpt1">خطاب استقالة وطلب شهادة خبرة وإخلاء طرف</option>
+              <option value="raise" data-i18n="letOpt2">طلب زيادة راتب أو تعديل مسمى وظيفي</option>
+              <option value="leave" data-i18n="letOpt3">طلب إجازة سنوية / اضطرارية</option>
+              <option value="nonrenewal" data-i18n="letOpt4">إشعار عدم رغبة في تجديد العقد</option>
+              <option value="salarycert" data-i18n="letOpt5">طلب تعريف بالراتب (Salary Certificate)</option>
+              <option value="petition" data-i18n="letOpt6">معروض / طلب إداري رسمي عام</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="let-doc-lang" data-i18n="letLangLabel">لغة صياغة الخطاب</label>
+            <select id="let-doc-lang" data-persist>
+              <option value="ar">اللغة العربية</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="let-recipient" data-i18n="letRecLabel">الجهة أو المسؤول الموجه إليه الخطاب</label>
+            <input type="text" id="let-recipient" data-persist data-i18n-ph="letRecPh" placeholder="مثال: سعادة مدير إدارة الموارد البشرية" />
+          </div>
+
+          <div class="form-group">
+            <label for="let-name" data-i18n="letNameLabel">اسم الموظف الكامل</label>
+            <input type="text" id="let-name" data-persist data-i18n-ph="letNamePh" placeholder="مثال: محمد بن أحمد العتيبي" />
+          </div>
+
+          <div class="form-group">
+            <label for="let-id" data-i18n="letIdLabel">المسمى الوظيفي ورقم الهوية/الإقامة</label>
+            <input type="text" id="let-id" data-persist data-i18n-ph="letIdPh" placeholder="مثال: أخصائي مبيعات — إقامة رقم: 2xxxxxxxx" />
+          </div>
+
+          <div class="inline-2">
+            <div class="form-group">
+              <label for="let-date" data-i18n="letDateLabel">تاريخ سريان الطلب</label>
+              <input type="date" id="let-date" data-persist />
+            </div>
+            <div class="form-group">
+              <label for="let-duration" data-i18n="letDurLabel">المدة (للإجازة / فترة الإشعار)</label>
+              <input type="text" id="let-duration" data-persist data-i18n-ph="letDurPh" placeholder="مثال: 15 يوماً / شهران" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="let-reason" data-i18n="letReasonLabel">السبب أو تفاصيل إضافية</label>
+            <input type="text" id="let-reason" data-persist data-i18n-ph="letReasonPh" placeholder="مثال: ظروف عائلية / طلب موجه لمصرف الراجحي" />
+          </div>
+        </div>
+
+        <div>
+          <div class="letter-preview" id="letter-output" aria-live="polite"></div>
+          <div class="action-row no-print">
+            <button class="btn-primary" id="let-copy" data-i18n="btnCopy">نسخ النص</button>
+            <button class="btn-secondary" id="let-share" data-i18n="btnShareLetter">مشاركة الخطاب</button>
+            <button class="btn-secondary" id="let-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== الأداة 4: منسق السيرة الذاتية ==================== -->
+    <section id="cv-tool" class="tool-section" role="tabpanel" aria-labelledby="tab-cv">
+      <div class="section-header no-print">
+        <h2 data-i18n="cvHeading">منسق السيرة الذاتية للسوق السعودي</h2>
+        <span class="section-tag" data-i18n="cvTag">منسّق على خطوات + تقييم ATS فوري</span>
+      </div>
+      <p class="tool-intro no-print" data-i18n="cvIntro">املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت — وكل بياناتك تبقى في متصفحك.</p>
+
+      <div class="cv-quickbar no-print">
+        <div class="cv-quick-actions">
+          <span class="cv-quickbar-label" data-i18n="cvQuickLabel">بداية سريعة:</span>
+          <button type="button" class="cv-mini-btn" id="cv-demo" data-i18n="cvDemoBtn">تعبئة مثال جاهز</button>
+          <button type="button" class="cv-mini-btn" id="cv-reset" data-i18n="cvResetBtn">مسح الكل</button>
+        </div>
+        <label class="cv-lang-pick" for="cv-doc-lang">
+          <span data-i18n="cvDocLangLabel">لغة السيرة</span>
+          <select id="cv-doc-lang" data-persist>
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="cv-nav no-print" id="cv-nav">
+        <button type="button" class="cv-nav-chip active" data-goto="1">
+          <span class="cv-nav-num">1</span><span data-i18n="cvStep1">البيانات الشخصية</span>
+        </button>
+        <button type="button" class="cv-nav-chip" data-goto="2">
+          <span class="cv-nav-num">2</span><span data-i18n="cvStep2">الملخص المهني</span>
+        </button>
+        <button type="button" class="cv-nav-chip" data-goto="3">
+          <span class="cv-nav-num">3</span><span data-i18n="cvStep3">الخبرات العملية</span>
+        </button>
+        <button type="button" class="cv-nav-chip" data-goto="4">
+          <span class="cv-nav-num">4</span><span data-i18n="cvStep4">التعليم والمهارات</span>
+        </button>
+      </div>
+
+      <div class="cv-layout">
+        <form class="cv-form no-print" id="cv-form" novalidate>
+          <input type="hidden" id="cv-data" data-persist />
+
+          <!-- ——— الخطوة 1: البيانات الشخصية ——— -->
+          <section class="cv-acc open" data-step="1">
+            <button type="button" class="cv-acc-head" aria-expanded="true" aria-controls="cv-body-1">
+              <span class="cv-acc-num">1</span>
+              <span class="cv-acc-titles">
+                <strong data-i18n="cvStep1">البيانات الشخصية</strong>
+                <small data-i18n="cvStep1Hint">الاسم والمسمى المستهدف ووسائل التواصل</small>
+              </span>
+              <span class="cv-acc-status" data-status></span>
+              <span class="cv-acc-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="cv-acc-body" id="cv-body-1">
+              <div class="cv-grid">
+                <div class="form-group cv-span2">
+                  <label for="cv-f-name" data-i18n="cvFName">الاسم الكامل</label>
+                  <input type="text" id="cv-f-name" autocomplete="name" data-i18n-ph="cvFNamePh" placeholder="مثال: محمد أحمد العتيبي" />
+                </div>
+                <div class="form-group cv-span2">
+                  <label for="cv-f-title" data-i18n="cvFTitle">المسمى الوظيفي المستهدف</label>
+                  <input type="text" id="cv-f-title" data-i18n-ph="cvFTitlePh" placeholder="مثال: محاسب قانوني — ZATCA" />
+                </div>
+                <div class="form-group">
+                  <label for="cv-f-city" data-i18n="cvFCity">المدينة</label>
+                  <input type="text" id="cv-f-city" data-i18n-ph="cvFCityPh" placeholder="مثال: الرياض" />
+                </div>
+                <div class="form-group">
+                  <label for="cv-f-phone" data-i18n="cvFPhone">رقم الجوال</label>
+                  <input type="tel" id="cv-f-phone" dir="ltr" inputmode="tel" autocomplete="tel" data-i18n-ph="cvFPhonePh" placeholder="+966 55 123 4567" />
+                </div>
+                <div class="form-group cv-span2">
+                  <label for="cv-f-email" data-i18n="cvFEmail">البريد الإلكتروني</label>
+                  <input type="email" id="cv-f-email" dir="ltr" inputmode="email" autocomplete="email" data-i18n-ph="cvFEmailPh" placeholder="name@example.com" />
+                </div>
+                <div class="form-group cv-span2">
+                  <label for="cv-f-status" data-i18n="cvFStatus">الجنسية / حالة الإقامة</label>
+                  <select id="cv-f-status">
+                    <option value="" data-i18n="cvStNone">— اختر —</option>
+                    <option value="saudi" data-i18n="cvStSaudi">سعودي / سعودية</option>
+                    <option value="transferable" data-i18n="cvStTransferable">مقيم — إقامة قابلة للنقل</option>
+                    <option value="sponsored" data-i18n="cvStSponsored">مقيم — بحاجة إلى نقل كفالة</option>
+                    <option value="other" data-i18n="cvStOther">أخرى (خليجي / زائر / بدون إقامة)</option>
+                  </select>
+                  <small class="field-hint" data-i18n="cvFStatusHint">تظهر في سطر بيانات التواصل بأعلى السيرة.</small>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ——— الخطوة 2: الملخص المهني ——— -->
+          <section class="cv-acc" data-step="2">
+            <button type="button" class="cv-acc-head" aria-expanded="false" aria-controls="cv-body-2">
+              <span class="cv-acc-num">2</span>
+              <span class="cv-acc-titles">
+                <strong data-i18n="cvStep2">الملخص المهني</strong>
+                <small data-i18n="cvStep2Hint">٣ إلى ٤ أسطر تُبرز خبرتك وأهم رقم حققته</small>
+              </span>
+              <span class="cv-acc-status" data-status></span>
+              <span class="cv-acc-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="cv-acc-body" id="cv-body-2">
+              <div class="form-group">
+                <label for="cv-f-summary" data-i18n="cvSumLabel">الملخص المهني</label>
+                <textarea id="cv-f-summary" rows="4" data-i18n-ph="cvSumPh" placeholder="اكتب نبذة مركزة: سنوات الخبرة + التخصص + أهم إنجاز رقمي…"></textarea>
+                <div class="cv-hintrow">
+                  <small class="field-hint" id="cv-sum-count"></small>
+                  <button type="button" class="cv-mini-btn" id="cv-auto-summary" data-i18n="cvAutoSummary">صياغة تلقائية</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ——— الخطوة 3: الخبرات العملية ——— -->
+          <section class="cv-acc" data-step="3">
+            <button type="button" class="cv-acc-head" aria-expanded="false" aria-controls="cv-body-3">
+              <span class="cv-acc-num">3</span>
+              <span class="cv-acc-titles">
+                <strong data-i18n="cvStep3">الخبرات العملية</strong>
+                <small data-i18n="cvStep3Hint">بطاقة مستقلة لكل وظيفة — الأحدث أولاً</small>
+              </span>
+              <span class="cv-acc-status" data-status></span>
+              <span class="cv-acc-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="cv-acc-body" id="cv-body-3">
+              <div class="cv-rep-list" id="cv-exp-list"></div>
+              <button type="button" class="cv-add-btn" id="cv-exp-add">＋ <span data-i18n="cvAddExp">إضافة خبرة</span></button>
+            </div>
+          </section>
+
+          <!-- ——— الخطوة 4: التعليم والمهارات ——— -->
+          <section class="cv-acc" data-step="4">
+            <button type="button" class="cv-acc-head" aria-expanded="false" aria-controls="cv-body-4">
+              <span class="cv-acc-num">4</span>
+              <span class="cv-acc-titles">
+                <strong data-i18n="cvStep4">التعليم والمهارات</strong>
+                <small data-i18n="cvStep4Hint">المؤهل واللغات والمهارات والشهادات</small>
+              </span>
+              <span class="cv-acc-status" data-status></span>
+              <span class="cv-acc-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="cv-acc-body" id="cv-body-4">
+              <div class="cv-subhead" data-i18n="cvSubEdu">المؤهل العلمي</div>
+              <div class="cv-rep-list" id="cv-edu-list"></div>
+              <button type="button" class="cv-add-btn" id="cv-edu-add">＋ <span data-i18n="cvAddEdu">إضافة مؤهل</span></button>
+
+              <div class="cv-subhead" style="margin-top:16px;" data-i18n="cvSubSkills">المهارات</div>
+              <div class="form-group">
+                <label for="cv-f-skills" data-i18n="cvSkillsLabel">المهارات (اكتب ثم اضغط فاصلة ،)</label>
+                <input type="text" id="cv-f-skills" data-i18n-ph="cvSkillsPh" placeholder="مثال: ZATCA, Excel متقدم, SAP, منصة قوى" />
+                <small class="field-hint" data-i18n="cvTagHint">افصل بين العناصر بفاصلة ،</small>
+                <div class="cv-tags" id="cv-skills-tags"></div>
+              </div>
+
+              <div class="form-group">
+                <label for="cv-f-certs" data-i18n="cvCertsLabel">الشهادات والدورات (اكتب ثم اضغط فاصلة ،)</label>
+                <input type="text" id="cv-f-certs" data-i18n-ph="cvCertsPh" placeholder="مثال: SOCPA, Excel Advanced, دورة السلامة" />
+                <small class="field-hint" data-i18n="cvTagHint">افصل بين العناصر بفاصلة ،</small>
+                <div class="cv-tags" id="cv-certs-tags"></div>
+              </div>
+
+              <div class="form-group">
+                <label for="cv-f-langs" data-i18n="cvLangsLabel">اللغات ومستواها (اكتب ثم اضغط فاصلة ،)</label>
+                <input type="text" id="cv-f-langs" data-i18n-ph="cvLangsPh" placeholder="مثال: العربية (اللغة الأم), الإنجليزية (جيد جداً)" />
+                <small class="field-hint" data-i18n="cvTagHint">افصل بين العناصر بفاصلة ،</small>
+                <div class="cv-tags" id="cv-langs-tags"></div>
+              </div>
+            </div>
+          </section>
+        </form>
+
+        <aside class="cv-side">
+          <div class="result-card ats-panel" aria-live="polite">
+            <div class="cv-score-head">
+              <span data-i18n="cvScoreTitle">جاهزية السيرة الذاتية:</span>
+              <span id="ats-score-text">0%</span>
+            </div>
+            <div class="ats-meter"><div class="ats-fill" id="ats-bar"></div></div>
+            <p id="ats-feedback" style="font-size:0.86rem; color:var(--slate);"></p>
+            <ul class="ats-checks" id="ats-checks"></ul>
+          </div>
+
+          <div class="cv-doc" id="cv-doc" aria-live="polite"></div>
+          <div class="letter-preview" id="cv-output" hidden></div>
+
+          <div class="action-row no-print">
+            <button class="btn-primary" id="cv-copy" data-i18n="btnCopy">نسخ النص</button>
+            <button class="btn-secondary" id="cv-share" data-i18n="btnShareCv">مشاركة السيرة</button>
+            <button class="btn-secondary" id="cv-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+<section class="guides-section" id="guides" aria-labelledby="guides-heading">
+    <h2 class="guides-heading" id="guides-heading" data-i18n="guidesHeading">أحدث الأدلة العمالية في السعودية</h2>
+    <p class="guides-intro" data-i18n="guidesIntro">أدلة ثنائية اللغة عن نظام العمل السعودي والتأمينات والسيرة الذاتية، تُحدَّث دورياً.</p>
+    <p class="guides-library-cta"><a class="guides-library-link" href="/articles/" data-i18n="guidesAllLink">عرض جميع المقالات والأدلة</a></p>
+    <div id="guides-list" aria-live="polite"></div>
+  </section>
+
+  <!-- ====== Adsterra: Native Banner مفعل ====== -->
+  <div class="ad-slot ad-native" id="ad-bottom" style="border-style:solid; min-height:auto; padding:18px 12px 12px;">
+    <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
+    <script async="async" data-cfasync="false" src="https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"></script>
+    <div id="container-7af3b8325dba6708da88eed5e517ec89"></div>
+  </div>
+
+  <div class="disclaimer-banner">
+    <div class="inner" data-i18n="disclaimer">
+      ⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات في هذه المنصة تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة (وزارة الموارد البشرية، التأمينات الاجتماعية، البنك المركزي). لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.
+    </div>
+  </div>
+
+  <section class="seo-faq">
+    <div class="faq-card">
+      <h3 data-i18n="faqHeading">الأسئلة الشائعة | Frequently Asked Questions</h3>
+      <div class="faq-item">
+        <h4 data-i18n="faqQ1">كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?</h4>
+        <p data-i18n="faqA1">بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.</p>
+      </div>
+      <div class="faq-item">
+        <h4 data-i18n="faqQ2">ما نسبة استقطاع التأمينات للسعودي في 2026؟ / What is the 2026 Saudi GOSI rate?</h4>
+        <p data-i18n="faqA2">9.75% للنظام القديم (أول تسجيل قبل 3 يوليو 2024)، و10.75% للنظام الجديد ابتداءً من يوليو 2026 (مسجّلون من 3 يوليو 2024 فصاعداً)، على الأساسي + السكن بسقف 45,000 ر.س. المقيم غير السعودي: 0%.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><span data-i18n="footerText">© 2026 منصة خدمات الموظف والمقيم في السعودية — أدوات مجانية ثنائية اللغة</span></p>
+    <nav class="footer-links" aria-label="روابط">
+      <a href="privacy.html" data-i18n="footerPrivacy">سياسة الخصوصية</a>
+      <span aria-hidden="true">•</span>
+      <a href="privacy.html#ads" data-i18n="footerAdDisclosure">الإعلانات وملفات تعريف الارتباط</a>
+      <span aria-hidden="true">•</span>
+      <a href="#eos-tool" data-i18n="footerTools">الأدوات</a>
+    </nav>
+  </footer>
+
+  <!-- ==================== لوحة مشاركة النتيجة ==================== -->
+  <div class="share-modal" id="share-modal" hidden>
+    <div class="share-sheet" role="dialog" aria-modal="true" aria-labelledby="share-title">
+      <div class="share-head">
+        <h3 id="share-title" data-i18n="shareSheetTitle">مشاركة النتيجة</h3>
+        <button type="button" class="share-close" id="share-close" aria-label="إغلاق | Close">✕</button>
+      </div>
+      <p class="share-sub" data-i18n="shareSheetSub">اختر طريقة المشاركة — النتيجة كاملة مع رابط يعيد فتح الأرقام نفسها جاهزة.</p>
+
+      <div class="share-targets" id="share-targets">
+        <button type="button" class="share-target" data-share="native">
+          <span class="share-ico" aria-hidden="true">📤</span>
+          <span data-i18n="shareNative">مشاركة…</span>
+        </button>
+        <button type="button" class="share-target" data-share="whatsapp">
+          <span class="share-ico" aria-hidden="true">💬</span>
+          <span>WhatsApp</span>
+        </button>
+        <button type="button" class="share-target" data-share="telegram">
+          <span class="share-ico" aria-hidden="true">✈️</span>
+          <span>Telegram</span>
+        </button>
+        <button type="button" class="share-target" data-share="x">
+          <span class="share-ico" aria-hidden="true">𝕏</span>
+          <span>X</span>
+        </button>
+        <button type="button" class="share-target" data-share="copy">
+          <span class="share-ico" aria-hidden="true">📋</span>
+          <span data-i18n="shareCopyText">نسخ النص</span>
+        </button>
+        <button type="button" class="share-target" data-share="link">
+          <span class="share-ico" aria-hidden="true">🔗</span>
+          <span data-i18n="shareCopyLink">نسخ الرابط</span>
+        </button>
+      </div>
+
+      <pre class="share-preview" id="share-preview" dir="auto"></pre>
+      <p class="share-note" data-i18n="shareNote">لا تُرسل أي بيانات إلى أي خادم — المشاركة تتم من جهازك مباشرة.</p>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+  'use strict';
+  const store = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  /* ==================== ثوابت قابلة للتحديث المركزي ==================== */
+  const CONFIG = {
+    GOSI_CAP: 45000,
+    DBR: 1 / 3,
+    RATES_UPDATED: '2026-07',
+    GOSI: {
+      expat:   { emp: 0,      er: 0.02   },
+      legacy:  { emp: 0.0975, er: 0.1175 },
+      new2026: { emp: 0.1075, er: 0.1275 }
+    }
+  };
+    /* النظام الجديد: حصة المعاشات 9% + 0.5% كل يوليو منذ 2025 حتى 11% (2028) */
+  function gosiScheme(cat, d = new Date()) {
+    if (cat !== 'new2026') return CONFIG.GOSI[cat] || CONFIG.GOSI.expat;
+    const steps = Math.min(4, Math.max(0, d.getFullYear() - 2025 + (d.getMonth() >= 6 ? 1 : 0)));
+    const annuity = 0.09 + 0.005 * steps;
+    return { emp: annuity + 0.0075, er: annuity + 0.0075 + 0.02 };
+  }
+
+  /* ==================== اللغة ==================== */
+  const urlLang = new URLSearchParams(location.search).get('lang');
+  let currentLang = (urlLang === 'ar' || urlLang === 'en') ? urlLang
+                  : (store.get('seh_lang') || 'ar');
+
+  const i18n = {
+    ar: {
+      docTitle: 'منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • سيرة ذاتية',
+      metaDesc: 'منصة خدمات الموظف والمقيم في السعودية (KSA Tools): حاسبة مكافأة نهاية الخدمة، حاسبة الراتب والتأمينات 2026، صانع الخطابات الرسمية، وفاحص السيرة الذاتية مجاناً باللغتين العربية والإنجليزية.',
+      langBtn: '🌐 English',
+      badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
+      siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
+      printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
+      siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
+      adLabel: 'إعلان | Advertisement',
+      adTopTitle: 'مساحة إعلانية علوية (Banner 728x90 / Native)',
+      adBotTitle: 'مساحة إعلانية سفلية (Native Banner)',
+      t1Num: 'الأداة 1', t1Title: 'حاسبة نهاية الخدمة والإجازات',
+      t2Num: 'الأداة 2', t2Title: 'حاسبة الراتب الصافي والتمويل',
+      t3Num: 'الأداة 3', t3Title: 'صانع الخطابات الرسمية (عربي/EN)',
+      t4Num: 'الأداة 4', t4Title: 'منسق السيرة الذاتية',
+      eosHeading: 'حاسبة مكافأة نهاية الخدمة ومستحقات الإجازات',
+      eosTag: 'المواد 84 و85 و87 من نظام العمل السعودي',
+      eosIntro: 'أدخل آخر أجر معتمد ومدة الخدمة لحساب مكافأة نهاية الخدمة وفق المادة 84، ونسب الاستحقاق عند الاستقالة وفق المادة 85، إضافة إلى تعويض رصيد الإجازات غير المستنفدة. تحقق من سبب انتهاء العلاقة والشروط النظامية قبل الاعتماد على النتيجة.',
+      eosReasonLabel: 'سبب انتهاء العلاقة العمالية',
+      eosReason1: 'انتهاء مدة العقد أو اتفاق الطرفين المستوفي للشروط (استحقاق كامل)',
+      eosReason2: 'إنهاء العقد من قِبل صاحب العمل (استحقاق كامل للمكافأة وفق الأصل العام)',
+      eosReason3: 'استقالة العامل (تُطبق نسب المادة 85)',
+      eosReason4: 'ترك العمل بسبب قوة قاهرة خارجة عن إرادة العامل (المادة 87)',
+      eosReason5: 'إنهاء وفق المادة 80 بعد تحقق شروطها النظامية (لا مكافأة)',
+      eosReason6: 'العاملة: إنهاء العقد خلال 6 أشهر من عقد الزواج (المادة 87)',
+      eosReason7: 'العاملة: إنهاء العقد خلال 3 أشهر من الوضع/الولادة (المادة 87)',
+      eosReason8: 'ترك العمل وفق المادة 81 مع تحقق إحدى حالاتها (الحقوق النظامية)',
+      eosReasonHint: 'المادة 87: القوة القاهرة يجب أن تكون خارجة عن إرادة العامل. خيارا الزواج والوضع خاصان بالعاملة وضمن المدد النظامية. لا تختر المادة 81 أو 80 إلا إذا انطبقت شروطها فعلًا.',
+      eosSalaryLabel: 'آخر أجر شهري فعلي معتمد لحساب مكافأة نهاية الخدمة',
+      eosSalaryHint: 'استخدم آخر أجر معتمد للمكافأة. قد تُستبعد العمولات أو النسب المتغيرة وفق اتفاق مستوفٍ للمادة 86؛ لا تعتمد على الأساسي والبدلات الثابتة وحدهما دون مراجعة حالتك.',
+      eosBasicRequired: 'أدخل الراتب الأساسي الفعلي لحساب تعويض الإجازات بهذا الأساس.',
+      eosBasicTooHigh: 'الراتب الأساسي المدخل أكبر من آخر أجر المستخدم للمكافأة. راجع القيم المدخلة.',
+      eosSalaryRequired: 'أدخل آخر أجر شهري موجب لحساب المكافأة.',
+      eosDurationLabel: 'مدة الخدمة (سنوات / أشهر / أيام)',
+      lblYears: 'سنوات', lblMonths: 'أشهر', lblDays: 'أيام',
+      eosLeaveLabel: 'رصيد أيام الإجازة السنوية غير المستنفدة',
+      eosLeaveBasisLabel: 'أساس احتساب أجر اليوم الواحد للإجازة',
+      eosBasisFull: 'الأجر الكامل (الأساسي + البدلات الثابتة)',
+      eosBasisBasic: 'الأساسي فقط',
+      eosBasisHint: 'راجع عقدك أو اسأل الموارد البشرية لمعرفة الأساس المعتمد في منشأتك',
+            eosBasicLabel: 'الراتب الأساسي الشهري (يُستخدم لحساب أجر الإجازة)',
+      eosCalcBtn: 'احسب المستحقات النهائية الآن',
+      eosTotalLabel: 'إجمالي التصفية النهائية المستحقة (نهاية الخدمة + الإجازات)',
+      eosRow1: 'إجمالي مدة الخدمة بالسنوات',
+      eosRow2: 'مكافأة السنوات الخمس الأولى (نصف راتب لكل سنة)',
+      eosRow3: 'مكافأة ما بعد 5 سنوات (راتب كامل لكل سنة)',
+      eosRow4: 'نسبة الاستحقاق النظامية حسب سبب الترك',
+      eosRow5: 'صافي مكافأة نهاية الخدمة',
+      eosRow6: 'تعويض رصيد الإجازات غير المستنفدة',
+      eosNote: 'الحساب يتم على أساس السنوات الفعلية بكسرها وفق المواد 84 و85 و87 من نظام العمل السعودي. هذا تقدير استرشادي وليس حكماً قضائياً.',
+      rFull: '100% (استحقاق كامل)', rNone: '0% (بدون استحقاق)',
+      rUnder2: '0% (أقل من سنتين)', rThird: '33.33% (الثلث)',
+      rTwoThirds: '66.67% (الثلثان)', rFull10: '100% (خدمة 10 سنوات فأكثر)',
+      durYear: ' سنة',
+      salHeading: 'حاسبة الراتب الصافي والتأمينات والحد الأقصى للتمويل',
+      salTag: 'GOSI بالنظامين القديم والجديد • حد الاستقطاع الثلث',
+      salIntro: 'تحسب الاستقطاعات وفق نظامي التأمينات المتعاملين بالتوازي: القديم (9.75%) للمسجلين قبل 3 يوليو 2024، والجديد (10.75% من يوليو 2026) لمن سُجّل لأول مرة بعده، مع القدرة التمويلية وفق حد الاستقطاع.',
+      salCatLabel: 'فئة الموظف ونظام التأمينات',
+      salCatRes: 'مقيم غير سعودي (استقطاع الموظف 0%)',
+      salCatOld: 'سعودي — نظام قديم (مسجّل قبل 3 يوليو 2024) 9.75%',
+      salCatNew: 'سعودي — نظام جديد (مسجّل من 3 يوليو 2024 فصاعداً) 10.75%',
+      salCatHint: 'تحقق من نظامك عبر تاريخ أول تسجيل في التأمينات (gosi.gov.sa) — الانتقال لصاحب عمل جديد لا يغيّر نظامك',
+      salBasicLabel: 'الراتب الأساسي الشهري',
+      salHousingLabel: 'بدل السكن الشهري (يُحتسب ضمن أجر التأمينات)',
+      salHousingHint: 'اتركه فارغاً إذا كان بدل السكن 25% من الأساسي ضمن العقد',
+      salTransLabel: 'بدل النقل وبدلات أخرى (لا تدخل في التأمينات)',
+      salObligLabel: 'الأقساط والالتزامات الشهرية الحالية',
+      salCalcBtn: 'احسب صافي الراتب والقدرة التمويلية',
+      salTotalLabel: 'الراتب الصافي المودع شهرياً',
+      salRow1: 'إجمالي الراتب بالبدلات',
+      salRow2: 'خصم التأمينات على الموظف (GOSI)',
+      salRowEr: 'حصة صاحب العمل في التأمينات (لا تُخصم من راتبك)',
+      salRow3: 'الحد الأقصى للاستقطاع الشهري (الثلث)',
+      salRow4: 'الرصيد المتاح لقسط تمويل جديد',
+      salRow5: 'المتبقي للمعيشة بعد الالتزامات',
+      salCapWarn: 'تجاوز (الأساسي + السكن) سقف التأمينات 45,000 ر.س — تم الحساب على السقف فقط.',
+      salNote: 'حد الاستقطاع الثلث يُطبق عادة على صافي الراتب بعد التأمينات، وقد تختلف شروط التمويل حسب نوع المنتج ومتطلبات البنك المركزي. آخر تحديث للنسب: يوليو 2026.',
+      letHeading: 'صانع الخطابات الرسمية والمعاريض (عربي / إنجليزي)',
+      letTag: '6 نماذج جاهزة بالتاريخين الميلادي والهجري',
+      letIntro: 'اختر النموذج واملأ الحقول — يُصاغ الخطاب فوراً بصيغة رسمية قابلة للنسخ أو الطباعة.',
+      letTypeLabel: 'نوع الخطاب المطلوب',
+      letOpt1: 'خطاب استقالة وطلب شهادة خبرة وإخلاء طرف',
+      letOpt2: 'طلب زيادة راتب أو تعديل مسمى وظيفي',
+      letOpt3: 'طلب إجازة سنوية / اضطرارية',
+      letOpt4: 'إشعار عدم رغبة في تجديد العقد',
+      letOpt5: 'طلب تعريف بالراتب (Salary Certificate)',
+      letOpt6: 'معروض / طلب إداري رسمي عام',
+      letLangLabel: 'لغة صياغة الخطاب',
+      letRecLabel: 'الجهة أو المسؤول الموجه إليه الخطاب',
+      letRecPh: 'مثال: سعادة مدير إدارة الموارد البشرية',
+      letNameLabel: 'اسم الموظف الكامل',
+      letNamePh: 'مثال: محمد بن أحمد العتيبي',
+      letIdLabel: 'المسمى الوظيفي ورقم الهوية/الإقامة',
+      letIdPh: 'مثال: أخصائي مبيعات — إقامة رقم: 2xxxxxxxx',
+      letDateLabel: 'تاريخ سريان الطلب',
+      letDurLabel: 'المدة (للإجازة / فترة الإشعار)',
+      letDurPh: 'مثال: 15 يوماً / شهران',
+      letReasonLabel: 'السبب أو تفاصيل إضافية',
+      letReasonPh: 'مثال: ظروف عائلية / طلب موجه لمصرف الراجحي',
+      cvHeading: 'منسق وفاحص السيرة الذاتية للسوق السعودي',
+      cvTag: 'منسّق على خطوات + تقييم ATS فوري',
+      cvIntro: 'املأ الخطوات واحدة تلو الأخرى وستُبنى سيرتك أمامك مباشرة. كل خطوة قسم مستقل، ويمكنك الرجوع وتعديل أي حقل في أي وقت — وكل بياناتك تبقى في متصفحك.',
+      cvSumLabel: 'الملخص المهني',
+      cvSumPh: 'اكتب نبذة مركزة: سنوات الخبرة + التخصص + أهم إنجاز رقمي…',
+      cvSkillsLabel: 'المهارات (اكتب ثم اضغط فاصلة ،)',
+      cvSkillsPh: 'مثال: ZATCA, E-Invoicing, SAP, Excel متقدم, منصة مدد, منصة قوى',
+      cvTagHint: 'افصل بين العناصر بفاصلة ،',
+      cvScoreTitle: 'جاهزية السيرة الذاتية:',
+      disclaimer: '⚖️ إخلاء مسؤولية: جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.',
+      faqHeading: 'الأسئلة الشائعة | Frequently Asked Questions',
+      faqQ1: 'كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?',
+      faqA1: 'بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.',
+      faqQ2: 'ما نسبة استقطاع التأمينات للسعودي في 2026؟ / What is the 2026 Saudi GOSI rate?',
+      faqA2: '9.75% للنظام القديم (أول تسجيل قبل 3 يوليو 2024)، و10.75% للنظام الجديد ابتداءً من يوليو 2026، على الأساسي + السكن بسقف 45,000 ر.س. المقيم غير السعودي: 0%.',
+      footerText: '© 2026 منصة خدمات الموظف والمقيم في السعودية — أدوات مجانية ثنائية اللغة',
+      footerPrivacy: 'سياسة الخصوصية',
+      footerAdDisclosure: 'الإعلانات وملفات تعريف الارتباط',
+      footerTools: 'الأدوات',
+      btnPrint: 'طباعة / حفظ PDF', btnCopy: 'نسخ النص', btnShare: 'مشاركة النتيجة',
+      btnDirectLink: 'عروض وظيفية وتمويلية مقترحة (إعلان)',
+      btnShareLetter: 'مشاركة الخطاب',
+      btnShareCv: 'مشاركة السيرة',
+      toastCopied: 'تم النسخ بنجاح', toastCopyFail: 'تعذر النسخ — حدد النص يدوياً',
+      shareEosTitle: 'نتيجة حاسبة نهاية الخدمة',
+      shareSalTitle: 'نتيجة حاسبة الراتب الصافي',
+      shareSheetTitle: 'مشاركة النتيجة',
+      shareSheetSub: 'اختر طريقة المشاركة — النتيجة كاملة، مع رابط يعيد فتح الأرقام نفسها جاهزة لمن يفتحه.',
+      shareNative: 'مشاركة…',
+      shareCopyText: 'نسخ النص',
+      shareCopyLink: 'نسخ الرابط',
+      shareNote: 'لا تُرسل أي بيانات إلى أي خادم — المشاركة تتم من جهازك مباشرة، والرابط لا يحتوي إلا على الأرقام التي أدخلتها.',
+      shareNothing: 'أدخل الأرقام أولاً لعرض النتيجة ثم شاركها.',
+      shareCopiedLink: 'تم نسخ الرابط',
+      sharePopBlocked: 'المتصفح منع فتح نافذة المشاركة — نسخنا النص بدلاً من ذلك',
+      shareInputs: 'المدخلات:',
+      shareResultBlock: 'النتيجة:',
+      shareOpen: 'افتح الحاسبة بنفس الأرقام من هنا:',
+      shareBrand: 'منصة خدمات الموظف والمقيم في السعودية',
+      shareLetTitle: 'خطاب رسمي جاهز',
+      shareCvTitle: 'سيرة ذاتية جاهزة',
+      shareSalary: 'الراتب الشهري',
+      shareDuration: 'مدة الخدمة',
+      shareReason: 'سبب انتهاء العلاقة',
+      shareLeave: 'رصيد الإجازات',
+      shareDays: 'يوم',
+      shareCategory: 'الفئة ونظام التأمينات',
+      shareBasic: 'الراتب الأساسي',
+      shareHousing: 'بدل السكن',
+      shareTransport: 'بدل النقل والبدلات',
+      shareOblig: 'الالتزامات الشهرية',
+      chkEmail: 'بريد إلكتروني واضح', chkPhone: 'رقم جوال صحيح',
+      chkName: 'الاسم الكامل (كلمتان فأكثر)', chkTitle: 'المسمى الوظيفي المستهدف',
+      chkCity: 'المدينة أو الموقع الجغرافي', chkIqama: 'حالة الإقامة أو الجنسية محددة',
+      chkSummary: 'ملخص مهني مكتوب', chkExpEntry: 'خبرة عملية مُدخلة',
+      chkDates: 'تواريخ كل خبرة مكتملة', chkMetrics: 'أرقام وإنجازات قابلة للقياس',
+      chkVerbs: 'أفعال إنجاز قوية (أدرت، حققت، طوّرت…)', chkSkills: 'مهارات أساسية مُدخلة',
+      chkEdu: 'مؤهل علمي', chkLangs: 'اللغات ومستواها',
+      cvChars: 'حرفاً',
+      cvCountLow: 'أضف تفاصيل أكثر لترفع الجاهزية',
+      cvDocLangLabel: 'لغة السيرة',
+      cvQuickLabel: 'بداية سريعة:',
+      cvDemoBtn: 'تعبئة مثال جاهز',
+      cvResetBtn: 'مسح الكل',
+      cvStep1: 'البيانات الشخصية', cvStep2: 'الملخص المهني',
+      cvStep3: 'الخبرات العملية', cvStep4: 'التعليم والمهارات',
+      cvStep1Hint: 'الاسم والمسمى المستهدف ووسائل التواصل',
+      cvStep2Hint: '٣ إلى ٤ أسطر تُبرز خبرتك وأهم رقم حققته',
+      cvStep3Hint: 'بطاقة مستقلة لكل وظيفة — الأحدث أولاً',
+      cvStep4Hint: 'المؤهل واللغات والمهارات والشهادات',
+      cvDone: 'مكتمل', cvTodo: 'ناقص',
+      cvFName: 'الاسم الكامل', cvFNamePh: 'مثال: محمد أحمد العتيبي',
+      cvFTitle: 'المسمى الوظيفي المستهدف', cvFTitlePh: 'مثال: محاسب قانوني — ZATCA',
+      cvFCity: 'المدينة', cvFCityPh: 'مثال: الرياض',
+      cvFPhone: 'رقم الجوال', cvFPhonePh: '+966 55 123 4567',
+      cvFEmail: 'البريد الإلكتروني', cvFEmailPh: 'name@example.com',
+      cvFStatus: 'الجنسية / حالة الإقامة',
+      cvFStatusHint: 'تظهر في سطر بيانات التواصل بأعلى السيرة.',
+      cvStNone: '— اختر —', cvStSaudi: 'سعودي / سعودية',
+      cvStTransferable: 'مقيم — إقامة قابلة للنقل',
+      cvStSponsored: 'مقيم — بحاجة إلى نقل كفالة',
+      cvStOther: 'أخرى (خليجي / زائر / بدون إقامة)',
+      cvAutoSummary: 'صياغة تلقائية',
+      cvAutoSummaryDone: 'تمت صياغة الملخص — راجعه وعدّل ما تريد',
+      cvAutoSummaryConfirm: 'سيتم استبدال الملخص الحالي بصياغة جديدة. المتابعة؟',
+      cvAutoSummaryNeed: 'أدخل المسمى الوظيفي أو خبرة واحدة على الأقل أولاً.',
+      cvAddExp: 'إضافة خبرة', cvAddEdu: 'إضافة مؤهل',
+      cvExpCard: 'خبرة', cvEduCard: 'مؤهل',
+      cvMoveUp: 'تحريك لأعلى', cvMoveDown: 'تحريك لأسفل', cvDelete: 'حذف',
+      cvRepTitle: 'المسمى الوظيفي', cvRepTitlePh: 'مثال: محاسب أول',
+      cvRepCompany: 'جهة العمل', cvRepCompanyPh: 'مثال: شركة النخبة للتجارة',
+      cvRepCity: 'المدينة', cvRepCityPh: 'مثال: الرياض',
+      cvRepPeriod: 'فترة العمل',
+      cvRepFromPh: 'من: 2021', cvRepToPh: 'إلى: 2024',
+      cvRepNow: 'ما زلت أعمل هنا',
+      cvRepDuties: 'المهام والإنجازات',
+      cvRepDutiesPh: 'اكتب كل إنجاز في سطر منفصل، مثال: خفّضت زمن الإقفال 40%',
+      cvRepDutiesHint: 'سطر لكل إنجاز — ابدأ بفعل إنجاز وأضف رقماً يوضح الأثر.',
+      cvRepDegree: 'المؤهل العلمي', cvRepDegreePh: 'مثال: بكالوريوس المحاسبة',
+      cvRepSchool: 'الجهة / التخصص', cvRepSchoolPh: 'مثال: جامعة الملك سعود',
+      cvRepYear: 'سنة التخرج', cvRepYearPh: 'مثال: 2019',
+      cvSubEdu: 'المؤهل العلمي', cvSubSkills: 'المهارات',
+      cvCertsLabel: 'الشهادات والدورات (اكتب ثم اضغط فاصلة ،)', cvCertsPh: 'مثال: SOCPA, Excel Advanced, دورة السلامة',
+      cvLangsLabel: 'اللغات ومستواها (اكتب ثم اضغط فاصلة ،)', cvLangsPh: 'مثال: العربية (اللغة الأم), الإنجليزية (جيد جداً)',
+      cvTagsEmpty: 'لم تُضف أي عنصر بعد — اكتب ثم اضغط فاصلة (،)',
+      cvTagRemove: 'إزالة',
+      cvEmptyTitle: 'سيرتك ستظهر هنا',
+      cvEmptyHint: 'ابدأ من الخطوة 1 أعلى النموذج، أو اضغط «تعبئة مثال جاهز» لترى النتيجة فوراً.',
+      cvEmptyWarn: 'أكمل بياناتك أولاً لتظهر السيرة.',
+      cvDemoDone: 'تم تعبئة المثال — عدّل البيانات لتناسبك',
+      cvResetConfirm: 'سيتم مسح كل بيانات السيرة. هل أنت متأكد؟',
+      atsExcellent: 'ممتاز — السيرة مكتملة العناصر الأساسية ومهيأة للتقديم.',
+      atsGood: 'جيد — أكمل العناصر الناقصة أدناه لرفع جاهزية سيرتك.',
+      shareCvPrivacy: 'ملخص آمن للمشاركة — بدون اسم أو هاتف أو بريد أو محتوى السيرة:',
+      guidesHeading: 'أحدث الأدلة العمالية في السعودية',
+      guidesIntro: 'أدلة ثنائية اللغة عن نظام العمل السعودي والتأمينات والسيرة الذاتية، تُحدَّث دورياً.',
+      guidesLoading: 'جارٍ تحميل الأدلة…',
+      guidesEmpty: 'لا توجد أدلة منشورة بالعربية بعد. تابعنا قريباً.',
+      guidesError: 'تعذّر تحميل قائمة الأدلة حالياً. يمكنك استخدام الأدوات أعلاه كما هي.',
+      guidesUpdated: 'آخر تحديث',
+      guidesOther: 'اقرأ النسخة الإنجليزية',
+      guidesAllLink: 'عرض جميع المقالات والأدلة',
+      atsNeeds: 'يحتاج عملاً — راجع العناصر الناقصة أدناه قبل التقديم.'
+    },
+    en: {
+      docTitle: 'Saudi Employee & Expat Services Hub | EOSB • GOSI • Letters • Resume',
+      metaDesc: 'Free Saudi End of Service calculator, Net Salary & GOSI calculator (legacy and new 2026 rates), bilingual official letter generator, and Saudi-market resume builder. No sign-up, data stays in your browser.',
+      langBtn: '🌐 العربية',
+      badge: 'Free Smart Tools • Compliant with Saudi Labor Law',
+      siteTitle: 'Saudi Employee & Expat Services Hub',
+      printHeadSub: 'Indicative report issued by KSA Tools',
+      siteSubtitle: 'Calculate End of Service gratuity and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic & English — all data stays in your browser',
+      adLabel: 'إعلان | Advertisement',
+      adTopTitle: 'Top ad unit (Banner 728x90 / Native)',
+      adBotTitle: 'Bottom ad unit (Native Banner)',
+      t1Num: 'Tool 1', t1Title: 'End of Service (EOSB) Calculator',
+      t2Num: 'Tool 2', t2Title: 'Net Salary, GOSI & Finance',
+      t3Num: 'Tool 3', t3Title: 'Official Letters (AR/EN)',
+      t4Num: 'Tool 4', t4Title: 'Resume Builder',
+      eosHeading: 'Saudi End of Service (EOSB) & Leave Settlement Calculator',
+      eosTag: 'Labor Law Articles 84, 85 & 87',
+      eosIntro: 'Enter the last applicable wage and service duration to estimate EOSB under Article 84, resignation tiers under Article 85, and unused leave encashment. Confirm the employment-ending reason and applicable legal conditions before relying on the estimate.',
+      eosReasonLabel: 'Reason for End of Employment',
+      eosReason1: 'Contract expiry or qualifying mutual agreement (full award under the general rule)',
+      eosReason2: 'Termination by employer (full EOSB under the general rule)',
+      eosReason3: 'Worker resignation (Article 85 tiers)',
+      eosReason4: 'Leaving because of force majeure beyond the worker’s control (Article 87)',
+      eosReason5: 'Termination under Article 80, only if its legal conditions are met (no EOSB)',
+      eosReason6: 'Female worker: ending the contract within 6 months of marriage (Article 87)',
+      eosReason7: 'Female worker: ending the contract within 3 months of childbirth (Article 87)',
+      eosReason8: 'Leaving under Article 81, if one of its legal cases applies (statutory rights retained)',
+      eosReasonHint: 'Under Article 87, force majeure must be beyond the worker’s control. The marriage and childbirth options apply to female workers within the statutory periods. Select Articles 80 or 81 only if their legal conditions actually apply.',
+      eosSalaryLabel: 'Last actual monthly wage used to calculate EOSB',
+      eosSalaryHint: 'Use the last wage applicable to the award. Commissions or variable percentages may be excluded under a qualifying agreement pursuant to Article 86; do not assume basic salary and fixed allowances alone always suffice.',
+      eosBasicRequired: 'Enter the actual basic salary to calculate leave pay using this basis.',
+      eosBasicTooHigh: 'The entered basic salary is higher than the last wage used for EOSB. Please review the values.',
+      eosSalaryRequired: 'Enter a positive last monthly wage to calculate the award.',
+      eosDurationLabel: 'Service duration (Years / Months / Days)',
+      lblYears: 'Years', lblMonths: 'Months', lblDays: 'Days',
+      eosLeaveLabel: 'Unused Annual Leave Balance (Days)',
+      eosLeaveBasisLabel: 'Daily wage basis for leave encashment',
+      eosBasisFull: 'Full wage (basic + fixed allowances)',
+      eosBasisBasic: 'Basic salary only',
+      eosBasisHint: 'Check with your HR for the applicable calculation basis in your company',
+            eosBasicLabel: 'Monthly basic salary (used for leave pay)',
+      eosCalcBtn: 'Calculate Final Settlement Now',
+      eosTotalLabel: 'Total Final Settlement (EOSB + Leave Encashment)',
+      eosRow1: 'Total Service Duration (Years)',
+      eosRow2: 'First 5 Years Gratuity (0.5 Month per Year)',
+      eosRow3: 'After 5 Years Gratuity (1 Full Month per Year)',
+      eosRow4: 'Statutory Entitlement Ratio',
+      eosRow5: 'Net End of Service Gratuity',
+      eosRow6: 'Unused Leave Encashment',
+      eosNote: 'Calculated on fractional actual years under Articles 84, 85, and 87 of the Saudi Labor Law. This is an estimate, not a legal ruling.',
+      rFull: '100% (Full Entitlement)', rNone: '0% (No Entitlement)',
+      rUnder2: '0% (Under 2 Years)', rThird: '33.33% (One-Third)',
+      rTwoThirds: '66.67% (Two-Thirds)', rFull10: '100% (10+ Years Service)',
+      durYear: ' Years',
+      salHeading: 'Net Salary, GOSI & Personal Finance Calculator',
+      salTag: 'GOSI legacy & new systems • 1/3 deduction limit',
+      salIntro: 'Deductions follow the two parallel GOSI systems: legacy (9.75%) for those first registered before 3 July 2024, and new (10.75% from July 2026) for those registered after, plus your financing capacity under the deduction limit.',
+      salCatLabel: 'Employee Category & GOSI System',
+      salCatRes: 'Expat Resident (0% Employee Deduction)',
+      salCatOld: 'Saudi — Legacy System (registered before 3 Jul 2024) 9.75%',
+      salCatNew: 'Saudi — New System (registered on/after 3 Jul 2024) 10.75%',
+      salCatHint: 'Check your system by your first GOSI registration date (gosi.gov.sa) — changing employer does not change your system',
+      salBasicLabel: 'Monthly Basic Salary',
+      salHousingLabel: 'Monthly Housing Allowance (GOSI-insurable)',
+      salHousingHint: 'Leave empty if housing is contractually 25% of basic',
+      salTransLabel: 'Transport & Other Allowances (not GOSI-insurable)',
+      salObligLabel: 'Current Monthly Loan / Credit Obligations',
+      salCalcBtn: 'Calculate Net Salary & Loan Eligibility',
+      salTotalLabel: 'Net Monthly Take-Home Salary',
+      salRow1: 'Total Gross Monthly Salary',
+      salRow2: 'Employee GOSI Deduction',
+      salRowEr: 'Employer GOSI Share (not deducted from you)',
+      salRow3: 'Max Monthly Deduction Limit (1/3)',
+      salRow4: 'Available Limit for New Finance',
+      salRow5: 'Remaining Disposable Income',
+      salCapWarn: 'Basic + housing exceeds the SAR 45,000 GOSI cap — calculated on the cap only.',
+      salNote: 'The one-third limit is typically applied to net salary after GOSI; actual finance terms vary by product and SAMA requirements. Rates last updated: July 2026.',
+      letHeading: 'Bilingual Official HR Letter Generator (Arabic / English)',
+      letTag: '6 templates with Gregorian & Hijri dates',
+      letIntro: 'Pick a template, fill the fields — the letter is drafted instantly in formal style, ready to copy or print.',
+      letTypeLabel: 'Letter Template',
+      letOpt1: 'Resignation + Experience Certificate Request',
+      letOpt2: 'Salary Increment / Promotion Request',
+      letOpt3: 'Annual / Emergency Leave Request',
+      letOpt4: 'Contract Non-Renewal Notice',
+      letOpt5: 'Salary Certificate Request',
+      letOpt6: 'General Administrative Petition',
+      letLangLabel: 'Letter Language',
+      letRecLabel: 'Recipient / Department',
+      letRecPh: 'e.g. HR Manager',
+      letNameLabel: 'Employee Full Name',
+      letNamePh: 'e.g. Mohammed A. Al-Otaibi',
+      letIdLabel: 'Job Title & Iqama / National ID',
+      letIdPh: 'e.g. Sales Specialist — Iqama: 2xxxxxxxx',
+      letDateLabel: 'Effective Date',
+      letDurLabel: 'Duration (for leave / notice period)',
+      letDurPh: 'e.g. 15 days / two months',
+      letReasonLabel: 'Reason or Additional Details',
+      letReasonPh: 'e.g. family circumstances / addressed to Al-Rajhi Bank',
+      cvHeading: 'Saudi Market Resume Builder & Completeness Checker',
+      cvTag: 'A step-by-step builder with live ATS scoring',
+      cvIntro: 'Fill in the steps one by one and your resume is built in front of you. Each step is its own section and you can go back and edit anything at any time — all data stays in your browser.',
+      cvSumLabel: 'Professional Summary',
+      cvSumPh: 'Write a focused pitch: years of experience + specialism + your best measurable result…',
+      cvSkillsLabel: 'Skills (type then press comma ,)',
+      cvSkillsPh: 'e.g. ZATCA, E-Invoicing, SAP, Advanced Excel, Mudad, Qiwa',
+      cvTagHint: 'Separate each item with a comma ,',
+      cvScoreTitle: 'Resume readiness:',
+      disclaimer: '⚖️ Disclaimer: All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. None of your data is sent to any server — all processing happens in your browser.',
+      faqHeading: 'Frequently Asked Questions',
+      faqQ1: 'How is Saudi End of Service Benefit (EOSB) calculated?',
+      faqA1: 'Half a month’s wage for each of the first five years, one month’s wage for each subsequent year, and a pro-rata amount for a fraction of a year. Upon resignation: one-third after continuous service of two to five years inclusive; two-thirds if service exceeds five years but is under ten; and the full award at ten years or more.',
+      faqQ2: 'What is the 2026 GOSI rate for Saudis?',
+      faqA2: '9.75% legacy (first registered before 3 July 2024) and 10.75% new system from July 2026, on basic + housing capped at SAR 45,000. Expats: 0%.',
+      footerText: '© 2026 Saudi Employee & Expat Services Hub — Free Bilingual Tools',
+      footerPrivacy: 'Privacy Policy',
+      footerAdDisclosure: 'Ads & Cookies',
+      footerTools: 'Tools',
+      btnPrint: 'Print / Save PDF', btnCopy: 'Copy Text', btnShare: 'Share Result',
+      btnDirectLink: 'Career & Finance Offers (Ad)',
+      btnShareLetter: 'Share Letter',
+      btnShareCv: 'Share Resume',
+      toastCopied: 'Copied to clipboard', toastCopyFail: 'Copy failed — select the text manually',
+      shareEosTitle: 'EOSB Calculation Result',
+      shareSalTitle: 'Net Salary Calculation Result',
+      shareSheetTitle: 'Share Result',
+      shareSheetSub: 'Pick how to share — the full result plus a link that reopens the exact same numbers for whoever opens it.',
+      shareNative: 'Share…',
+      shareCopyText: 'Copy text',
+      shareCopyLink: 'Copy link',
+      shareNote: 'Nothing is sent to any server — sharing happens straight from your device, and the link contains only the numbers you entered.',
+      shareNothing: 'Enter your numbers first, then share the result.',
+      shareCopiedLink: 'Link copied',
+      sharePopBlocked: 'The browser blocked the share window — we copied the text instead',
+      shareInputs: 'Inputs:',
+      shareResultBlock: 'Result:',
+      shareOpen: 'Reopen the calculator with the same numbers here:',
+      shareBrand: 'Saudi Employee & Expat Services Hub',
+      shareLetTitle: 'Ready official letter',
+      shareCvTitle: 'Ready resume',
+      shareSalary: 'Monthly wage',
+      shareDuration: 'Service period',
+      shareReason: 'Reason for end of employment',
+      shareLeave: 'Leave balance',
+      shareDays: 'days',
+      shareCategory: 'Category & GOSI scheme',
+      shareBasic: 'Basic salary',
+      shareHousing: 'Housing allowance',
+      shareTransport: 'Transport & other allowances',
+      shareOblig: 'Monthly obligations',
+      chkEmail: 'Clear email address', chkPhone: 'Valid mobile number',
+      chkName: 'Full name (2+ words)', chkTitle: 'Target job title',
+      chkCity: 'City or location', chkIqama: 'Nationality / Iqama status selected',
+      chkSummary: 'Professional summary written', chkExpEntry: 'Work experience added',
+      chkDates: 'Dates filled for every job', chkMetrics: 'Measurable numbers & achievements',
+      chkVerbs: 'Strong action verbs (led, achieved, improved…)', chkSkills: 'Core skills added',
+      chkEdu: 'Education entry', chkLangs: 'Languages & proficiency',
+      cvChars: 'characters',
+      cvCountLow: 'Add more detail to raise readiness',
+      cvDocLangLabel: 'Resume language',
+      cvQuickLabel: 'Quick start:',
+      cvDemoBtn: 'Fill a sample resume',
+      cvResetBtn: 'Clear all',
+      cvStep1: 'Personal details', cvStep2: 'Professional summary',
+      cvStep3: 'Work experience', cvStep4: 'Education & skills',
+      cvStep1Hint: 'Name, target title and contact details',
+      cvStep2Hint: '3-4 lines highlighting your experience and best number',
+      cvStep3Hint: 'A separate card per job — most recent first',
+      cvStep4Hint: 'Degree, languages, skills and certifications',
+      cvDone: 'Complete', cvTodo: 'Incomplete',
+      cvFName: 'Full name', cvFNamePh: 'e.g. Mohammed A. Alotaibi',
+      cvFTitle: 'Target job title', cvFTitlePh: 'e.g. Senior Accountant — ZATCA',
+      cvFCity: 'City', cvFCityPh: 'e.g. Riyadh',
+      cvFPhone: 'Mobile number', cvFPhonePh: '+966 55 123 4567',
+      cvFEmail: 'Email address', cvFEmailPh: 'name@example.com',
+      cvFStatus: 'Nationality / Iqama status',
+      cvFStatusHint: 'Appears in the contact line at the top of the resume.',
+      cvStNone: '— Select —', cvStSaudi: 'Saudi national',
+      cvStTransferable: 'Expat — transferable Iqama',
+      cvStSponsored: 'Expat — sponsorship transfer required',
+      cvStOther: 'Other (GCC national / visitor / no Iqama)',
+      cvAutoSummary: 'Draft it for me',
+      cvAutoSummaryDone: 'Summary drafted — review and adjust it',
+      cvAutoSummaryConfirm: 'The current summary will be replaced with a new draft. Continue?',
+      cvAutoSummaryNeed: 'Enter your target job title or at least one job first.',
+      cvAddExp: 'Add experience', cvAddEdu: 'Add qualification',
+      cvExpCard: 'Experience', cvEduCard: 'Qualification',
+      cvMoveUp: 'Move up', cvMoveDown: 'Move down', cvDelete: 'Delete',
+      cvRepTitle: 'Job title', cvRepTitlePh: 'e.g. Senior Accountant',
+      cvRepCompany: 'Employer', cvRepCompanyPh: 'e.g. Al-Nokhba Trading Co.',
+      cvRepCity: 'City', cvRepCityPh: 'e.g. Riyadh',
+      cvRepPeriod: 'Employment period',
+      cvRepFromPh: 'From: 2021', cvRepToPh: 'To: 2024',
+      cvRepNow: 'I currently work here',
+      cvRepDuties: 'Duties & achievements',
+      cvRepDutiesPh: 'Put each achievement on its own line, e.g. Cut closing time by 40%',
+      cvRepDutiesHint: 'One line per achievement — start with an action verb and add a number showing impact.',
+      cvRepDegree: 'Degree / qualification', cvRepDegreePh: 'e.g. BSc in Accounting',
+      cvRepSchool: 'Institution / major', cvRepSchoolPh: 'e.g. King Saud University',
+      cvRepYear: 'Graduation year', cvRepYearPh: 'e.g. 2019',
+      cvSubEdu: 'Education', cvSubSkills: 'Skills',
+      cvCertsLabel: 'Certifications & courses (type then press comma ,)', cvCertsPh: 'e.g. SOCPA, Advanced Excel, First Aid',
+      cvLangsLabel: 'Languages & proficiency (type then press comma ,)', cvLangsPh: 'e.g. Arabic (Native), English (Very Good)',
+      cvTagsEmpty: 'Nothing added yet — type then press comma (,)',
+      cvTagRemove: 'Remove',
+      cvEmptyTitle: 'Your resume will appear here',
+      cvEmptyHint: 'Start from step 1 in the form, or press "Fill a sample resume" to see the result instantly.',
+      cvEmptyWarn: 'Complete your details first so the resume can be generated.',
+      cvDemoDone: 'Sample data loaded — edit it to match your background',
+      cvResetConfirm: 'All resume data will be cleared. Are you sure?',
+      atsExcellent: 'Excellent — your resume has all core elements and is ready to submit.',
+      atsGood: 'Good — complete the missing items below to improve readiness.',
+      shareCvPrivacy: 'Safe share summary — no name, phone, email or resume content:',
+      guidesHeading: 'Latest Saudi Labour Guides',
+      guidesIntro: 'Bilingual guides on Saudi labour law, social insurance and job applications, updated regularly.',
+      guidesLoading: 'Loading guides…',
+      guidesEmpty: 'No published guides in English yet. Please check back soon.',
+      guidesError: 'The guides list could not be loaded right now. The tools above still work normally.',
+      guidesUpdated: 'Last updated',
+      guidesOther: 'Read the Arabic version',
+      guidesAllLink: 'Browse all guides and articles',
+      atsNeeds: 'Needs work — review the missing items below before applying.'
+    }
+  };
+
+  const t = (key) => (i18n[currentLang] && i18n[currentLang][key]) || key;
+
+  /* ==================== أدوات عامة ==================== */
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  const numVal = (id) => { const v = parseFloat($(id).value); return isNaN(v) ? 0 : Math.max(0, v); };
+
+  function debounce(fn, ms) {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+  }
+
+  function formatSAR(n) {
+    return new Intl.NumberFormat(currentLang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US',
+      { style: 'currency', currency: 'SAR' }).format(n);
+  }
+
+  function showToast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  /* ==================== الطباعة: تجهيز المستند الرسمي قبل الطباعة ==================== */
+  function refreshPrintDate() {
+    const dateEl = $('print-head-date');
+    if (!dateEl) return;
+    const now = new Date();
+    const opts = { year: 'numeric', month: 'long', day: 'numeric' };
+    if (currentLang === 'en') {
+      dateEl.textContent = now.toLocaleDateString('en-GB', opts);
+    } else {
+      const greg = now.toLocaleDateString('ar-SA-u-ca-gregory', opts);
+      const hijri = now.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', opts);
+      dateEl.textContent = greg + ' — ' + hijri;
+    }
+  }
+
+  function printDoc() {
+    const active = document.querySelector('.tool-section.active');
+    document.body.setAttribute('data-print-tool', active ? active.id : '');
+    refreshPrintDate();
+    window.print();
+  }
+
+  function copyText(text, msgKey) {
+    const done = () => showToast(msgKey ? t(msgKey) : t('toastCopied'));
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+  function fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); cb(); } catch (e) { showToast(t('toastCopyFail')); }
+    document.body.removeChild(ta);
+  }
+
+  /* ==================== مشاركة النتيجة (نص غني + رابط يستعيد الأرقام) ==================== */
+  const SHARE_BASE = location.origin + location.pathname;
+  let sharePayload = null;
+
+  function buildShareLink(toolId, params) {
+    return SHARE_BASE + '?' + new URLSearchParams(params).toString() + '#' + toolId;
+  }
+
+  function optionLabel(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    return opt ? opt.textContent.trim() : '';
+  }
+
+  function openShareSheet(payload) {
+    if (!payload) { showToast(t('shareNothing')); return; }
+    sharePayload = payload;
+    $('share-preview').textContent = payload.text + '\n\n' + payload.link;
+    const modal = $('share-modal');
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    const first = $('share-targets').querySelector('button:not([hidden])');
+    if (first) first.focus();
+  }
+
+  function closeShareSheet() {
+    const modal = $('share-modal');
+    if (modal.hidden) return;
+    modal.hidden = true;
+    document.body.style.overflow = '';
+    sharePayload = null;
+  }
+
+  function openExternal(url) {
+    // ملاحظة: لا نستخدم noopener في خصائص النافذة لأن ذلك يجعل window.open() تُرجع null
+    // فنظن أن النافذة محجوبة. نُلغي المُفتِح يدوياً بدلاً من ذلك.
+    const w = window.open(url, '_blank');
+    if (w) {
+      try { w.opener = null; } catch (e) { /* تجاهل */ }
+      return;
+    }
+    if (sharePayload) {
+      copyText(sharePayload.text + '\n\n' + sharePayload.link);
+      showToast(t('sharePopBlocked'));
+    }
+  }
+
+  function runShareTarget(kind) {
+    if (!sharePayload) return;
+    const p = sharePayload;
+    const full = p.text + '\n\n' + p.link;
+    switch (kind) {
+      case 'native':
+        closeShareSheet();
+        navigator.share({ title: p.title, text: p.text, url: p.link })
+          .catch(err => { if (!err || err.name !== 'AbortError') copyText(full); });
+        return;
+      case 'whatsapp':
+        return openExternal('https://wa.me/?text=' + encodeURIComponent(full));
+      case 'telegram':
+        return openExternal('https://t.me/share/url?url=' + encodeURIComponent(p.link)
+          + '&text=' + encodeURIComponent(p.text));
+      case 'x':
+        return openExternal('https://twitter.com/intent/tweet?text=' + encodeURIComponent(p.text)
+          + '&url=' + encodeURIComponent(p.link));
+      case 'copy':
+        return copyText(full);
+      case 'link':
+        return copyText(p.link, 'shareCopiedLink');
+    }
+  }
+
+  function eosSharePayload() {
+    const salary = numVal('eos-salary');
+    if (salary <= 0) return null;
+    const reasonSel = $('eos-reason');
+    const leaveBasis = $('eos-leave-basis').value;
+    const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
+    const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
+    const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
+    const leaveDays = numVal('eos-leave-days');
+    const link = buildShareLink('eos-tool', {
+      tool: 'eos', s: salary, y: years, m: months, d: days,
+      ld: leaveDays, lb: leaveBasis, bs: $('eos-basic').value,
+    });
+    const text = [
+      t('shareEosTitle'),
+      t('shareBrand'),
+      '-----------------------------',
+      '',
+      t('shareInputs'),
+      '• ' + t('shareSalary') + ': ' + formatSAR(salary),
+      '• ' + t('shareDuration') + ': ' + $('eos-duration-out').textContent,
+      '• ' + t('shareReason') + ': ' + optionLabel(reasonSel),
+      '• ' + t('shareLeave') + ': ' + leaveDays + ' ' + t('shareDays'),
+      '',
+      t('shareResultBlock'),
+      '• ' + t('eosTotalLabel') + ': ' + $('eos-total-val').textContent,
+      '• ' + t('eosRow5') + ': ' + $('eos-net-gratuity').textContent,
+      '• ' + t('eosRow6') + ': ' + $('eos-leave-out').textContent,
+      '• ' + t('eosRow4') + ': ' + $('eos-ratio-out').textContent,
+      '',
+      t('shareOpen')
+    ].join('\n');
+    return { title: t('shareEosTitle'), text, link };
+  }
+
+  function salSharePayload() {
+    const basic = numVal('sal-basic');
+    if (basic <= 0) return null;
+    const catSel = $('sal-category');
+    const housingField = $('sal-housing').value.trim();
+    const housing = housingField === '' ? basic * 0.25 : Math.max(0, numVal('sal-housing'));
+    const link = buildShareLink('salary-tool', {
+      tool: 'sal', c: catSel.value, b: basic, h: housingField,
+      t: numVal('sal-transport'), o: numVal('sal-obligations')
+    });
+    const text = [
+      t('shareSalTitle'),
+      t('shareBrand'),
+      '-----------------------------',
+      '',
+      t('shareInputs'),
+      '• ' + t('shareCategory') + ': ' + optionLabel(catSel),
+      '• ' + t('shareBasic') + ': ' + formatSAR(basic),
+      '• ' + t('shareHousing') + ': ' + formatSAR(housing),
+      '• ' + t('shareTransport') + ': ' + formatSAR(numVal('sal-transport')),
+      '• ' + t('shareOblig') + ': ' + formatSAR(numVal('sal-obligations')),
+      '',
+      t('shareResultBlock'),
+      '• ' + t('salTotalLabel') + ': ' + $('sal-net-val').textContent,
+      '• ' + t('salRow1') + ': ' + $('sal-gross-out').textContent,
+      '• ' + t('salRow2') + ': ' + $('sal-gosi-out').textContent,
+      '• ' + t('salRow4') + ': ' + $('sal-avail-installment').textContent,
+      '',
+      t('shareOpen')
+    ].join('\n');
+    return { title: t('shareSalTitle'), text, link };
+  }
+
+  function textSharePayload(titleKey, toolId, node) {
+    const body = (node.textContent || '').trim();
+    if (body.length < 10) return null;
+    return { title: t(titleKey), text: body, link: SHARE_BASE + '#' + toolId };
+  }
+
+  /* استعادة الأرقام من رابط المشاركة (?tool=...&...) */
+  function applyShareParams() {
+    let p;
+    try { p = new URLSearchParams(location.search); } catch (e) { return; }
+    const tool = p.get('tool');
+    const num = (key, max) => {
+      const raw = p.get(key);
+      if (raw === null || raw === '') return null;
+      const v = parseFloat(raw);
+      return isNaN(v) ? null : clamp(v, 0, max);
+    };
+    const hasOption = (sel, val) =>
+      !!val && Array.prototype.some.call(sel.options, o => o.value === val);
+    const set = (id, v) => { if (v !== null) $(id).value = v; };
+    const setInt = (id, v) => { if (v !== null) $(id).value = Math.floor(v); };
+
+    if (tool === 'eos') {
+      set('eos-salary', num('s', 10000000));
+      setInt('eos-years', num('y', 50));
+      setInt('eos-months', num('m', 11));
+      setInt('eos-days', num('d', 30));
+      setInt('eos-leave-days', num('ld', 365));
+            set('eos-basic', num('bs', 10000000));
+      if (hasOption($('eos-leave-basis'), p.get('lb'))) $('eos-leave-basis').value = p.get('lb');
+      if (hasOption($('eos-reason'), p.get('r'))) $('eos-reason').value = p.get('r');
+      switchTool('eos-tool', false);
+    } else if (tool === 'sal') {
+      set('sal-basic', num('b', 10000000));
+      set('sal-housing', num('h', 10000000));
+      set('sal-transport', num('t', 10000000));
+      set('sal-obligations', num('o', 10000000));
+      if (hasOption($('sal-category'), p.get('c'))) $('sal-category').value = p.get('c');
+      switchTool('salary-tool', false);
+    } else {
+      return;
+    }
+    saveInputs();
+  }
+
+  function initShareSheet() {
+    if (!navigator.share) {
+      const nativeBtn = $('share-targets').querySelector('[data-share="native"]');
+      if (nativeBtn) nativeBtn.hidden = true;
+    }
+    $('share-targets').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-share]');
+      if (btn) runShareTarget(btn.dataset.share);
+    });
+    $('share-close').addEventListener('click', closeShareSheet);
+    $('share-modal').addEventListener('click', (e) => {
+      if (e.target === $('share-modal')) closeShareSheet();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeShareSheet();
+    });
+  }
+
+  /* ==================== حفظ المدخلات محلياً ==================== */
+  const PERSIST_KEY = 'seh_inputs_v2';
+  const saveInputs = debounce(() => {
+    const d = {};
+    document.querySelectorAll('[data-persist]').forEach(el => { d[el.id] = el.value; });
+    store.set(PERSIST_KEY, JSON.stringify(d));
+  }, 300);
+  function restoreInputs() {
+    try {
+      const d = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}');
+      for (const id in d) { const el = $(id); if (el) el.value = d[id]; }
+    } catch (e) { /* تجاهل */ }
+  }
+
+  /* ==================== المظهر الداكن ==================== */
+  function applyTheme(theme) {
+    $('html-root').dataset.theme = theme;
+    $('theme-btn').textContent = theme === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('seh_theme', theme);
+  }
+
+  /* ==================== تطبيق اللغة ==================== */
+  function applyI18n() {
+    document.documentElement.lang = currentLang;
+    document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+    document.title = t('docTitle');
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute('content', t('metaDesc'));
+    $('lang-btn').textContent = t('langBtn');
+
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (i18n[currentLang][key] !== undefined) el.textContent = i18n[currentLang][key];
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+      const key = el.getAttribute('data-i18n-ph');
+      if (i18n[currentLang][key] !== undefined) el.placeholder = i18n[currentLang][key];
+    });
+    refreshPrintDate();
+  }
+
+function cvSharePayload() {
+    if (!cvHasContent) return null;
+    const scoreNode = $('ats-score-text');
+    const score = scoreNode ? (scoreNode.textContent || '').trim() : '';
+    const feedbackNode = $('ats-feedback');
+    const feedback = feedbackNode ? (feedbackNode.textContent || '').trim() : '';
+    if (!score) return null;
+    const lines = [
+      t('shareCvPrivacy'),
+      '• ' + t('cvScoreTitle') + ' ' + score + (feedback ? ' — ' + feedback : ''),
+      '',
+      t('shareBrand') + ': ' + SHARE_BASE + '#cv-tool'
+    ].join('\n');
+    return { title: t('shareCvTitle'), text: lines, link: SHARE_BASE + '#cv-tool' };
+  }
+
+  /* استعادة الأرقام من رابط المشاركة (?tool=...&...) */
+
+  function toggleLanguage() {
+    closeShareSheet();
+    currentLang = currentLang === 'ar' ? 'en' : 'ar';
+    localStorage.setItem('seh_lang', currentLang);
+    applyI18n();
+    renderGuides();
+    calculateEOS(); calculateSalary(); generateLetter(); cvRenderAll();
+  }
+
+  /* ==================== التبويبات + التنقل بالأسهم + الهاش ==================== */
+  const TOOL_IDS = ['eos-tool', 'salary-tool', 'letter-tool', 'cv-tool'];
+  function switchTool(toolId, setHash = true) {
+    TOOL_IDS.forEach(id => $(id).classList.toggle('active', id === toolId));
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      const selected = btn.dataset.tool === toolId;
+      btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+      btn.tabIndex = selected ? 0 : -1;
+    });
+    if (setHash) history.replaceState(null, '', '#' + toolId);
+  }
+
+  function initTabs() {
+    const tabs = Array.from(document.querySelectorAll('.tab-btn'));
+
+    // Activate the requested tool when arriving through an article's direct link.
+    const activateHashTool = () => {
+      const requestedTool = location.hash.slice(1);
+      if (!TOOL_IDS.includes(requestedTool)) return;
+      switchTool(requestedTool, false);
+      window.requestAnimationFrame(() => $('main-tabs').scrollIntoView({ block: 'start' }));
+    };
+    activateHashTool();
+    window.addEventListener('hashchange', activateHashTool);
+
+    tabs.forEach(btn => btn.addEventListener('click', () => { switchTool(btn.dataset.tool); btn.focus(); }));
+       $('main-tabs').addEventListener('keydown', (e) => {
+      if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const idx = tabs.findIndex(b => b.getAttribute('aria-selected') === 'true');
+      const rtl = document.documentElement.dir === 'rtl';
+      let next;
+      if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      else {
+        const step = (e.key === 'ArrowRight') === !rtl ? 1 : -1;
+        next = (idx + step + tabs.length) % tabs.length;
+      }
+      switchTool(tabs[next].dataset.tool);
+      tabs[next].focus();
+    });
+  }
+
+  /* ==================== الأداة 1: نهاية الخدمة (بدون نوع العقد) ==================== */
+  function localDateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function calculateEOS(showErrors = false) {
+    const reason = $('eos-reason').value;
+    const salary = numVal('eos-salary');
+    const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
+    const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
+    const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
+    const leaveDays = numVal('eos-leave-days');
+    const leaveBasis = $('eos-leave-basis').value;
+    const basicField = $('eos-basic').value.trim();
+
+    $('eos-basic-group').hidden = leaveBasis !== 'basic';
+
+    // This is an estimate from the entered service duration. Dates can produce
+    // a slightly different day fraction where calendar/leap-year details matter.
+    const totalYears = years + (months / 12) + (days / 365);
+
+    // Article 84: half-month wage for the first five years and one-month wage thereafter.
+    const first5 = Math.min(totalYears, 5) * (salary / 2);
+    const after5 = Math.max(0, totalYears - 5) * salary;
+    const full = first5 + after5;
+
+    let ratio = 1;
+    let ratioLabel = t('rFull');
+    if (reason === 'art80') {
+      ratio = 0;
+      ratioLabel = t('rNone');
+    } else if (reason === 'resignation') {
+      // Article 85: one-third for 2 to 5 years inclusive; two-thirds only
+      // when continuous service exceeds 5 years and is less than 10 years.
+      if (totalYears < 2) {
+        ratio = 0;
+        ratioLabel = t('rUnder2');
+      } else if (totalYears <= 5) {
+        ratio = 1 / 3;
+        ratioLabel = t('rThird');
+      } else if (totalYears < 10) {
+        ratio = 2 / 3;
+        ratioLabel = t('rTwoThirds');
+      } else {
+        ratio = 1;
+        ratioLabel = t('rFull10');
+      }
+    }
+
+    const netGratuity = full * ratio;
+    $('eos-duration-out').textContent = totalYears.toFixed(2) + t('durYear');
+    $('eos-first5-out').textContent = formatSAR(first5);
+    $('eos-after5-out').textContent = formatSAR(after5);
+    $('eos-ratio-out').textContent = ratioLabel;
+    $('eos-net-gratuity').textContent = formatSAR(netGratuity);
+
+    // Never guess basic salary (the old version assumed 75% of total wage).
+    // If the user elects a basic-only leave-pay basis, require the real value.
+    if (salary <= 0) {
+      $('eos-leave-out').textContent = '—';
+      $('eos-total-val').textContent = '—';
+      if (showErrors) showToast(t('eosSalaryRequired'));
+      return;
+    }
+
+    let leaveWage = salary;
+    if (leaveBasis === 'basic') {
+      if (basicField === '') {
+        $('eos-leave-out').textContent = t('eosBasicRequired');
+        $('eos-total-val').textContent = '—';
+        if (showErrors) showToast(t('eosBasicRequired'));
+        return;
+      }
+      const basicSalary = numVal('eos-basic');
+      if (basicSalary > salary) {
+        $('eos-leave-out').textContent = t('eosBasicTooHigh');
+        $('eos-total-val').textContent = '—';
+        if (showErrors) showToast(t('eosBasicTooHigh'));
+        return;
+      }
+      leaveWage = basicSalary;
+    }
+
+    const leavePay = (leaveWage / 30) * leaveDays;
+    const total = netGratuity + leavePay;
+    $('eos-leave-out').textContent = formatSAR(leavePay);
+    $('eos-total-val').textContent = formatSAR(total);
+  }
+
+  /* ==================== الأداة 2: الراتب ==================== */
+  function calculateSalary() {
+    const scheme = gosiScheme($('sal-category').value);
+    const basic = numVal('sal-basic');
+    const housingRaw = parseFloat($('sal-housing').value);
+    const housing = isNaN(housingRaw) ? basic * 0.25 : Math.max(0, housingRaw);
+    const transport = numVal('sal-transport');
+    const obligations = numVal('sal-obligations');
+
+    const gross = basic + housing + transport;
+    const insurable = Math.min(basic + housing, CONFIG.GOSI_CAP);
+    const gosiEmp = insurable * scheme.emp;
+    const gosiEr = insurable * scheme.er;
+
+    const net = gross - gosiEmp;
+    const maxDeduct = net * CONFIG.DBR;
+    const avail = Math.max(0, maxDeduct - obligations);
+    const disposable = Math.max(0, net - obligations);
+
+    $('sal-cap-warn').hidden = (basic + housing) <= CONFIG.GOSI_CAP;
+    $('sal-gross-out').textContent = formatSAR(gross);
+    $('sal-gosi-out').textContent = formatSAR(gosiEmp);
+    $('sal-gosi-er-out').textContent = formatSAR(gosiEr);
+    $('sal-max-deduct').textContent = formatSAR(maxDeduct);
+    $('sal-avail-installment').textContent = formatSAR(avail);
+    $('sal-disposable-out').textContent = formatSAR(disposable);
+    $('sal-net-val').textContent = formatSAR(net);
+  }
+
+  /* ==================== الأداة 3: الخطابات ==================== */
+  function hijriToday() {
+    try {
+      const s = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+      // بعض المتصفحات تضيف "هـ" في نهاية التاريخ — نتخلص منها لأن القالب يضيفها
+      return s.replace(/\s*هـ\s*$/, '').trim();
+    } catch (e) { return ''; }
+  }
+
+  function generateLetter() {
+    const type = $('let-type').value;
+    const lang = $('let-doc-lang').value;
+    const recipient = $('let-recipient').value.trim();
+    const name = $('let-name').value.trim();
+    const idInfo = $('let-id').value.trim();
+    const dateStr = $('let-date').value || localDateStr(new Date());
+    const dur = $('let-duration').value.trim();
+    const reason = $('let-reason').value.trim();
+    const today = localDateStr(new Date());
+    const outBox = $('letter-output');
+
+    if (lang === 'en') {
+      outBox.dir = 'ltr'; outBox.style.textAlign = 'left';
+      const subj = {
+        resign: 'Subject: Formal Resignation & Final Settlement Request',
+        raise: 'Subject: Salary Review / Job Title Adjustment Request',
+        leave: 'Subject: Leave Application',
+        nonrenewal: 'Subject: Notice of Non-Renewal of Employment Contract',
+        salarycert: 'Subject: Request for Salary Certificate',
+        petition: 'Subject: Administrative Request'
+      }[type];
+      const when = dur ? 'effective ' + dateStr + ' (' + dur + ')' : 'effective ' + dateStr;
+      const body = {
+        resign: `Please accept this letter as formal notification of my resignation from my position (${idInfo}), ${when}. I will honor the statutory notice period and kindly request my final settlement, End of Service Benefits, and my experience and clearance certificates.`,
+        raise: `I respectfully request a review of my compensation package / job title (${idInfo}) in light of my responsibilities and performance. Details: ${reason || 'to be discussed'}.`,
+        leave: `I kindly request approval for my leave ${when}. Reason: ${reason || 'personal'}. I will hand over all pending tasks before my departure.`,
+        nonrenewal: `Pursuant to the notice period in our contract, I formally notify you that I do not wish to renew my employment contract upon its expiry (${dateStr}). Thank you for your support during my service.`,
+        salarycert: `Kindly issue an official Salary Certificate addressed to (${reason || 'the requesting entity'}) stating my start date, job title (${idInfo}), and gross monthly salary.`,
+        petition: `I submit the following request for your kind consideration: ${reason || '(details)'}${dur ? ' — effective ' + dateStr : ''}.`
+      }[type];
+      outBox.textContent =
+`Date: ${today}
+To: ${recipient || 'HR Department'}
+
+${subj}
+
+Dear Sir/Madam,
+
+${body}
+
+Sincerely,
+${name || 'Employee Name'}
+${idInfo}
+Signature: ............................`;
+    } else {
+      outBox.dir = 'rtl'; outBox.style.textAlign = 'right';
+      const subj = {
+        resign: 'الموضوع: تقديم استقالة وطلب إخلاء طرف وشهادة خبرة',
+        raise: 'الموضوع: طلب مراجعة الراتب / تعديل المسمى الوظيفي',
+        leave: 'الموضوع: طلب الموافقة على إجازة',
+        nonrenewal: 'الموضوع: إشعار بعدم الرغبة في تجديد عقد العمل',
+        salarycert: 'الموضوع: طلب إصدار خطاب تعريف بالراتب',
+        petition: 'الموضوع: التماس وطلب إداري رسمي'
+      }[type];
+      const when = dur ? ` اعتباراً من (${dateStr}) ولمدة (${dur})` : ` اعتباراً من (${dateStr})`;
+      const body = {
+        resign: `أتقدم إليكم بطلب استقالتي من العمل لديكم${when}، مع التزامي بفترة الإشعار النظامية. وأرجو التكرم بالتوجيه لاستكمال إجراءات التصفية النهائية وتسليمي شهادة الخبرة وإخلاء الطرف.`,
+        raise: `أتشرف برفع خطابي لسعادتكم بطلب النظر في مراجعة راتبي / مسمائي الوظيفي (${idInfo}). التفاصيل: ${reason || 'للنقاش عند التكرم بالمقابلة'}.`,
+        leave: `أرجو التكرم بالموافقة على منحي إجازة${when}. السبب: ${reason || 'ظروف خاصة'}، مع التزامي بتسليم المهام لزملائي قبل بدئها.`,
+        nonrenewal: `إشارة إلى عقد العمل المبرم بيننا، أود إشعاركم رسمياً وبموجب فترة الإشعار النظامية بعدم رغبتي في تجديد العقد عند انتهائه (${dateStr})، مع خالص التقدير.`,
+        salarycert: `أرجو التكرم بالتوجيه لإصدار خطاب تعريف بالراتب موجه إلى (${reason || 'الجهة الطالبة'}) يتضمن تاريخ المباشرة والمسمى الوظيفي (${idInfo}) وإجمالي الراتب الشهري.`,
+        petition: `أتشرف برفع معروضي هذا بخصوص: ${reason || '(بيان الطلب)'}${dur ? ` — وذلك اعتباراً من (${dateStr})` : ''}، راجياً التكرم بالنظر والتوجيه بما ترونه مناسباً.`
+      }[type];
+      outBox.textContent =
+`بسم الله الرحمن الرحيم
+التاريخ: ${today} م — الموافق ${hijriToday()} هـ
+
+سعادة / ${recipient || 'مدير إدارة الموارد البشرية'}    حفظه الله
+السلام عليكم ورحمة الله وبركاته،،،
+
+${subj}
+
+${body}
+
+وتفضلوا بقبول فائق الاحترام والتقدير،،،
+
+مقدم الطلب: ${name || 'اسم الموظف'}
+البيانات الوظيفية: ${idInfo}
+التوقيع: ............................`;
+    }
+  }
+
+  /* ==================== الأداة 4: منسق السيرة الذاتية ==================== */
+  /* عناوين الأقسام تتبع لغة المستند المختارة، لا لغة الواجهة */
+  const CV_SECTIONS = {
+    ar: { summary: 'الملخص المهني', exp: 'الخبرات العملية', edu: 'المؤهل العلمي', skills: 'المهارات', certs: 'الشهادات والدورات', langs: 'اللغات', now: 'حتى الآن' },
+    en: { summary: 'PROFESSIONAL SUMMARY', exp: 'WORK EXPERIENCE', edu: 'EDUCATION', skills: 'CORE SKILLS', certs: 'CERTIFICATIONS & COURSES', langs: 'LANGUAGES', now: 'Present' }
+  };
+  const CV_STATUS_TEXT = {
+    saudi: { ar: 'سعودي', en: 'Saudi national' },
+    transferable: { ar: 'إقامة قابلة للنقل', en: 'Transferable Iqama' },
+    sponsored: { ar: 'إقامة بحاجة إلى نقل كفالة', en: 'Iqama — transfer required' },
+    other: { ar: 'حالة إقامة: أخرى', en: 'Residency: other' }
+  };
+  const CV_RULES = {
+    email: /[\w.+-]+@[\w-]+\.[\w.]+/,
+    phone: /(\+?\d[\d\s()\-]{7,}\d)/,
+    metrics: /(\d+\s*%|\d+(?:\.\d+)?\s*(?:ر\.?\s*س|ريال|sar|usd|مليون|ألف|الف)|\b\d{2,}\b)/i,
+    verbs: /(أدرت|قدت|قُدت|حققت|طوّرت|طورت|أشرفت|اشرفت|خفّضت|خفضت|رفعت|نفّذت|نفذت|نظمت|بنيت|أسست|اسست|ساهمت|حسّنت|حسنت|أنجزت|انجزت|قلّلت|أطلقت|اطلقت|درّبت|قمت|led|managed|achieved|developed|improved|reduced|increased|launched|built|implemented|supervised|delivered|created|optimized|trained|handled)/i
+  };
+
+  /* توحيد الأرقام العربية-الهندية وعلامة النسبة حتى تُلتقط الفحوصات بثقة */
+  function normalizeDigits(s) {
+    return String(s)
+      .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+      .replace(/\u066A/g, '%');
+  }
+
+  const cvEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function cvSplitTags(v) {
+    return String(v || '').split(/[،,;\n]+/).map(s => s.trim()).filter(Boolean);
+  }
+  /* كل إنجاز في سطر — ومع السطر الطويل الواحد نفصل على الفواصل */
+  function cvDuties(raw) {
+    let lines = String(raw || '').split('\n').map(l => l.trim().replace(/^[-•*\u2022]\s*/, '')).filter(Boolean);
+    if (lines.length === 1 && lines[0].length > 90 && (lines[0].match(/[،,]/g) || []).length >= 2) {
+      lines = lines[0].split(/[،,]+/).map(s => s.trim()).filter(s => s.length > 2);
+    }
+    return lines;
+  }
+
+  /* ——— حالة السيرة: مصدر واحد للحقيقة ——— */
+  let cvSeq = 1;
+  const cvNewExp = () => ({ uid: cvSeq++, title: '', company: '', city: '', from: '', to: '', now: false, duties: '' });
+  const cvNewEdu = () => ({ uid: cvSeq++, degree: '', school: '', year: '' });
+  const cvNewState = () => ({
+    p: { name: '', title: '', city: '', phone: '', email: '', status: '' },
+    summary: '', exp: [cvNewExp()], edu: [], skills: '', certs: '', langs: ''
+  });
+  let cvState = cvNewState();
+  let cvHasContent = false;
+  const cvLang = () => ($('cv-doc-lang') && $('cv-doc-lang').value === 'en') ? 'en' : 'ar';
+
+  const CV_DEMO = {
+    ar: {
+      p: {
+        name: 'محمد أحمد العتيبي', title: 'محاسب قانوني — ZATCA', city: 'الرياض',
+        phone: '+966 55 123 4567', email: 'mohammed.otaibi@example.com', status: 'saudi'
+      },
+      summary: 'محاسب قانوني بخبرة تتجاوز 6 سنوات في السوق السعودي، متخصص في فوترة زاتكا وإقرارات ضريبة القيمة المضافة والإقفال الشهري. طوّرت إجراءات الإقفال وخفّضت زمنه 40%، وحققت وفراً سنوياً يتجاوز 120 ألف ريال عبر إعادة تنظيم سياسة المشتريات.',
+      exp: [
+        {
+          title: 'محاسب أول', company: 'شركة النخبة للتجارة', city: 'الرياض', from: '2021', to: '', now: true,
+          duties: 'أشرفت على فريق من 3 محاسبين وأنجزت الإقفال الشهري قبل الموعد بيومين.\nأعددت إقرارات ضريبة القيمة المضافة والاستقطاع وقدّمتها في مواعيدها دون أي غرامة.\nخفّضت زمن التحصيل 25% بعد تطبيق سياسة متابعة الفواتير المتأخرة.'
+        },
+        {
+          title: 'محاسب', company: 'مؤسسة الوفاء التجارية', city: 'جدة', from: '2019', to: '2021', now: false,
+          duties: 'سجلت القيود اليومية وأعددت مطابقات الحسابات البنكية الشهرية.\nنظمت أرشيف الفواتير إلكترونياً وسرّعت الوصول إلى المستندات 60%.'
+        }
+      ],
+      edu: [{ degree: 'بكالوريوس المحاسبة', school: 'جامعة الملك سعود', year: '2019' }],
+      skills: 'ZATCA، E-Invoicing، SAP، Excel متقدم، إعداد القوائم المالية، ضريبة القيمة المضافة، منصة قوى، منصة مدد',
+      certs: 'SOCPA، شهادة ضريبة القيمة المضافة، Excel Advanced',
+      langs: 'العربية (اللغة الأم)، الإنجليزية (جيد جداً)'
+    },
+    en: {
+      p: {
+        name: 'Mohammed A. Alotaibi', title: 'Senior Accountant — ZATCA Compliance', city: 'Riyadh',
+        phone: '+966 55 123 4567', email: 'mohammed.otaibi@example.com', status: 'saudi'
+      },
+      summary: 'Senior accountant with over 6 years of experience in the Saudi market, specialising in ZATCA e-invoicing, VAT filings and monthly closing. Redesigned the closing process and cut closing time by 40%, delivering annual savings of over SAR 120,000.',
+      exp: [
+        {
+          title: 'Senior Accountant', company: 'Al-Nokhba Trading Co.', city: 'Riyadh', from: '2021', to: '', now: true,
+          duties: 'Supervised a team of 3 accountants and completed monthly closing two days ahead of deadline.\nFiled VAT and withholding tax returns on time with zero penalties.\nReduced collection cycle by 25% by introducing a follow-up policy for overdue invoices.'
+        },
+        {
+          title: 'Accountant', company: 'Al-Wafa Trading Est.', city: 'Jeddah', from: '2019', to: '2021', now: false,
+          duties: 'Recorded daily journal entries and prepared monthly bank reconciliations.\nDigitised the invoice archive and sped up document retrieval by 60%.'
+        }
+      ],
+      edu: [{ degree: 'BSc in Accounting', school: 'King Saud University', year: '2019' }],
+      skills: 'ZATCA, E-Invoicing, SAP, Advanced Excel, Financial Statements, VAT, Qiwa, Mudad',
+      certs: 'SOCPA, VAT Certificate, Advanced Excel',
+      langs: 'Arabic (Native), English (Very Good)'
+    }
+  };
+
+  function cvHydrate(raw) {
+    const s = cvNewState();
+    s.exp = [];
+    s.edu = [];
+    let d = null;
+    try { d = JSON.parse(raw); } catch (e) { d = null; }
+    if (!d || typeof d !== 'object') return s;
+    if (d.p && typeof d.p === 'object') {
+      Object.keys(s.p).forEach(k => { if (typeof d.p[k] === 'string') s.p[k] = d.p[k]; });
+    }
+    ['summary', 'skills', 'certs', 'langs'].forEach(k => { if (typeof d[k] === 'string') s[k] = d[k]; });
+    (Array.isArray(d.exp) ? d.exp : []).forEach(e => {
+      if (!e || typeof e !== 'object') return;
+      const n = cvNewExp();
+      ['title', 'company', 'city', 'from', 'to', 'duties'].forEach(k => { if (typeof e[k] === 'string') n[k] = e[k]; });
+      n.now = !!e.now;
+      s.exp.push(n);
+    });
+    (Array.isArray(d.edu) ? d.edu : []).forEach(e => {
+      if (!e || typeof e !== 'object') return;
+      const n = cvNewEdu();
+      ['degree', 'school', 'year'].forEach(k => { if (typeof e[k] === 'string') n[k] = e[k]; });
+      s.edu.push(n);
+    });
+    if (!s.exp.length) s.exp.push(cvNewExp());
+    return s;
+  }
+
+  function cvReadRep(sel, fields, prev) {
+    const map = new Map((prev || []).map(x => [String(x.uid), x]));
+    const out = [];
+    document.querySelectorAll(sel + ' .cv-rep').forEach(node => {
+      const uid = node.dataset.uid;
+      const obj = Object.assign({}, map.get(uid) || { uid: uid });
+      fields.forEach(f => {
+        const el = node.querySelector('[data-f="' + f + '"]');
+        if (!el) return;
+        obj[f] = (el.type === 'checkbox') ? el.checked : el.value;
+      });
+      obj.uid = uid;
+      out.push(obj);
+    });
+    return out;
+  }
+
+  /* قراءة النموذج كاملاً وتحويله إلى الحالة */
+  function cvSync() {
+    const v = id => { const el = $(id); return el ? el.value : ''; };
+    cvState.p.name = v('cv-f-name');
+    cvState.p.title = v('cv-f-title');
+    cvState.p.city = v('cv-f-city');
+    cvState.p.phone = v('cv-f-phone');
+    cvState.p.email = v('cv-f-email');
+    cvState.p.status = v('cv-f-status');
+    cvState.summary = v('cv-f-summary');
+    cvState.skills = v('cv-f-skills');
+    cvState.certs = v('cv-f-certs');
+    cvState.langs = v('cv-f-langs');
+    cvState.exp = cvReadRep('#cv-exp-list', ['title', 'company', 'city', 'from', 'to', 'now', 'duties'], cvState.exp);
+    cvState.edu = cvReadRep('#cv-edu-list', ['degree', 'school', 'year'], cvState.edu);
+  }
+
+  function cvSave() {
+    const el = $('cv-data');
+    if (el) el.value = JSON.stringify(cvState);
+    saveInputs();
+  }
+
+  function cvPaintStatics() {
+    const set = (id, val) => { const el = $(id); if (el) el.value = val || ''; };
+    set('cv-f-name', cvState.p.name);
+    set('cv-f-title', cvState.p.title);
+    set('cv-f-city', cvState.p.city);
+    set('cv-f-phone', cvState.p.phone);
+    set('cv-f-email', cvState.p.email);
+    set('cv-f-status', cvState.p.status);
+    set('cv-f-summary', cvState.summary);
+    set('cv-f-skills', cvState.skills);
+    set('cv-f-certs', cvState.certs);
+    set('cv-f-langs', cvState.langs);
+  }
+
+  function cvToolsHTML(i, last) {
+    return '<button type="button" class="cv-icon-btn" data-act="up" aria-label="' + cvEsc(t('cvMoveUp')) + '"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
+      '<button type="button" class="cv-icon-btn" data-act="down" aria-label="' + cvEsc(t('cvMoveDown')) + '"' + (i === last ? ' disabled' : '') + '>▼</button>' +
+      '<button type="button" class="cv-icon-btn danger" data-act="del" aria-label="' + cvEsc(t('cvDelete')) + '">✕</button>';
+  }
+
+  function cvExpHTML(e, i) {
+    const last = cvState.exp.length - 1;
+    return '<div class="cv-rep" data-uid="' + cvEsc(e.uid) + '">' +
+      '<div class="cv-rep-head">' +
+        '<strong class="cv-rep-title">' + cvEsc(t('cvExpCard')) + ' ' + (i + 1) + '</strong>' +
+        '<div class="cv-rep-tools">' + cvToolsHTML(i, last) + '</div>' +
+      '</div>' +
+      '<div class="cv-grid">' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepTitle')) + '</label>' +
+          '<input type="text" data-f="title" aria-label="' + cvEsc(t('cvRepTitle')) + '" value="' + cvEsc(e.title) + '" placeholder="' + cvEsc(t('cvRepTitlePh')) + '" /></div>' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepCompany')) + '</label>' +
+          '<input type="text" data-f="company" aria-label="' + cvEsc(t('cvRepCompany')) + '" value="' + cvEsc(e.company) + '" placeholder="' + cvEsc(t('cvRepCompanyPh')) + '" /></div>' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepCity')) + '</label>' +
+          '<input type="text" data-f="city" aria-label="' + cvEsc(t('cvRepCity')) + '" value="' + cvEsc(e.city) + '" placeholder="' + cvEsc(t('cvRepCityPh')) + '" /></div>' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepPeriod')) + '</label>' +
+          '<div class="cv-year-row">' +
+            '<input type="text" data-f="from" inputmode="numeric" aria-label="' + cvEsc(t('cvRepFromPh')) + '" value="' + cvEsc(e.from) + '" placeholder="' + cvEsc(t('cvRepFromPh')) + '" />' +
+            '<input type="text" data-f="to" inputmode="numeric" aria-label="' + cvEsc(t('cvRepToPh')) + '" value="' + cvEsc(e.to) + '" placeholder="' + cvEsc(t('cvRepToPh')) + '"' + (e.now ? ' disabled' : '') + ' />' +
+          '</div>' +
+          '<label class="cv-check"><input type="checkbox" data-f="now"' + (e.now ? ' checked' : '') + ' /> <span>' + cvEsc(t('cvRepNow')) + '</span></label>' +
+        '</div>' +
+        '<div class="form-group cv-span2"><label>' + cvEsc(t('cvRepDuties')) + '</label>' +
+          '<textarea data-f="duties" rows="4" aria-label="' + cvEsc(t('cvRepDuties')) + '" placeholder="' + cvEsc(t('cvRepDutiesPh')) + '">' + cvEsc(e.duties) + '</textarea>' +
+          '<small class="field-hint">' + cvEsc(t('cvRepDutiesHint')) + '</small>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function cvEduHTML(e, i) {
+    const last = cvState.edu.length - 1;
+    return '<div class="cv-rep" data-uid="' + cvEsc(e.uid) + '">' +
+      '<div class="cv-rep-head">' +
+        '<strong class="cv-rep-title">' + cvEsc(t('cvEduCard')) + ' ' + (i + 1) + '</strong>' +
+        '<div class="cv-rep-tools">' + cvToolsHTML(i, last) + '</div>' +
+      '</div>' +
+      '<div class="cv-grid">' +
+        '<div class="form-group cv-span2"><label>' + cvEsc(t('cvRepDegree')) + '</label>' +
+          '<input type="text" data-f="degree" aria-label="' + cvEsc(t('cvRepDegree')) + '" value="' + cvEsc(e.degree) + '" placeholder="' + cvEsc(t('cvRepDegreePh')) + '" /></div>' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepSchool')) + '</label>' +
+          '<input type="text" data-f="school" aria-label="' + cvEsc(t('cvRepSchool')) + '" value="' + cvEsc(e.school) + '" placeholder="' + cvEsc(t('cvRepSchoolPh')) + '" /></div>' +
+        '<div class="form-group"><label>' + cvEsc(t('cvRepYear')) + '</label>' +
+          '<input type="text" data-f="year" inputmode="numeric" aria-label="' + cvEsc(t('cvRepYear')) + '" value="' + cvEsc(e.year) + '" placeholder="' + cvEsc(t('cvRepYearPh')) + '" /></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function cvRender() {
+    const expBox = $('cv-exp-list');
+    const eduBox = $('cv-edu-list');
+    if (expBox) expBox.innerHTML = cvState.exp.map(cvExpHTML).join('');
+    if (eduBox) eduBox.innerHTML = cvState.edu.map(cvEduHTML).join('');
+    cvPaintStatics();
+    cvUpdateStatus();
+  }
+
+  function cvRenderTags(inputId, boxId) {
+    const inp = $(inputId);
+    const box = $(boxId);
+    if (!inp || !box) return;
+    const tags = cvSplitTags(inp.value);
+    if (!tags.length) {
+      box.innerHTML = '<span class="cv-tags-empty">' + cvEsc(t('cvTagsEmpty')) + '</span>';
+      return;
+    }
+    box.innerHTML = tags.map((tg, i) =>
+      '<span class="cv-tag">' + cvEsc(tg) +
+      '<button type="button" data-tag="' + i + '" aria-label="' + cvEsc(t('cvTagRemove')) + '">✕</button></span>'
+    ).join('');
+  }
+  function cvRenderTagsAll() {
+    cvRenderTags('cv-f-skills', 'cv-skills-tags');
+    cvRenderTags('cv-f-certs', 'cv-certs-tags');
+    cvRenderTags('cv-f-langs', 'cv-langs-tags');
+  }
+
+  function updateCountHint(id, len, min) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = len + ' ' + t('cvChars') + (len >= min ? ' ✓' : ' — ' + t('cvCountLow'));
+    el.classList.toggle('count-ok', len >= min);
+  }
+
+  /* ——— اكتمال كل خطوة ——— */
+  function cvStepDone(step) {
+    const s = cvState;
+    if (step === '1') {
+      return s.p.name.trim().split(/\s+/).filter(Boolean).length >= 2 &&
+        !!s.p.title.trim() && s.p.city.trim().length >= 2 &&
+        CV_RULES.phone.test(normalizeDigits(s.p.phone)) && CV_RULES.email.test(s.p.email);
+    }
+    if (step === '2') return s.summary.trim().length >= 30;
+    if (step === '3') return s.exp.some(e => e.title.trim() && (e.company.trim() || e.city.trim()) && e.from.trim());
+    if (step === '4') return s.edu.some(e => e.degree.trim() || e.school.trim()) || cvSplitTags(s.skills).length >= 3;
+    return false;
+  }
+
+  function cvUpdateStatus() {
+    document.querySelectorAll('#cv-tool .cv-acc').forEach(acc => {
+      const done = cvStepDone(acc.dataset.step);
+      const pill = acc.querySelector('[data-status]');
+      if (pill) {
+        pill.textContent = done ? t('cvDone') : t('cvTodo');
+        pill.classList.toggle('done', done);
+      }
+      const num = acc.querySelector('.cv-acc-num');
+      if (num) num.textContent = done ? '✓' : acc.dataset.step;
+    });
+    document.querySelectorAll('#cv-nav .cv-nav-chip').forEach(chip => {
+      const done = cvStepDone(chip.dataset.goto);
+      chip.classList.toggle('done', done);
+      const n = chip.querySelector('.cv-nav-num');
+      if (n) n.textContent = done ? '✓' : chip.dataset.goto;
+    });
+  }
+
+  function cvSetNavActive(step) {
+    document.querySelectorAll('#cv-nav .cv-nav-chip').forEach(c => {
+      c.classList.toggle('active', !!step && c.dataset.goto === String(step));
+    });
+  }
+
+  function cvOpenStep(step, scroll) {
+    document.querySelectorAll('#cv-tool .cv-acc').forEach(acc => {
+      const on = acc.dataset.step === String(step);
+      acc.classList.toggle('open', on);
+      const h = acc.querySelector('.cv-acc-head');
+      if (h) h.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+    cvSetNavActive(step);
+    if (scroll === false) return;
+    const target = document.querySelector('#cv-tool .cv-acc[data-step="' + step + '"]');
+    if (target) {
+      const y = target.getBoundingClientRect().top + window.scrollY - 16;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+  }
+
+  function cvAfterInput() {
+    cvSync();
+    cvSave();
+    cvUpdateStatus();
+    cvRenderTagsAll();
+    buildCV();
+  }
+
+  /* بعد أي تغيير هيكلي (إضافة/حذف/ترتيب): لا نقرأ النموذج مرة أخرى
+     حتى لا نتجاوز التعديلات التي طُبقت للتو على الحالة */
+  function cvAfterStruct() {
+    cvRender();
+    cvSave();
+    cvRenderTagsAll();
+    buildCV();
+  }
+
+  /* تغيير لغة الواجهة: نقرأ النموذج أولاً ثم نعيد رسمه باللغة الجديدة */
+  function cvRenderAll() {
+    cvSync();
+    cvRender();
+    cvRenderTagsAll();
+    buildCV();
+  }
+
+  /* ——— بناء مستند السيرة المُنسّق (HTML) ——— */
+  function cvSecHTML(titleText, body) {
+    return '<section class="cvd-sec"><h2 class="cvd-h">' + cvEsc(titleText) + '</h2>' + body + '</section>';
+  }
+  /* المهارات/الشهادات/اللغات: نص عادي بفواصل (بلا رقائق ملوّنة) — أوضح في الطباعة وفي أنظمة ATS */
+  function cvPlainHTML(arr) {
+    return '<p class="cvd-plain">' +
+      arr.map(x => '<bdi>' + cvEsc(x) + '</bdi>').join('<span class="cvd-sep">·</span>') + '</p>';
+  }
+  function cvDocHTML(lang, L, s) {
+    const dash = ' – ';
+    const parts = [];
+
+    /* الترويسة: الاسم + المسمى + بيانات التواصل */
+    const name = s.p.name.trim();
+    const role = s.p.title.trim();
+    /* كل عنصر تواصل في حاوية مستقلة مع عزل الاتجاه: يمنع المتصفح من قلب ترتيب الأرقام والبريد */
+    const contact = [];
+    if (s.p.city.trim()) contact.push({ t: s.p.city.trim(), ltr: false });
+    if (s.p.phone.trim()) contact.push({ t: s.p.phone.trim(), ltr: true });
+    if (s.p.email.trim()) contact.push({ t: s.p.email.trim(), ltr: true });
+    if (CV_STATUS_TEXT[s.p.status]) contact.push({ t: CV_STATUS_TEXT[s.p.status][lang], ltr: false });
+    if (name || role || contact.length) {
+      let h = '<header class="cvd-head">';
+      if (name) h += '<h1 class="cvd-name">' + cvEsc(name) + '</h1>';
+      if (role) h += '<p class="cvd-role">' + cvEsc(role) + '</p>';
+      if (contact.length) {
+        h += '<p class="cvd-contact">' +
+          contact.map(c => '<span class="cvd-ci' + (c.ltr ? ' cvd-ltr' : '') + '">' + cvEsc(c.t) + '</span>')
+            .join('<span class="cvd-sep">•</span>') + '</p>';
+      }
+      parts.push(h + '</header>');
+    }
+
+    /* الملخص المهني */
+    if (s.summary.trim()) {
+      parts.push(cvSecHTML(L.summary,
+        '<p class="cvd-p">' + cvEsc(s.summary.trim().replace(/\s*\n+\s*/g, ' ')) + '</p>'));
+    }
+
+    /* الخبرات العملية */
+    const jobs = s.exp.map(e => {
+      const jobTitle = e.title.trim();
+      const org = [e.company.trim(), e.city.trim()].filter(Boolean).join(' — ');
+      const duties = cvDuties(e.duties);
+      const to = e.now ? L.now : e.to.trim();
+      const years = [e.from.trim(), to].filter(Boolean).join(dash);
+      if (!jobTitle && !org && !duties.length && !years) return '';
+      let h = '<div class="cvd-item"><div class="cvd-item-head">';
+      h += '<h3 class="cvd-job">' + cvEsc(jobTitle || org) + '</h3>';
+      if (years) h += '<span class="cvd-date">' + cvEsc(years) + '</span>';
+      h += '</div>';
+      if (jobTitle && org) h += '<p class="cvd-org">' + cvEsc(org) + '</p>';
+      if (duties.length) {
+        h += '<ul class="cvd-list">' + duties.map(d => '<li>' + cvEsc(d) + '</li>').join('') + '</ul>';
+      }
+      return h + '</div>';
+    }).filter(Boolean);
+    if (jobs.length) parts.push(cvSecHTML(L.exp, jobs.join('')));
+
+    /* المؤهل العلمي */
+    const edus = s.edu.map(e => {
+      const deg = e.degree.trim();
+      const school = e.school.trim();
+      const year = e.year.trim();
+      if (!deg && !school && !year) return '';
+      let h = '<div class="cvd-item"><div class="cvd-item-head">';
+      h += '<h3 class="cvd-job">' + cvEsc(deg || school) + '</h3>';
+      if (year) h += '<span class="cvd-date">' + cvEsc(year) + '</span>';
+      h += '</div>';
+      if (deg && school) h += '<p class="cvd-org">' + cvEsc(school) + '</p>';
+      return h + '</div>';
+    }).filter(Boolean);
+    if (edus.length) parts.push(cvSecHTML(L.edu, edus.join('')));
+
+    /* المهارات والشهادات واللغات */
+    const skills = cvSplitTags(s.skills);
+    const certs = cvSplitTags(s.certs);
+    const langs = cvSplitTags(s.langs);
+    if (skills.length) parts.push(cvSecHTML(L.skills, cvPlainHTML(skills)));
+    if (certs.length) parts.push(cvSecHTML(L.certs, cvPlainHTML(certs)));
+    if (langs.length) parts.push(cvSecHTML(L.langs, cvPlainHTML(langs)));
+
+    return parts.join('');
+  }
+
+  /* ==================== بناء السيرة ==================== */
+  function buildCV() {
+    const lang = cvLang();
+    const L = CV_SECTIONS[lang];
+    const s = cvState;
+    const sep = lang === 'en' ? ', ' : '، ';
+
+    const name = s.p.name.trim();
+    const title = s.p.title.trim();
+    const head1 = [name, title].filter(Boolean).join(' — ');
+
+    const contact = [];
+    if (s.p.city.trim()) contact.push(s.p.city.trim());
+    if (s.p.phone.trim()) contact.push(s.p.phone.trim());
+    if (s.p.email.trim()) contact.push(s.p.email.trim());
+    if (CV_STATUS_TEXT[s.p.status]) contact.push(CV_STATUS_TEXT[s.p.status][lang]);
+    const head2 = contact.join(' • ');
+
+    const expBlocks = s.exp.map(e => {
+      const role = [e.title.trim(), e.company.trim()].filter(Boolean).join(' — ');
+      const where = e.city.trim() ? (role ? role + sep + e.city.trim() : e.city.trim()) : role;
+      const to = e.now ? L.now : e.to.trim();
+      const years = [e.from.trim(), to].filter(Boolean).join(' - ');
+      const head = (where + (years ? ' (' + years + ')' : '')).trim();
+      const duties = cvDuties(e.duties);
+      if (!head) return duties.map(d => '• ' + d).join('\n');
+      return duties.length ? head + '\n' + duties.map(d => '  • ' + d).join('\n') : head;
+    }).filter(Boolean);
+
+    const eduBlocks = s.edu.map(e => {
+      const line = [e.degree.trim(), e.school.trim()].filter(Boolean).join(' — ');
+      return e.year.trim() ? (line ? line + ' (' + e.year.trim() + ')' : e.year.trim()) : line;
+    }).filter(Boolean);
+
+    const skills = cvSplitTags(s.skills);
+    const certs = cvSplitTags(s.certs);
+    const langs = cvSplitTags(s.langs);
+    const sumText = s.summary.trim();
+    const dutiesAll = s.exp.map(e => e.duties).join('\n');
+
+    /* ——— فحوصات الجاهزية (موزونة، مجموعها 100) ——— */
+    const metricsText = normalizeDigits(sumText + ' ' + dutiesAll).replace(/\b(19|20)\d{2}\b/g, ' ');
+    const filledExp = s.exp.filter(e => e.title.trim() || e.company.trim() || e.duties.trim());
+    const checks = [
+      { key: 'chkName', ok: name.split(/\s+/).filter(Boolean).length >= 2, pts: 8 },
+      { key: 'chkTitle', ok: title.length >= 3, pts: 8 },
+      { key: 'chkEmail', ok: CV_RULES.email.test(s.p.email), pts: 10 },
+      { key: 'chkPhone', ok: CV_RULES.phone.test(normalizeDigits(s.p.phone)), pts: 10 },
+      { key: 'chkCity', ok: s.p.city.trim().length >= 2, pts: 6 },
+      { key: 'chkIqama', ok: !!s.p.status, pts: 4 },
+      { key: 'chkSummary', ok: sumText.length >= 30, pts: 10 },
+      { key: 'chkExpEntry', ok: s.exp.some(e => e.title.trim()), pts: 10 },
+      { key: 'chkDates', ok: filledExp.length > 0 && filledExp.every(e => e.from.trim() && (e.now || e.to.trim())), pts: 6 },
+      { key: 'chkMetrics', ok: CV_RULES.metrics.test(metricsText), pts: 10 },
+      { key: 'chkVerbs', ok: CV_RULES.verbs.test(sumText + ' ' + dutiesAll), pts: 6 },
+      { key: 'chkSkills', ok: skills.length >= 3, pts: 6 },
+      { key: 'chkEdu', ok: eduBlocks.length >= 1, pts: 3 },
+      { key: 'chkLangs', ok: langs.length >= 1, pts: 3 }
+    ];
+    const totalPts = checks.reduce((a, c) => a + c.pts, 0);
+    const earned = checks.filter(c => c.ok).reduce((a, c) => a + c.pts, 0);
+    const score = Math.round((earned / totalPts) * 100);
+
+    const bar = $('ats-bar');
+    const scoreTxt = $('ats-score-text');
+    const fb = $('ats-feedback');
+    const ul = $('ats-checks');
+    if (bar) bar.style.width = score + '%';
+    if (scoreTxt) scoreTxt.textContent = score + '%';
+    if (fb) fb.textContent = score >= 80 ? t('atsExcellent') : score >= 50 ? t('atsGood') : t('atsNeeds');
+    if (ul) ul.innerHTML = checks.map(c =>
+      '<li class="' + (c.ok ? '' : 'missing') + '">' + cvEsc(t(c.key)) + '</li>').join('');
+
+    /* ——— النص المنسّق ——— */
+    const blocks = [];
+    if (head1 || head2) {
+      blocks.push([head1, head2].filter(Boolean).join('\n'));
+      blocks.push('-'.repeat(44));
+    }
+    if (sumText) blocks.push(L.summary + '\n' + sumText.replace(/\s*\n+\s*/g, ' '));
+    if (expBlocks.length) blocks.push(L.exp + '\n' + expBlocks.join('\n'));
+    if (eduBlocks.length) blocks.push(L.edu + '\n' + eduBlocks.join('\n'));
+    if (skills.length) blocks.push(L.skills + '\n' + skills.join(' • '));
+    if (certs.length) blocks.push(L.certs + '\n' + certs.join(' • '));
+    if (langs.length) blocks.push(L.langs + '\n' + langs.join(' • '));
+
+    const text = blocks.join('\n\n');
+    cvHasContent = !!text;
+    /* نص خام (مخفي) — يُستخدم للنسخ والمشاركة فقط */
+    const out = $('cv-output');
+    if (out) out.textContent = text;
+
+    /* مستند مُنسّق للمعاينة والطباعة */
+    const docEl = $('cv-doc');
+    if (docEl) {
+      if (!text) {
+        docEl.removeAttribute('dir');
+        docEl.innerHTML = '<div class="cv-empty"><span class="cv-empty-ico">📄</span><strong>' +
+          cvEsc(t('cvEmptyTitle')) + '</strong><span>' + cvEsc(t('cvEmptyHint')) + '</span></div>';
+      } else {
+        docEl.dir = lang === 'en' ? 'ltr' : 'rtl';
+        docEl.innerHTML = cvDocHTML(lang, L, s);
+      }
+    }
+    updateCountHint('cv-sum-count', sumText.length, 30);
+    ['cv-copy', 'cv-share', 'cv-print'].forEach(id => {
+      const b = $(id);
+      if (b) b.disabled = !cvHasContent;
+    });
+  }
+
+  /* ——— صياغة تلقائية للملخص من البيانات المُدخلة ——— */
+  function cvYearsSpan() {
+    const cur = new Date().getFullYear();
+    let minFrom = null;
+    let maxTo = null;
+    cvState.exp.forEach(e => {
+      const f = parseInt(normalizeDigits(e.from), 10);
+      const to = e.now ? cur : parseInt(normalizeDigits(e.to), 10);
+      if (!isNaN(f) && f > 1900 && f <= cur) minFrom = (minFrom === null) ? f : Math.min(minFrom, f);
+      if (!isNaN(to) && to > 1900 && to <= cur + 1) maxTo = (maxTo === null) ? to : Math.max(maxTo, to);
+    });
+    if (minFrom === null) return 0;
+    const end = (maxTo === null || maxTo < minFrom) ? cur : maxTo;
+    return Math.max(0, end - minFrom);
+  }
+
+  function cvAutoSummary() {
+    cvSync();
+    const box = $('cv-f-summary');
+    if (!box) return;
+    if (box.value.trim() && !window.confirm(t('cvAutoSummaryConfirm'))) return;
+    const ar = cvLang() === 'ar';
+    const title = cvState.p.title.trim();
+    const hasExp = cvState.exp.some(e => e.title.trim() || e.company.trim());
+    if (!title && !hasExp) { showToast(t('cvAutoSummaryNeed')); cvOpenStep('1'); return; }
+
+    const years = cvYearsSpan();
+    const city = cvState.p.city.trim();
+    const skills = cvSplitTags(cvState.skills).slice(0, 4);
+    const first = cvState.exp.find(e => e.title.trim() || e.company.trim());
+
+    let opening = title || (ar ? 'محترف' : 'Professional');
+    if (years) {
+      opening += ar ? ' بخبرة تتجاوز ' + years + ' سنوات' : ' with over ' + years + ' years of experience';
+    } else {
+      opening += ar ? ' بخبرة عملية' : ' with hands-on experience';
+    }
+    if (city) opening += (ar ? ' في ' : ' in ') + city;
+
+    const parts = [opening];
+    if (first) {
+      const role = [first.title.trim(), first.company.trim()].filter(Boolean).join(ar ? ' في ' : ' at ');
+      if (role) parts.push((ar ? 'أحدثها ' : 'Most recently: ') + role);
+    }
+    let txt = parts.join(ar ? '، ' : '; ') + '.';
+    if (skills.length) txt += ' ' + (ar ? 'أُجيد ' : 'Skilled in ') + skills.join(ar ? '، ' : ', ') + '.';
+    txt += ' ' + (ar
+      ? 'أسعى إلى فرصة تُستثمر فيها خبرتي في تحقيق نتائج ملموسة وقابلة للقياس.'
+      : 'Seeking a role where my experience translates into measurable results.');
+
+    box.value = txt;
+    cvAfterInput();
+    showToast(t('cvAutoSummaryDone'));
+  }
+
+  function cvLoadDemo() {
+    cvState = cvHydrate(JSON.stringify(CV_DEMO[cvLang()]));
+    cvRender();
+    cvSave();
+    cvRenderTagsAll();
+    buildCV();
+    showToast(t('cvDemoDone'));
+  }
+
+  function cvReset() {
+    if (!window.confirm(t('cvResetConfirm'))) return;
+    cvState = cvNewState();
+    cvRender();
+    cvSave();
+    cvRenderTagsAll();
+    buildCV();
+    const f = $('cv-f-name');
+    if (f) f.focus();
+  }
+
+  function cvInit() {
+    const raw = $('cv-data') ? $('cv-data').value : '';
+    if (raw) cvState = cvHydrate(raw);
+    if (!cvState.exp.length) cvState.exp.push(cvNewExp());
+
+    const onInput = debounce(cvAfterInput, 160);
+    const form = $('cv-form');
+    if (form) {
+      form.addEventListener('input', onInput);
+      form.addEventListener('change', e => {
+        const f = (e.target && e.target.dataset) ? e.target.dataset.f : '';
+        if (f === 'now') {
+          const rep = e.target.closest('.cv-rep');
+          const toEl = rep ? rep.querySelector('[data-f="to"]') : null;
+          if (toEl) {
+            if (e.target.checked) toEl.value = '';
+            toEl.disabled = e.target.checked;
+          }
+        }
+        onInput();
+      });
+    }
+
+    /* إزالة وسم بالضغط على ✕ */
+    [['cv-f-skills', 'cv-skills-tags'], ['cv-f-certs', 'cv-certs-tags'], ['cv-f-langs', 'cv-langs-tags']].forEach(pair => {
+      const box = $(pair[1]);
+      if (!box) return;
+      box.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-tag]');
+        if (!btn) return;
+        const tags = cvSplitTags($(pair[0]).value);
+        tags.splice(Number(btn.dataset.tag), 1);
+        $(pair[0]).value = tags.length ? tags.join(', ') + ', ' : '';
+        cvAfterInput();
+      });
+    });
+
+    /* حذف / ترتيب بطاقات الخبرات والمؤهلات */
+    const repClick = (listId, key) => {
+      const box = $(listId);
+      if (!box) return;
+      box.addEventListener('click', e => {
+        const btn = e.target.closest('.cv-icon-btn');
+        if (!btn) return;
+        const rep = btn.closest('.cv-rep');
+        if (!rep) return;
+        cvSync();
+        const store = cvState[key];
+        const i = store.findIndex(x => String(x.uid) === rep.dataset.uid);
+        if (i < 0) return;
+        const act = btn.dataset.act;
+        if (act === 'del') store.splice(i, 1);
+        else if (act === 'up' && i > 0) { const tmp = store[i - 1]; store[i - 1] = store[i]; store[i] = tmp; }
+        else if (act === 'down' && i < store.length - 1) { const tmp = store[i + 1]; store[i + 1] = store[i]; store[i] = tmp; }
+        cvAfterStruct();
+      });
+    };
+    repClick('cv-exp-list', 'exp');
+    repClick('cv-edu-list', 'edu');
+
+    if ($('cv-exp-add')) $('cv-exp-add').addEventListener('click', () => { cvSync(); cvState.exp.push(cvNewExp()); cvAfterStruct(); });
+    if ($('cv-edu-add')) $('cv-edu-add').addEventListener('click', () => { cvSync(); cvState.edu.push(cvNewEdu()); cvAfterStruct(); });
+
+    /* فتح/إغلاق الأقسام */
+    document.querySelectorAll('#cv-tool .cv-acc-head').forEach(head => {
+      head.addEventListener('click', () => {
+        const acc = head.closest('.cv-acc');
+        const willOpen = !acc.classList.contains('open');
+        document.querySelectorAll('#cv-tool .cv-acc').forEach(a => {
+          const on = a === acc && willOpen;
+          a.classList.toggle('open', on);
+          const h = a.querySelector('.cv-acc-head');
+          if (h) h.setAttribute('aria-expanded', on ? 'true' : 'false');
+        });
+        cvSetNavActive(willOpen ? acc.dataset.step : '');
+      });
+    });
+    document.querySelectorAll('#cv-nav .cv-nav-chip').forEach(chip => {
+      chip.addEventListener('click', () => cvOpenStep(chip.dataset.goto));
+    });
+
+    if ($('cv-auto-summary')) $('cv-auto-summary').addEventListener('click', cvAutoSummary);
+    if ($('cv-demo')) $('cv-demo').addEventListener('click', cvLoadDemo);
+    if ($('cv-reset')) $('cv-reset').addEventListener('click', cvReset);
+    if ($('cv-doc-lang')) $('cv-doc-lang').addEventListener('change', () => { cvSave(); buildCV(); });
+
+    cvRender();
+    cvRenderTagsAll();
+    buildCV();
+  }
+
+const GUIDES_JSON = 'articles.json';
+  const GUIDES_LIMIT = 6;
+  const GUIDES_ALLOWED_ORIGIN = 'https://ksatools.github.io';
+  let guidesData = [];
+  let guidesState = 'idle';   /* idle | loading | ready | error */
+
+  /* يقبل: مساراً داخلياً مطلقاً ينتهي بـ.html، أو رابطاً مطلقاً على نطاق الموقع.
+     يرفض كل ما عدا ذلك (javascript:، data:، نطاقات خارجية، //، ..). */
+  function safeGuideUrl(raw) {
+    if (typeof raw !== 'string') return null;
+    const s = raw.trim();
+    if (!s) return null;
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+      let u;
+      try { u = new URL(s); } catch (e) { return null; }
+      if (u.protocol !== 'https:') return null;
+      if (u.origin !== location.origin && u.origin !== GUIDES_ALLOWED_ORIGIN) return null;
+      return u.href;
+    }
+    if (s.startsWith('//') || !s.startsWith('/')) return null;
+    if (s.indexOf('..') !== -1) return null;
+    if (!/^\/[A-Za-z0-9._~\-\/]*\.html$/.test(s)) return null;
+    return s;
+  }
+
+  function guidesSetStatus(message) {
+    const box = $('guides-list');
+    if (!box) return;
+    box.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'guides-status';
+    p.textContent = message;
+    box.appendChild(p);
+  }
+
+  function guidesCard(item) {
+    const card = document.createElement('article');
+    card.className = 'guide-card';
+
+    const h = document.createElement('h3');
+    h.className = 'guide-title';
+    const link = document.createElement('a');
+    link.href = item.href;
+    link.textContent = item.title;
+    h.appendChild(link);
+    card.appendChild(h);
+
+    if (item.excerpt) {
+      const p = document.createElement('p');
+      p.className = 'guide-excerpt';
+      p.textContent = item.excerpt;
+      card.appendChild(p);
+    }
+
+    if (item.updated) {
+      const meta = document.createElement('p');
+      meta.className = 'guide-meta';
+      meta.textContent = t('guidesUpdated') + ': ' + item.updated;
+      card.appendChild(meta);
+    }
+
+    if (item.altHref) {
+      const alt = document.createElement('a');
+      alt.className = 'guide-alt';
+      alt.href = item.altHref;
+      alt.textContent = t('guidesOther');
+      card.appendChild(alt);
+    }
+    return card;
+  }
+
+  function renderGuides() {
+    const box = $('guides-list');
+    if (!box) return;
+    if (guidesState === 'loading') { guidesSetStatus(t('guidesLoading')); return; }
+    if (guidesState === 'error') { guidesSetStatus(t('guidesError')); return; }
+    if (guidesState !== 'ready') return;
+
+    const items = [];
+    guidesData.forEach(rec => {
+      if (!rec || typeof rec !== 'object') return;
+      if (rec.status !== 'published' || rec.lang !== currentLang) return;
+      if (typeof rec.title !== 'string' || !rec.title.trim()) return;
+      const href = safeGuideUrl(rec.url);
+      if (!href) return;
+      items.push({
+        href: href,
+        title: rec.title.trim(),
+        excerpt: (typeof rec.excerpt === 'string' ? rec.excerpt.trim() : ''),
+        updated: (typeof rec.updated_at === 'string' ? rec.updated_at.trim() : ''),
+        altHref: safeGuideUrl(rec.alternate_url),
+        sortKey: (typeof rec.updated_at === 'string' && rec.updated_at) ||
+                 (typeof rec.published_at === 'string' ? rec.published_at : '')
+      });
+    });
+
+    if (!items.length) { guidesSetStatus(t('guidesEmpty')); return; }
+
+    items.sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
+
+    box.textContent = '';
+    const grid = document.createElement('div');
+    grid.className = 'guides-grid';
+    items.slice(0, GUIDES_LIMIT).forEach(it => grid.appendChild(guidesCard(it)));
+    box.appendChild(grid);
+  }
+
+  function loadGuides() {
+    const box = $('guides-list');
+    if (!box) return;
+    if (typeof fetch !== 'function' || location.protocol === 'file:') {
+      /* على file:// لا يمكن قراءة JSON عبر fetch — نُظهر حالة الخطأ بهدوء دون أي طلب */
+      guidesState = 'error';
+      renderGuides();
+      return;
+    }
+    guidesState = 'loading';
+    renderGuides();
+    fetch(GUIDES_JSON, { cache: 'no-store' })
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(data => {
+        guidesData = Array.isArray(data) ? data : [];
+        guidesState = 'ready';
+        renderGuides();
+      })
+      .catch(() => {
+        guidesData = [];
+        guidesState = 'error';
+        renderGuides();
+      });
+  }
+
+  /* ==================== التهيئة ==================== */
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('seh_theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(savedTheme);
+    $('theme-btn').addEventListener('click', () =>
+      applyTheme($('html-root').dataset.theme === 'dark' ? 'light' : 'dark'));
+    $('lang-btn').addEventListener('click', toggleLanguage);
+
+    initTabs();
+
+    restoreInputs();
+    if (!$('let-date').value) $('let-date').value = localDateStr(new Date());
+    if (!$('let-doc-lang').value) $('let-doc-lang').value = currentLang;
+    // لغة مستند السيرة: تتبع لغة الواجهة فقط إن لم يختر المستخدم لغة سابقة
+    try {
+      const saved = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}');
+      if (!saved['cv-doc-lang']) $('cv-doc-lang').value = currentLang;
+    } catch (e) { $('cv-doc-lang').value = currentLang; }
+
+    applyShareParams();
+    applyI18n();
+    initShareSheet();
+    loadGuides();
+
+    const bindCalc = (ids, fn) => ids.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener('input', debounce(() => { fn(); saveInputs(); }, 200));
+      el.addEventListener('change', () => { fn(); saveInputs(); });
+    });
+
+    bindCalc(['eos-reason', 'eos-salary', 'eos-years', 'eos-months', 'eos-days',
+              'eos-leave-days', 'eos-leave-basis', 'eos-basic'], calculateEOS);
+    $('eos-calc-btn').addEventListener('click', () => calculateEOS(true));
+    $('eos-print').addEventListener('click', printDoc);
+    $('eos-share').addEventListener('click', () => openShareSheet(eosSharePayload()));
+
+    bindCalc(['sal-category', 'sal-basic', 'sal-housing', 'sal-transport', 'sal-obligations'], calculateSalary);
+    $('sal-calc-btn').addEventListener('click', calculateSalary);
+    $('sal-print').addEventListener('click', printDoc);
+    $('sal-share').addEventListener('click', () => openShareSheet(salSharePayload()));
+
+    bindCalc(['let-type', 'let-doc-lang', 'let-recipient', 'let-name', 'let-id',
+              'let-date', 'let-duration', 'let-reason'], generateLetter);
+    $('let-copy').addEventListener('click', () => copyText($('letter-output').textContent));
+    $('let-share').addEventListener('click', () =>
+      openShareSheet(textSharePayload('shareLetTitle', 'letter-tool', $('letter-output'))));
+    $('let-print').addEventListener('click', printDoc);
+
+    cvInit();
+    $('cv-copy').addEventListener('click', () => {
+      if (!cvHasContent) { showToast(t('cvEmptyWarn')); return; }
+      copyText($('cv-output').textContent, 'toastCopied');
+    });
+    $('cv-share').addEventListener('click', () => {
+      if (!cvHasContent) { showToast(t('cvEmptyWarn')); return; }
+      openShareSheet(cvSharePayload());
+    });
+    $('cv-print').addEventListener('click', printDoc);
+
+    calculateEOS(); calculateSalary(); generateLetter();
+  });
+  </script>
+  <!-- ملاحظة: سكربت Adsterra Social Bar هنا في نهاية <body> قبل </body>؛ لا تُكرّره ولا تحذفه -->
+  <!-- ====== Adsterra: Social Bar ====== -->
+  <script data-cfasync="false" src="https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"></script>
+
+</body>
+</html>
