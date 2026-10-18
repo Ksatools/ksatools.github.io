@@ -2,7 +2,7 @@
 
 > المنصّة موقع ثابت بملف واحد (`index.html`) يُنشر على GitHub Pages:
 > `https://ksatools.github.io/`
-> **لا يوجد خادم ولا إرسال بيانات.** كل الحساب يجري في متصفّح المستخدم.
+> **وظائف الحاسبات تعالج القيم المُدخلة داخل المتصفح ولا ترسلها إلى خوادم KSA Tools.** مع ذلك، قد تعالج خدمات التحليلات والإعلانات الخارجية معلومات تقنية أو استخدامية عن الزيارة، ورابط المشاركة يحتوي القيم اللازمة لاستعادة الحساب. راجع §5 وسياسة الخصوصية.
 
 > هذا الملف نُسخ من تعليق \"ملاحظات النشر\" أعلى `index.html`، مع تصحيحات وتنبيهات.
 > البند المقابل في `docs/BACKLOG.md` هو نقل التعليق من داخل الملف إلى هنا وحذفه.
@@ -12,13 +12,13 @@
 
 ## 1) `ads.txt`
 
-**المُصلَح (2026-10-15):** سطر واحد صحيح بصيغة IAB:
+**المُعتمد (2026-10-18 بعد تأكيد دعم Adsterra):** سجل واحد للحساب الحالي وفق تعليمات الدعم:
 ```
-adsterra.com, <publisher-id>, DIRECT
+adsterra.com, <publisher-id>, RESELLER
 ```
 (القيمة الفعلية في `ads.txt`، ولا تُنسخ هنا.)
 
-**⚠️ درس مستفاد:** كان الملف يحوي سطراً إضافياً بصيغة `adsterra.com, ksatools.github.io, DIRECT` — أي وضع **نطاق الموقع** في خانة **معرّف الناشر**، وهو غير مطابق للصيغة. الحقل الثاني يجب أن يكون معرّف الناشر من لوحة Adsterra. (ملاحظة موثّقة: بعض المواقع مثل `anotepad.com` تستخدم صيغة النطاق فعلاً؛ لكن المعتمد هو ما تسلّمه لوحة حسابك.) البند مُغلق في `docs/BACKLOG.md`.
+**التصحيح:** السجل السابق الذي وضع نطاق الموقع في حقل معرّف الناشر أُزيل. اتُّبعت صيغة العلاقة `RESELLER` بناءً على تأكيد دعم Adsterra لهذا الحساب. لا تستنتج صحة أي سجل من اسم النطاق أو نوع العلاقة وحدهما؛ عند تغيير الحساب أو الشبكة، ارجع إلى التعليمات الرسمية الخاصة بحساب الناشر. لا تُدرج المعرّف الفعلي في الوثائق.
 
 ---
 
@@ -53,7 +53,10 @@ adsterra.com, <publisher-id>, DIRECT
 
 ## 5) الخصوصية والبيانات
 
-- لا يوجد أي إرسال لبيانات المستخدم إلى أي خادم.
+- وظائف الحاسبات تعالج القيم التي يدخلها المستخدم داخل المتصفح، ولا ترسل هذه القيم إلى خوادم KSA Tools.
+- قد تعالج خدمات التحليلات والإعلانات الخارجية معلومات تقنية أو استخدامية عن الزيارة.
+- يتضمن رابط المشاركة القيم اللازمة لإعادة فتح الحساب؛ لذلك ينبغي مشاركته فقط مع أشخاص موثوقين.
+- هذا الوصف ليس ضماناً بأن جميع معلومات الزيارة تبقى محلياً؛ راجع `privacy.html` للتفاصيل.
 - الحفظ محلي فقط عبر `localStorage` بالمفاتيح: `seh_inputs_v2` (المدخلات)، `seh_theme` (المظهر)، `seh_lang` (اللغة).
 - **⚠️ ملاحظة للمراجعة:** وجود سكربتات Adsterra يعني أن المتصفّح يُجري طلبات إلى نطاقات خارجية عند التحميل؛ يجب أن تكون صياغة الخصوصية دقيقة بهذا الشأن.
 
@@ -72,14 +75,14 @@ adsterra.com, <publisher-id>, DIRECT
 ### 6.2 GitHub Actions — `.github/workflows/ai_marketing.yml`
 | المطلوب | كيف تضيفه |
 |---|---|
-| **Secrets** (إلزامي لـ `auto`) | Settings → Secrets → Actions → New repository secret: `GEMINI_API_KEY`، `GEMINI_MODEL` (اختياري، افتراضي `gemini-3.8-flash`)، `TELEGRAM_BOT_TOKEN` (اختياري)، `TELEGRAM_CHAT_ID` (اختياري). |
-| **Variables** (اختياري) | Settings → Variables → Actions: `PUBLISH_MODE` (افتراضي `draft`)، `SOCIAL_LANGUAGE` (افتراضي `both`)، `PAGES_VIA_ACTIONS` (إن `true` يستخدم `actions/deploy-pages` بدل `git push`). |
+| **Secrets** | Settings → Secrets → Actions: `GROQ_API_KEY` مطلوب عند استخدام المزوّد الافتراضي Groq؛ `GEMINI_API_KEY` مطلوب فقط إذا اختير `AI_PROVIDER=gemini`. `TELEGRAM_BOT_TOKEN` و`TELEGRAM_CHAT_ID` اختياريان. لا تضع قيم الأسرار في الملفات أو السجلات. |
+| **Variables** (اختياري) | Settings → Variables → Actions: `AI_PROVIDER` (`groq` افتراضياً؛ `gemini` اختيار صريح)، `GROQ_MODEL` (افتراضي `openai/gpt-oss-20b`)، `GEMINI_MODEL` (يُستخدم عند اختيار Gemini)، `PUBLISH_MODE` (افتراضي `draft`)، `SOCIAL_LANGUAGE` (افتراضي `both`)، `PAGES_VIA_ACTIONS` (إن `true` يستخدم `actions/deploy-pages` بدل `git push`). |
 | **Pages Source** | Settings → Pages → Source: `Deploy from a branch`، الفرع `main` (أو `gh-pages`)، مجلد `/ (root)`. **هذا هو المسار الافتراضي (دفع `git push` من الـworkflow).** إن فضلت `actions/deploy-pages` فعّل `vars.PAGES_VIA_ACTIONS = 'true'` وأضف صلاحيات `pages: write` و`id-token: write` للـworkflow. |
 
 ### 6.3 التحقّق قبل النشر (محدث)
 - [ ] `index.html` ينتهي بـ`</html>` ويحتوي `gosiScheme`.
-- [ ] `python tests/smoke_test.py` ⇒ `FAIL=0` (حالياً `PASS=57 · FAIL=0 · FAIL(known)=13`).
-- [ ] `python auto_marketing.py --selftest` ⇒ 28/28 PASS.
+- [ ] `python tests/smoke_test.py` ⇒ `FAIL=0`؛ نتيجة التشغيل المحلي بعد PR #22: `PASS=102 · FAIL=0 · FAIL(known)=0` (سجّل نتيجة كل تشغيل جديد بدلاً من اعتبار الرقم ضماناً دائماً).
+- [ ] `python auto_marketing.py --selftest` ⇒ جميع الفحوص ناجحة (آخر عدد موثّق في سجل M31: 74/74).
 - [ ] `python auto_marketing.py --verify` ⇒ لا مشاكل.
 - [ ] صيغة `ads.txt` صحيحة (معرّف الناشر في خانته).
 - [ ] الروابط نسبية (`privacy.html` لا `/privacy.html`).
