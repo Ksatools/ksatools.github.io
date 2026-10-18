@@ -102,8 +102,8 @@ er      = annuity + 0.0075 + 0.02       // + 2% أخطار مهنية (حصة ص
 housing    = isEmpty(sal-housing) ? basic × 0.25 : max(0, housingRaw)
 gross      = basic + housing + transport
 insurable  = min(basic + housing, GOSI_CAP)
-gosiEmp    = insurable × scheme.emp
-gosiEr     = insurable × scheme.er
+gosiEmp    = round2(insurable × scheme.emp)
+gosiEr     = round2(insurable × scheme.er)
 net        = gross − gosiEmp
 maxDeduct  = net × DBR            // 1/3
 avail      = max(0, maxDeduct − obligations)
@@ -117,6 +117,7 @@ disposable = max(0, net − obligations)
 
 ## 4) نظام الفئات والوسوم
 - `sal-category`: `expat` / `legacy` / `new2026`.
+- `round2(n) = Math.round((n + 1e-9) * 100) / 100` يُستخدم لتقريب حصتي الموظف وصاحب العمل إلى هللتين وتجنّب أخطاء تمثيل الكسور العشرية؛ ويُحسب صافي الراتب من حصة الموظف المقربة.
 - `eos-reason`: `expiry` · `termination` · `resignation` · `force` · `marriage` · `childbirth` · `art81` · `art80`. النسبة **0** لـ`art80`، ونسب المادة 85 لـ`resignation`، والنسبة **1** لبقية القيم (بما فيها غير المعروفة).
 - وسوم النسب: `rFull`، `rNone`، `rUnder2`، `rThird`، `rTwoThirds`، `rFull10`.
 
