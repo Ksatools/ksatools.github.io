@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-tests/smoke_test.py — اختبار الدخان لمنصة ksatools (صفحة واحدة: index.html)
+tests/smoke_test.py — اختبار الدخان لصفحتَي index.html وprivacy.html
 
 الغرض: كشف الانكسارات في الملف الحالي بسرعة، دون أي تعديل عليه.
 
@@ -34,6 +34,7 @@ import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 INDEX = REPO / "index.html"
+PRIVACY = REPO / "privacy.html"
 
 PASS, FAIL, XFAIL = "PASS", "FAIL", "XFAIL"
 results = []  # (status, name, detail, known)
@@ -77,6 +78,42 @@ def static_checks():
     check("ينتهي بـ</html>", text.rstrip().endswith("</html>"))
     check("يحتوي gosiScheme", "gosiScheme" in text)
     check("يحتوي store.set", "store.set" in text)
+    check("معرّف GA4 موجود مرة واحدة لكل من src وconfig", text.count("G-HGMS3MZ27P") == 2,
+          "المعرّف متوقع في سكربت التحميل وفي التهيئة فقط")
+    check("عنوان الصفحة المرسل إلى GA4 يخلو من query وfragment",
+          re.search(r"""gtag\(\s*['"]config['"]\s*,\s*['"]G-HGMS3MZ27P['"]\s*,\s*\{\s*page_location\s*:\s*window\.location\.origin\s*\+\s*window\.location\.pathname\s*\}\s*\)\s*;""", text) is not None)
+    check("معاملات رابط المشاركة تُحذف بعد استعادة القيم",
+          "const shareKeys = ['tool', 's', 'y', 'm', 'd', 'ld', 'lb', 'bs', 'r', 'c', 'b', 'h', 't', 'o']" in text
+          and "history.replaceState(null, '', cleanUrl.pathname" in text)
+    privacy_text = PRIVACY.read_text(encoding="utf-8") if PRIVACY.exists() else ""
+    check("privacy.html موجود", PRIVACY.exists())
+    check("تاريخ تحديث سياسة الخصوصية الحالي ظاهر باللغتين",
+          "آخر تحديث: أكتوبر 2026" in privacy_text
+          and "Last updated: October 2026" in privacy_text)
+    check("سياسة الخصوصية تصرّح باستخدام GA4 باللغتين",
+          "تستخدم الصفحة الرئيسية التي تضم الأدوات Google Analytics 4 (GA4)" in privacy_text
+          and "The main tools page uses Google Analytics 4 (GA4)" in privacy_text)
+    check("أزيلت عبارة التحليلات القديمة غير المطابقة",
+          "لا نستخدم حالياً أدوات تحليل سلوكية خاصة بنا" not in privacy_text
+          and "We currently use no behavioral analytics of our own." not in privacy_text)
+    # الصفحة القانونية لها JavaScript مستقل عن index.html؛ افحصه أيضاً.
+    privacy_scripts = re.findall(r"<script>(.*?)</script>", privacy_text, re.S)
+    privacy_js = max(privacy_scripts, key=len) if privacy_scripts else ""
+    if privacy_js:
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                             encoding="utf-8") as fh:
+                fh.write(privacy_js)
+                privacy_js_path = fh.name
+            privacy_proc = subprocess.run(["node", "--check", privacy_js_path],
+                                          capture_output=True, text=True)
+            check("node --check لجافاسكربت privacy.html",
+                  privacy_proc.returncode == 0,
+                  (privacy_proc.stderr or "").strip()[:200])
+        except FileNotFoundError:
+            print("[SKIP] node غير متوفّر — تخطّي فحص privacy.html", flush=True)
+    elif PRIVACY.exists():
+        record(FAIL, "العثور على جافاسكربت privacy.html", "لم يُعثر على <script>…</script>")
     check("سكربت Social Bar موجود مرة واحدة",
           text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3") == 1,
           "count=%d" % text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"))
@@ -208,6 +245,43 @@ def browser_checks(headless):
         ctx = browser.new_context(viewport={"width": 1440, "height": 1000})
         ctx.route("**/*", stub_third_party)
         pg = setup_page(ctx, errors)
+
+        # --- روابط المشاركة: استعادة القيم ثم إزالة معاملات الحساب الحساسة من العنوان.
+        share_page = ctx.new_page()
+        share_page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        share_page.on("pageerror", lambda e: errors.append("pageerror: %s" % e))
+        share_page.goto(INDEX.as_uri() +
+                        "?tool=eos&s=6500&y=2&m=0&d=0&ld=0&lb=full&r=resignation#eos-tool",
+                        wait_until="load")
+        share_page.wait_for_timeout(350)
+        eos_restored = share_page.evaluate(
+            "()=>({salary:document.getElementById('eos-salary').value,"
+            "reason:document.getElementById('eos-reason').value,"
+            "search:location.search,hash:location.hash})")
+        check("رابط EOS يستعيد الراتب وسبب الاستقالة",
+              eos_restored["salary"] == "6500" and eos_restored["reason"] == "resignation",
+              repr(eos_restored))
+        check("رابط EOS يحذف معاملات الحساب بعد الاستعادة",
+              eos_restored["search"] == "" and eos_restored["hash"] == "#eos-tool",
+              repr(eos_restored))
+
+        share_page.goto(INDEX.as_uri() +
+                        "?tool=sal&b=8500&h=1200&t=500&o=80#salary-tool",
+                        wait_until="load")
+        share_page.wait_for_timeout(350)
+        sal_restored = share_page.evaluate(
+            "()=>({basic:document.getElementById('sal-basic').value,"
+            "housing:document.getElementById('sal-housing').value,"
+            "transport:document.getElementById('sal-transport').value,"
+            "obligations:document.getElementById('sal-obligations').value,"
+            "search:location.search,hash:location.hash})")
+        check("رابط الراتب يستعيد قيم الحساب", sal_restored["basic"] == "8500"
+              and sal_restored["housing"] == "1200" and sal_restored["transport"] == "500"
+              and sal_restored["obligations"] == "80", repr(sal_restored))
+        check("رابط الراتب يحذف معاملات الحساب بعد الاستعادة",
+              sal_restored["search"] == "" and sal_restored["hash"] == "#salary-tool",
+              repr(sal_restored))
+        share_page.close()
 
         # --- بنية
         dups = pg.evaluate(

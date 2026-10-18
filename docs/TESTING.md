@@ -86,18 +86,19 @@ python auto_marketing.py --verify
 
 ## 5) حالة آخر تشغيل (متحقّق)
 
-**آخر تحقق كامل في CI:** 2026-10-18 · فرع `fix/remove-unused-hidden-ad-links` · الالتزام `73c9e598c4dc69fc8226e2240b3ebb9cfc1063ef` ([سجل GitHub Actions](https://github.com/Ksatools/ksatools.github.io/actions/runs/39082727533)).
+**آخر تحقق كامل للكود والاختبارات في CI:** 2026-10-18 · فرع `fix/ga4-query-privacy-disclosure` · الالتزام `291210cbce79cc4f6f3b61ce5d4a8e4ba2d19ef3` ([سجل GitHub Actions](https://github.com/Ksatools/ksatools.github.io/actions/runs/39113013856)).
 
 ```
-python -m py_compile auto_marketing.py  → rc=0
-python auto_marketing.py --selftest     → rc=0  كل الفحوص ناجحة
-python auto_marketing.py --verify       → rc=0  كل الفحوص ناجحة
-node --check (JS المستخرج من index.html) → rc=0  (97,411 حرفاً)
-git diff --check                        → rc=0
-python tests/smoke_test.py              → rc=0  PASS=80  FAIL=0  FAIL(known)=0
+python -m py_compile auto_marketing.py      → rc=0
+python auto_marketing.py --selftest         → rc=0  كل الفحوص ناجحة
+python auto_marketing.py --verify           → rc=0  كل الفحوص ناجحة
+node --check (JS المستخرج من index.html)   → rc=0
+node --check (JS المستخرج من privacy.html) → rc=0
+git diff --check                            → rc=0
+python tests/smoke_test.py                  → rc=0  PASS=92  FAIL=0  FAIL(known)=0
 ```
 
-**النتيجة:** عولجت الإخفاقات العشرة السابقة في فحص الدخان، وأصبحت اختبارات عادية إلزامية. بقيت مهام BACKLOG أخرى خارج نطاق حالات الفشل هذه، وهي غير مدّعاة كمكتملة. هذا التشغيل كان على فرع PR #19؛ لم يكن نشراً إلى `main`.
+**النتيجة:** عولجت الإخفاقات العشرة السابقة، وأضيفت اختبارات لحماية معاملات روابط المشاركة من الظهور في `page_location` المرسل إلى GA4، ولتأكيد استعادة القيم ثم تنظيف عناوين EOS والراتب، ولتطابق الإفصاح بالعربية والإنجليزية وتاريخ تحديثه مع حالة GA4. كما يُفحص JavaScript في الصفحة الرئيسة وصفحة الخصوصية. اجتاز الكود والاختبارات CI على فرع PR #20؛ لم يكن هذا تشغيل نشر إلى `main`. الالتزام المشار إليه هو آخر التزام اختُبر فيه الكود والاختبارات؛ التعديلات اللاحقة في هذا الفرع توثيقية فقط.
 
 ---
 **سجل تاريخي:** النتائج التالية تعود إلى تشغيل أقدم بتاريخ 2026-10-15، وليست الحالة الحالية.

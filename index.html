@@ -20,7 +20,10 @@
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
 
-  gtag('config', 'G-HGMS3MZ27P');
+  // Share URLs can contain salary and service details. Send GA4 only the page path.
+  gtag('config', 'G-HGMS3MZ27P', {
+    page_location: window.location.origin + window.location.pathname
+  });
 </script>
   <meta charset="UTF-8" />
   <!-- كود التحقق من ملكية الموقع في Google Search Console -->
@@ -3305,6 +3308,14 @@
       return;
     }
     saveInputs();
+    // Inputs have been restored; remove share payload values from the address bar.
+    // This protects later history-based pageviews if GA4 enhanced measurement is enabled.
+    const shareKeys = ['tool', 's', 'y', 'm', 'd', 'ld', 'lb', 'bs', 'r', 'c', 'b', 'h', 't', 'o'];
+    const cleanUrl = new URL(location.href);
+    shareKeys.forEach(key => cleanUrl.searchParams.delete(key));
+    const cleanSearch = cleanUrl.searchParams.toString();
+    history.replaceState(null, '', cleanUrl.pathname
+      + (cleanSearch ? '?' + cleanSearch : '') + cleanUrl.hash);
   }
 
   function initShareSheet() {
