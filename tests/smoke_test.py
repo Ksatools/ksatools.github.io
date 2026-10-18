@@ -312,7 +312,7 @@ def browser_checks(headless):
 
         # --- GOSI
         tab(pg, "salary")
-        for cat, emp, er, known in (("new2026", "671.88", "796.88", 4),
+        for cat, emp, er, known in (("new2026", "671.88", "796.88", None),
                                     ("legacy", "609.38", "734.38", None),
                                     ("expat", "0.00", "125.00", None)):
             setv(pg, "sal-category", cat)
@@ -339,7 +339,7 @@ def browser_checks(headless):
         link = m.group(0) if m else ""
         check("رابط المشاركة يحمل bs=5000", "bs=5000" in preview)
         check("رابط المشاركة يحمل r=resignation",
-              "r=resignation" in preview, link, known=1)
+              "r=resignation" in preview, link)
 
         # --- الاستعادة من الرابط في سياق نظيف (بلا localStorage مشترك)
         ctx2 = browser.new_context(viewport={"width": 1280, "height": 900})
@@ -350,7 +350,7 @@ def browser_checks(headless):
             reason = pg2.eval_on_selector("#eos-reason", "e=>e.value")
             basic = pg2.eval_on_selector("#eos-basic", "e=>e.value")
             salary = pg2.eval_on_selector("#eos-salary", "e=>e.value")
-            check("الرابط يعيد سبب الاستقالة", reason == "resignation", repr(reason), known=1)
+            check("الرابط يعيد سبب الاستقالة", reason == "resignation", repr(reason))
             check("الرابط يعيد eos-basic", basic == "5000", repr(basic))
             check("الرابط يعيد الراتب", salary == "6500", repr(salary))
             pg2.close()
@@ -361,7 +361,7 @@ def browser_checks(headless):
         # --- السيرة: فحص المقاييس (قبل تعبئة المثال، ليكون السياق نظيفاً)
         tab(pg, "cv")
         m2000 = cv_metric_state(pg, "حقّقت وفرة مالية قدرها 2000 ريال خلال العام")
-        check("مقاييس السيرة: تُقبل '2000 ريال'", m2000 is True, "state=%r" % m2000, known=16)
+        check("مقاييس السيرة: تُقبل '2000 ريال'", m2000 is True, "state=%r" % m2000)
         m1500 = cv_metric_state(pg, "خفّضت الكلفة بمقدار 1500 ريال خلال الربع")
         check("مقاييس السيرة: تُقبل '1500 ريال'", m1500 is True, "state=%r" % m1500)
         mpct = cv_metric_state(pg, "رفعت الإنتاجية بمقدار 25% خلال العام")
@@ -429,24 +429,31 @@ def browser_checks(headless):
 
         # --- الإتاحة/السيو المعلّقة
         pg.evaluate("document.getElementById('lang-btn').click()"); pg.wait_for_timeout(300)
+        check("نص إخلاء المسؤولية يحافظ على التنسيق بعد تغيير اللغة",
+              pg.evaluate("!!document.querySelector('.disclaimer-banner .inner strong')"))
         aria = pg.eval_on_selector("#theme-btn", "e=>e.getAttribute('aria-label')")
         check("aria-label لزر المظهر مترجم", aria is not None and "للمظهر" not in aria
-              and "المظهر" not in aria, "aria=%r" % aria, known=14)
+              and "المظهر" not in aria, "aria=%r" % aria)
         pg.evaluate("document.getElementById('lang-btn').click()"); pg.wait_for_timeout(300)
 
         check("لا يوجد meta keywords",
-              pg.evaluate("document.querySelectorAll('meta[name=keywords]').length") == 0,
-              known=18)
+              pg.evaluate("document.querySelectorAll('meta[name=keywords]').length") == 0)
         check("theme-color له نسخة ليلية",
-              pg.evaluate("document.querySelectorAll('meta[name=theme-color][media]').length") >= 1,
-              known=18)
+              pg.evaluate("document.querySelectorAll('meta[name=theme-color][media]').length") >= 1)
+        pg.evaluate("applyTheme('dark')")
+        check("theme-color يتبع المظهر الداكن المختار",
+              pg.evaluate("document.getElementById('theme-color-dark').media === 'all' && document.getElementById('theme-color-light').media === 'not all'"))
+        pg.evaluate("applyTheme('light')")
+        check("دعم تقليل الحركة موجود",
+              pg.evaluate("document.querySelector('style').textContent.includes('prefers-reduced-motion: reduce')"))
         check("يوجد data-i18n-html لنصوص الإخلاء",
-              pg.evaluate("document.querySelectorAll('[data-i18n-html]').length") >= 1,
-              known=18)
+              pg.evaluate("document.querySelectorAll('[data-i18n-html]').length") >= 1)
+        check("رابط مشاركة X يستخدم x.com intent",
+              pg.evaluate("Array.from(document.scripts).some(s => s.textContent.includes('https://x.com/intent/tweet')) && !Array.from(document.scripts).some(s => s.textContent.includes('https://twitter.com/intent/tweet'))"))
         check("حاوية #ad-top محذوفة",
-              pg.evaluate("document.querySelectorAll('#ad-top').length") == 0, known=19)
+              pg.evaluate("document.querySelectorAll('#ad-top').length") == 0)
         check("زر .btn-ad محذوف",
-              pg.evaluate("document.querySelectorAll('.btn-ad').length") == 0, known=19)
+              pg.evaluate("document.querySelectorAll('.btn-ad').length") == 0)
 
         # --- الأرقام الهندية
         tab(pg, "eos")
@@ -455,9 +462,11 @@ def browser_checks(headless):
         setv(pg, "eos-leave-days", "15")
         setv(pg, "eos-leave-basis", "full")
         click(pg, "eos-calc-btn")
+        check("مدخل الراتب يقبل الأرقام المحلية",
+              pg.eval_on_selector("#eos-salary", "e=>e.type === 'text' && e.inputMode === 'decimal'"))
         check("تقبل الأرقام الهندية (٦٥٠٠ ⇒ 3250 إجازة)",
               has_num(pg.text_content("#eos-leave-out"), "3250.00"),
-              repr(pg.text_content("#eos-leave-out")), known=12)
+              repr(pg.text_content("#eos-leave-out")))
 
         # --- الحفظ المحلي
         keys = pg.evaluate("Object.keys(localStorage)")

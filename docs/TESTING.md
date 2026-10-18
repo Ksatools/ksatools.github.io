@@ -86,7 +86,23 @@ python auto_marketing.py --verify
 
 ## 5) حالة آخر تشغيل (متحقّق)
 
-**التاريخ:** 2026-10-15 · **الملف:** `index.html` — 212,583 بايت · `SHA256[:16]=53955A99BDA2BD63`
+**آخر تحقق كامل في CI:** 2026-10-18 · فرع `fix/remove-unused-hidden-ad-links` · الالتزام `73c9e598c4dc69fc8226e2240b3ebb9cfc1063ef` ([سجل GitHub Actions](https://github.com/Ksatools/ksatools.github.io/actions/runs/39082727533)).
+
+```
+python -m py_compile auto_marketing.py  → rc=0
+python auto_marketing.py --selftest     → rc=0  كل الفحوص ناجحة
+python auto_marketing.py --verify       → rc=0  كل الفحوص ناجحة
+node --check (JS المستخرج من index.html) → rc=0  (97,411 حرفاً)
+git diff --check                        → rc=0
+python tests/smoke_test.py              → rc=0  PASS=80  FAIL=0  FAIL(known)=0
+```
+
+**النتيجة:** عولجت الإخفاقات العشرة السابقة في فحص الدخان، وأصبحت اختبارات عادية إلزامية. بقيت مهام BACKLOG أخرى خارج نطاق حالات الفشل هذه، وهي غير مدّعاة كمكتملة. هذا التشغيل كان على فرع PR #19؛ لم يكن نشراً إلى `main`.
+
+---
+**سجل تاريخي:** النتائج التالية تعود إلى تشغيل أقدم بتاريخ 2026-10-15، وليست الحالة الحالية.
+
+**تاريخ التشغيل التاريخي:** 2026-10-15 · **الملف وقتها:** `index.html` — 212,583 بايت · `SHA256[:16]=53955A99BDA2BD63`
 
 ```
 python tests/smoke_test.py            → rc=0   PASS=57  FAIL=0  FAIL(known)=13
@@ -105,7 +121,7 @@ python auto_marketing.py --verify     → rc=0   لا مشاكل
 > `auto_marketing.py --selftest`: 28/28 PASS (بما في ذلك حارس انحدار تكرار sitemap).
 > اختبار خط أنابيب كامل مع Gemini وهمي (`probe_pipeline.py`): draft → auto → re-run → verify → reject → لا تكرار في sitemap، الـ35 فحص PASS، المستودع مُسترجَع بالكامل.
 
-**الحصيلة:** لا يوجد أي انكسار غير متوقّع. الفشل الوحيد الظاهر هو لبنود BACKLOG غير المنفّذة عمداً:
+**الحصيلة التاريخية لذلك التشغيل:** لم يكن هناك انكسار غير متوقّع وقتها؛ كانت الحالات التالية معفاة بوصفها بنود BACKLOG غير منفّذة حينها:
 
 | البند | الحالة عند التشغيل | ملاحظة |
 |---|---|---|

@@ -19,12 +19,12 @@
 
   <!-- أكواد تحسين محركات البحث للسوق السعودي (SEO) -->
   <meta name="description" content="منصة خدمات الموظف والمقيم في السعودية (KSA Tools): حاسبة مكافأة نهاية الخدمة، حاسبة الراتب والتأمينات 2026، صانع الخطابات الرسمية، وفاحص السيرة الذاتية مجاناً باللغتين العربية والإنجليزية." />
-  <meta name="keywords" content="حاسبة نهاية الخدمة, حساب مكافأة نهاية الخدمة, حاسبة التأمينات الاجتماعية 2026, حاسبة الراتب الصافي, صانع خطابات رسمية, فحص السيرة الذاتية ATS, خدمات المقيمين في السعودية, KSA Tools" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://ksatools.github.io/" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
   <title>منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • ATS</title>
-  <meta name="theme-color" content="#075135" />
+  <meta name="theme-color" id="theme-color-light" content="#075135" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" id="theme-color-dark" content="#0f172a" media="(prefers-color-scheme: dark)" />
   <!-- الأيقونة (هوية الموقع: أخضر سعودي + ذهبي) -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
@@ -129,8 +129,6 @@
       --accent-deep: #92400e;
       --accent-soft: #fef3c7;
       --gold: #fde68a;
-      /* زر الإعلان (خلفية داكنة تحفظ تباين النص الأبيض في الوضعين) */
-      --ad-gradient: linear-gradient(135deg, #92400e 0%, #78350f 100%);
       /* ——— المحايدات ——— */
       --dark: #0f172a;
       --slate: #334155;
@@ -196,7 +194,6 @@
       --accent-deep: #fde68a;
       --danger: #fca5a5;
       --danger-soft: #3b1717;
-      --ad-gradient: linear-gradient(135deg, #92400e 0%, #b45309 100%);
       --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
       --shadow-accent: 0 6px 16px rgba(0, 0, 0, 0.5);
       /* إطار ورقة السيرة في الليلي: حدّ خفيف + ظل يفصلها عن الخلفية الداكنة دون وهج */
@@ -333,7 +330,7 @@
       position: absolute;
       top: 6px;
       inset-inline-start: 10px;
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       color: var(--muted);
       opacity: 0.8;
       letter-spacing: 0.5px;
@@ -378,7 +375,7 @@
     .tab-btn span.tab-num {
       background: var(--primary-soft);
       color: var(--primary-text);
-      font-size: 0.74rem;
+      font-size: 0.75rem;
       padding: 2px 10px;
       border-radius: 99px;
       font-weight: 800;
@@ -591,24 +588,6 @@
       background: var(--border);
       border-color: var(--primary-light);
       color: var(--primary-text);
-    }
-
-    .btn-ad {
-      background: var(--ad-gradient);
-      color: #ffffff;
-      border: none;
-      padding: 10px 14px;
-      min-height: 44px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      flex: 1 1 100%;
     }
 
     /* ==================== بطاقة النتائج والجداول ==================== */
@@ -892,7 +871,7 @@
       border-radius: 10px;
       color: var(--slate);
       font-family: 'Cairo', 'Inter', system-ui, sans-serif;
-      font-size: 0.74rem;
+      font-size: 0.75rem;
       line-height: 1.75;
       white-space: pre-wrap;
       word-break: break-word;
@@ -904,7 +883,7 @@
     }
     .share-note {
       margin-top: 10px;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       line-height: 1.7;
       color: var(--muted);
       text-align: center;
@@ -1098,6 +1077,15 @@
       }
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
     @media print {
       body > header, body > footer, .nav-tabs, .ad-slot, .seo-faq, .no-print, .disclaimer-banner, #toast, .share-modal {
         display: none !important;
@@ -1222,7 +1210,7 @@
       border-radius: 50%;
       background: var(--border);
       color: var(--slate);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 800;
       flex: 0 0 auto;
     }
@@ -1320,7 +1308,7 @@
       font-weight: 800;
     }
     .cv-acc-titles small {
-      font-size: 0.74rem;
+      font-size: 0.75rem;
       font-weight: 600;
       color: var(--muted);
     }
@@ -1330,7 +1318,7 @@
       border-radius: 999px;
       background: var(--accent-soft);
       color: var(--accent-deep);
-      font-size: 0.71rem;
+      font-size: 0.75rem;
       font-weight: 800;
     }
     .cv-acc-status.done {
@@ -1518,7 +1506,7 @@
       border-radius: 50%;
       background: rgba(0, 0, 0, 0.09);
       color: inherit;
-      font-size: 0.66rem;
+      font-size: 0.75rem;
       line-height: 1;
       cursor: pointer;
     }
@@ -1526,7 +1514,7 @@
       background: rgba(0, 0, 0, 0.2);
     }
     .cv-tags-empty {
-      font-size: 0.73rem;
+      font-size: 0.75rem;
       color: var(--muted);
     }
 
@@ -2026,13 +2014,6 @@
     <p data-i18n="siteSubtitle">احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين العربية والإنجليزية — كل بياناتك تُعالج في متصفحك فقط</p>
   </header>
 
-  <!-- ====== Adsterra: Banner 728x90 / Native — الصق الكود داخل هذا الحاوي ====== -->
-  <div class="ad-slot" id="ad-top" style="display:none;">
-    <span class="ad-label" data-i18n="adLabel">إعلان | Advertisement</span>
-    <!-- PASTE ADSTERRA TOP BANNER SCRIPT HERE -->
-    <strong data-i18n="adTopTitle">مساحة إعلانية علوية (Banner 728x90 / Native)</strong>
-  </div>
-
   <nav class="nav-tabs" role="tablist" aria-label="أدوات المنصة" id="main-tabs">
     <button class="tab-btn" role="tab" id="tab-eos" aria-selected="true" aria-controls="eos-tool" data-tool="eos-tool">
       <span class="tab-num" data-i18n="t1Num">الأداة 1</span>
@@ -2086,7 +2067,7 @@
 
           <div class="form-group">
             <label for="eos-salary" data-i18n="eosSalaryLabel">آخر أجر شهري فعلي معتمد لحساب مكافأة نهاية الخدمة</label>
-            <input type="number" id="eos-salary" data-persist value="6500" min="0" step="100" inputmode="decimal" />
+            <input type="text" id="eos-salary" data-persist value="6500" min="0" step="100" inputmode="decimal" />
             <small class="field-hint" data-i18n="eosSalaryHint">استخدم آخر أجر معتمد للمكافأة. قد تُستبعد العمولات أو النسب المتغيرة وفق اتفاق مستوفٍ للمادة 86؛ لا تعتمد على الأساسي والبدلات الثابتة وحدهما دون مراجعة حالتك.</small>
           </div>
 
@@ -2094,15 +2075,15 @@
             <label data-i18n="eosDurationLabel">مدة الخدمة (سنوات / أشهر / أيام)</label>
             <div class="inline-inputs">
               <div>
-                <input type="number" id="eos-years" data-persist value="4" min="0" max="50" inputmode="numeric" aria-label="سنوات" />
+                <input type="text" id="eos-years" data-persist value="4" min="0" max="50" inputmode="numeric" aria-label="سنوات" />
                 <small class="field-hint" data-i18n="lblYears">سنوات</small>
               </div>
               <div>
-                <input type="number" id="eos-months" data-persist value="6" min="0" max="11" inputmode="numeric" aria-label="أشهر" />
+                <input type="text" id="eos-months" data-persist value="6" min="0" max="11" inputmode="numeric" aria-label="أشهر" />
                 <small class="field-hint" data-i18n="lblMonths">أشهر</small>
               </div>
               <div>
-                <input type="number" id="eos-days" data-persist value="0" min="0" max="30" inputmode="numeric" aria-label="أيام" />
+                <input type="text" id="eos-days" data-persist value="0" min="0" max="30" inputmode="numeric" aria-label="أيام" />
                 <small class="field-hint" data-i18n="lblDays">أيام</small>
               </div>
             </div>
@@ -2110,7 +2091,7 @@
 
           <div class="form-group">
             <label for="eos-leave-days" data-i18n="eosLeaveLabel">رصيد أيام الإجازة السنوية غير المستنفدة</label>
-            <input type="number" id="eos-leave-days" data-persist value="15" min="0" max="365" inputmode="numeric" />
+            <input type="text" id="eos-leave-days" data-persist value="15" min="0" max="365" inputmode="numeric" />
           </div>
 
           <div class="form-group">
@@ -2123,7 +2104,7 @@
           </div>
           <div class="form-group" id="eos-basic-group" hidden>
             <label for="eos-basic" data-i18n="eosBasicLabel">الراتب الأساسي الشهري (يُستخدم لحساب أجر الإجازة)</label>
-            <input type="number" id="eos-basic" data-persist min="0" step="100" inputmode="decimal" />
+            <input type="text" id="eos-basic" data-persist min="0" step="100" inputmode="decimal" />
           </div>
           <button class="btn-primary" id="eos-calc-btn" data-i18n="eosCalcBtn">احسب المستحقات النهائية الآن</button>
         </div>
@@ -2150,7 +2131,6 @@
           <div class="action-row no-print">
             <button class="btn-secondary" id="eos-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
             <button class="btn-secondary" id="eos-share" data-i18n="btnShare">مشاركة النتيجة</button>
-            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
           </div>
         </div>
       </div>
@@ -2178,23 +2158,23 @@
 
           <div class="form-group">
             <label for="sal-basic" data-i18n="salBasicLabel">الراتب الأساسي الشهري</label>
-            <input type="number" id="sal-basic" data-persist value="5000" min="0" step="100" inputmode="decimal" />
+            <input type="text" id="sal-basic" data-persist value="5000" min="0" step="100" inputmode="decimal" />
           </div>
 
           <div class="form-group">
             <label for="sal-housing" data-i18n="salHousingLabel">بدل السكن الشهري (يُحتسب ضمن أجر التأمينات)</label>
-            <input type="number" id="sal-housing" data-persist placeholder="1250" min="0" step="50" inputmode="decimal" />
+            <input type="text" id="sal-housing" data-persist placeholder="1250" min="0" step="50" inputmode="decimal" />
             <small class="field-hint" data-i18n="salHousingHint">اتركه فارغاً إذا كان بدل السكن 25% من الأساسي ضمن العقد</small>
           </div>
 
           <div class="form-group">
             <label for="sal-transport" data-i18n="salTransLabel">بدل النقل وبدلات أخرى (لا تدخل في التأمينات)</label>
-            <input type="number" id="sal-transport" data-persist value="500" min="0" step="50" inputmode="decimal" />
+            <input type="text" id="sal-transport" data-persist value="500" min="0" step="50" inputmode="decimal" />
           </div>
 
           <div class="form-group">
             <label for="sal-obligations" data-i18n="salObligLabel">الأقساط والالتزامات الشهرية الحالية</label>
-            <input type="number" id="sal-obligations" data-persist value="500" min="0" step="50" inputmode="decimal" />
+            <input type="text" id="sal-obligations" data-persist value="500" min="0" step="50" inputmode="decimal" />
           </div>
 
           <button class="btn-primary" id="sal-calc-btn" data-i18n="salCalcBtn">احسب صافي الراتب والقدرة التمويلية</button>
@@ -2223,7 +2203,6 @@
           <div class="action-row no-print">
             <button class="btn-secondary" id="sal-print" data-i18n="btnPrint">طباعة / حفظ PDF</button>
             <button class="btn-secondary" id="sal-share" data-i18n="btnShare">مشاركة النتيجة</button>
-            <a href="#adsterra-direct-link" target="_blank" rel="sponsored noopener" class="btn-ad" style="display:none;" data-i18n="btnDirectLink">عروض وظيفية وتمويلية مقترحة (إعلان)</a>
           </div>
         </div>
       </div>
@@ -2511,7 +2490,7 @@
   </div>
 
   <div class="disclaimer-banner">
-    <div class="inner" data-i18n="disclaimer">
+    <div class="inner" data-i18n-html="disclaimer">
       ⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات في هذه المنصة تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة (وزارة الموارد البشرية، التأمينات الاجتماعية، البنك المركزي). لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.
     </div>
   </div>
@@ -2619,13 +2598,12 @@
       docTitle: 'منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • سيرة ذاتية',
       metaDesc: 'منصة خدمات الموظف والمقيم في السعودية (KSA Tools): حاسبة مكافأة نهاية الخدمة، حاسبة الراتب والتأمينات 2026، صانع الخطابات الرسمية، وفاحص السيرة الذاتية مجاناً باللغتين العربية والإنجليزية.',
       langBtn: '🌐 English',
+      themeAria: 'تبديل المظهر',
       badge: 'أدوات ذكية مجانية • متوافقة مع نظام العمل السعودي',
       siteTitle: 'منصة خدمات الموظف والمقيم في السعودية',
       printHeadSub: 'تقرير استرشادي صادر عن منصة KSA Tools',
       siteSubtitle: 'احسب مكافأة نهاية الخدمة ورصيد الإجازات، الراتب الصافي والتأمينات، صِغ خطاباتك الرسمية، ونسّق سيرتك الذاتية باللغتين — كل بياناتك تُعالج في متصفحك فقط',
       adLabel: 'إعلان | Advertisement',
-      adTopTitle: 'مساحة إعلانية علوية (Banner 728x90 / Native)',
-      adBotTitle: 'مساحة إعلانية سفلية (Native Banner)',
       t1Num: 'الأداة 1', t1Title: 'حاسبة نهاية الخدمة والإجازات',
       t2Num: 'الأداة 2', t2Title: 'حاسبة الراتب الصافي والتمويل',
       t3Num: 'الأداة 3', t3Title: 'صانع الخطابات الرسمية (عربي/EN)',
@@ -2723,7 +2701,7 @@
       cvSkillsPh: 'مثال: ZATCA, E-Invoicing, SAP, Excel متقدم, منصة مدد, منصة قوى',
       cvTagHint: 'افصل بين العناصر بفاصلة ،',
       cvScoreTitle: 'جاهزية السيرة الذاتية:',
-      disclaimer: '⚖️ إخلاء مسؤولية: جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.',
+      disclaimer: '⚖️ <strong>إخلاء مسؤولية:</strong> جميع الحسابات تقديرات استرشادية مبنية على نظام العمل السعودي وضوابط التأمينات وحسب آخر تحديث (يوليو 2026)، ولا تُغني عن الاستشارة القانونية أو التأكيد الرسمي من الجهات المختصة. لا يتم إرسال أي من بياناتك إلى أي خادم — كل المعالجة تتم داخل متصفحك.',
       faqHeading: 'الأسئلة الشائعة | Frequently Asked Questions',
       faqQ1: 'كيف تُحسب مكافأة نهاية الخدمة في السعودية؟ / How is EOSB calculated?',
       faqA1: 'بنصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. وعند الاستقالة: الثلث بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، والثلثان إذا زادت الخدمة على خمس ولم تبلغ عشر سنوات، وكامل المكافأة عند عشر سنوات فأكثر.',
@@ -2734,7 +2712,6 @@
       footerAdDisclosure: 'الإعلانات وملفات تعريف الارتباط',
       footerTools: 'الأدوات',
       btnPrint: 'طباعة / حفظ PDF', btnCopy: 'نسخ النص', btnShare: 'مشاركة النتيجة',
-      btnDirectLink: 'عروض وظيفية وتمويلية مقترحة (إعلان)',
       btnShareLetter: 'مشاركة الخطاب',
       btnShareCv: 'مشاركة السيرة',
       toastCopied: 'تم النسخ بنجاح', toastCopyFail: 'تعذر النسخ — حدد النص يدوياً',
@@ -2842,13 +2819,12 @@
       docTitle: 'Saudi Employee & Expat Services Hub | EOSB • GOSI • Letters • Resume',
       metaDesc: 'Free Saudi End of Service calculator, Net Salary & GOSI calculator (legacy and new 2026 rates), bilingual official letter generator, and Saudi-market resume builder. No sign-up, data stays in your browser.',
       langBtn: '🌐 العربية',
+      themeAria: 'Toggle appearance',
       badge: 'Free Smart Tools • Compliant with Saudi Labor Law',
       siteTitle: 'Saudi Employee & Expat Services Hub',
       printHeadSub: 'Indicative report issued by KSA Tools',
       siteSubtitle: 'Calculate End of Service gratuity and leave pay, net salary and GOSI, generate official letters, and format your resume in Arabic & English — all data stays in your browser',
       adLabel: 'إعلان | Advertisement',
-      adTopTitle: 'Top ad unit (Banner 728x90 / Native)',
-      adBotTitle: 'Bottom ad unit (Native Banner)',
       t1Num: 'Tool 1', t1Title: 'End of Service (EOSB) Calculator',
       t2Num: 'Tool 2', t2Title: 'Net Salary, GOSI & Finance',
       t3Num: 'Tool 3', t3Title: 'Official Letters (AR/EN)',
@@ -2946,7 +2922,7 @@
       cvSkillsPh: 'e.g. ZATCA, E-Invoicing, SAP, Advanced Excel, Mudad, Qiwa',
       cvTagHint: 'Separate each item with a comma ,',
       cvScoreTitle: 'Resume readiness:',
-      disclaimer: '⚖️ Disclaimer: All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. None of your data is sent to any server — all processing happens in your browser.',
+      disclaimer: '⚖️ <strong>Disclaimer:</strong> All calculations are estimates based on the Saudi Labor Law and GOSI rules as of July 2026, and do not replace legal advice or official confirmation from the relevant authorities. None of your data is sent to any server — all processing happens in your browser.',
       faqHeading: 'Frequently Asked Questions',
       faqQ1: 'How is Saudi End of Service Benefit (EOSB) calculated?',
       faqA1: 'Half a month’s wage for each of the first five years, one month’s wage for each subsequent year, and a pro-rata amount for a fraction of a year. Upon resignation: one-third after continuous service of two to five years inclusive; two-thirds if service exceeds five years but is under ten; and the full award at ten years or more.',
@@ -2957,7 +2933,6 @@
       footerAdDisclosure: 'Ads & Cookies',
       footerTools: 'Tools',
       btnPrint: 'Print / Save PDF', btnCopy: 'Copy Text', btnShare: 'Share Result',
-      btnDirectLink: 'Career & Finance Offers (Ad)',
       btnShareLetter: 'Share Letter',
       btnShareCv: 'Share Resume',
       toastCopied: 'Copied to clipboard', toastCopyFail: 'Copy failed — select the text manually',
@@ -3068,7 +3043,20 @@
   /* ==================== أدوات عامة ==================== */
   const $ = (id) => document.getElementById(id);
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-  const numVal = (id) => { const v = parseFloat($(id).value); return isNaN(v) ? 0 : Math.max(0, v); };
+  const round2 = (n) => Math.round((n + 1e-9) * 100) / 100;
+  function parseLocalizedNumber(raw) {
+    const normalized = normalizeDigits(String(raw == null ? '' : raw))
+      .replace(/\u066c/g, '')
+      .replace(/\u066b/g, '.')
+      .replace(/[\s,٬]/g, '')
+      .trim();
+    if (!normalized || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return NaN;
+    return Number(normalized);
+  }
+  const numVal = (id) => {
+    const v = parseLocalizedNumber($(id).value);
+    return !Number.isFinite(v) ? 0 : Math.max(0, v);
+  };
 
   function debounce(fn, ms) {
     let timer;
@@ -3188,7 +3176,7 @@
         return openExternal('https://t.me/share/url?url=' + encodeURIComponent(p.link)
           + '&text=' + encodeURIComponent(p.text));
       case 'x':
-        return openExternal('https://twitter.com/intent/tweet?text=' + encodeURIComponent(p.text)
+        return openExternal('https://x.com/intent/tweet?text=' + encodeURIComponent(p.text)
           + '&url=' + encodeURIComponent(p.link));
       case 'copy':
         return copyText(full);
@@ -3205,10 +3193,10 @@
     const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
     const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
     const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
-    const leaveDays = numVal('eos-leave-days');
+    const leaveDays = clamp(numVal('eos-leave-days'), 0, 365);
     const link = buildShareLink('eos-tool', {
       tool: 'eos', s: salary, y: years, m: months, d: days,
-      ld: leaveDays, lb: leaveBasis, bs: $('eos-basic').value,
+      ld: leaveDays, lb: leaveBasis, bs: $('eos-basic').value, r: reasonSel.value,
     });
     const text = [
       t('shareEosTitle'),
@@ -3346,6 +3334,10 @@
   function applyTheme(theme) {
     $('html-root').dataset.theme = theme;
     $('theme-btn').textContent = theme === 'dark' ? '☀️' : '🌙';
+    const lightMeta = $('theme-color-light');
+    const darkMeta = $('theme-color-dark');
+    if (lightMeta) lightMeta.media = theme === 'light' ? 'all' : 'not all';
+    if (darkMeta) darkMeta.media = theme === 'dark' ? 'all' : 'not all';
     localStorage.setItem('seh_theme', theme);
   }
 
@@ -3357,10 +3349,15 @@
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute('content', t('metaDesc'));
     $('lang-btn').textContent = t('langBtn');
+    $('theme-btn').setAttribute('aria-label', t('themeAria'));
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       if (i18n[currentLang][key] !== undefined) el.textContent = i18n[currentLang][key];
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      const key = el.getAttribute('data-i18n-html');
+      if (i18n[currentLang][key] !== undefined) el.innerHTML = i18n[currentLang][key];
     });
     document.querySelectorAll('[data-i18n-ph]').forEach(el => {
       const key = el.getAttribute('data-i18n-ph');
@@ -3450,7 +3447,7 @@ function cvSharePayload() {
     const years = clamp(Math.floor(numVal('eos-years')), 0, 50);
     const months = clamp(Math.floor(numVal('eos-months')), 0, 11);
     const days = clamp(Math.floor(numVal('eos-days')), 0, 30);
-    const leaveDays = numVal('eos-leave-days');
+    const leaveDays = clamp(numVal('eos-leave-days'), 0, 365);
     const leaveBasis = $('eos-leave-basis').value;
     const basicField = $('eos-basic').value.trim();
 
@@ -3532,15 +3529,15 @@ function cvSharePayload() {
   function calculateSalary() {
     const scheme = gosiScheme($('sal-category').value);
     const basic = numVal('sal-basic');
-    const housingRaw = parseFloat($('sal-housing').value);
+    const housingRaw = parseLocalizedNumber($('sal-housing').value);
     const housing = isNaN(housingRaw) ? basic * 0.25 : Math.max(0, housingRaw);
     const transport = numVal('sal-transport');
     const obligations = numVal('sal-obligations');
 
     const gross = basic + housing + transport;
     const insurable = Math.min(basic + housing, CONFIG.GOSI_CAP);
-    const gosiEmp = insurable * scheme.emp;
-    const gosiEr = insurable * scheme.er;
+    const gosiEmp = round2(insurable * scheme.emp);
+    const gosiEr = round2(insurable * scheme.er);
 
     const net = gross - gosiEmp;
     const maxDeduct = net * CONFIG.DBR;
@@ -4126,7 +4123,8 @@ ${body}
     const dutiesAll = s.exp.map(e => e.duties).join('\n');
 
     /* ——— فحوصات الجاهزية (موزونة، مجموعها 100) ——— */
-    const metricsText = normalizeDigits(sumText + ' ' + dutiesAll).replace(/\b(19|20)\d{2}\b/g, ' ');
+    const metricsText = normalizeDigits(sumText + ' ' + dutiesAll)
+      .replace(/\b(19|20)\d{2}\b(?!\s*(?:ر\.?\s*س|ريال|%|sar|usd|مليون|ألف|الف))/gi, ' ');
     const filledExp = s.exp.filter(e => e.title.trim() || e.company.trim() || e.duties.trim());
     const checks = [
       { key: 'chkName', ok: name.split(/\s+/).filter(Boolean).length >= 2, pts: 8 },
