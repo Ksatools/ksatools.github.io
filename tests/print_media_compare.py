@@ -222,15 +222,13 @@ def compare_pdfs(before_path, after_path, tool, before_markers, after_markers):
 
     before = pdfium.PdfDocument(str(before_path))
     after = pdfium.PdfDocument(str(after_path))
-    before_content = inspect_pdf_text(before, before_markers)
-    after_content = inspect_pdf_text(after, after_markers)
+    before_count, after_count = len(before), len(after)
     report = {
-        "tool": tool, "before_pages": len(before), "after_pages": len(after),
-        "page_count_equal": len(before) == len(after), "pages": [],
-        "content": {"before": before_content, "after": after_content},
+        "tool": tool, "before_pages": before_count, "after_pages": after_count,
+        "page_count_equal": before_count == after_count, "pages": [],
     }
-    for i in range(max(len(before), len(after))):
-        if i >= len(before) or i >= len(after):
+    for i in range(max(before_count, after_count)):
+        if i >= before_count or i >= after_count:
             continue
         bi = before[i].render(scale=1.25).to_pil().convert("RGB")
         ai = after[i].render(scale=1.25).to_pil().convert("RGB")
@@ -258,13 +256,18 @@ def compare_pdfs(before_path, after_path, tool, before_markers, after_markers):
             "nonblank": nonblank,
             "pass": same_size and nonblank and ratio <= MAX_DIFF,
         })
-    before.close()
-    after.close()
+    # Extract text only after raster rendering, because pypdfium2 page handles
+    # are tied to their document lifetime.
+    before_content = inspect_pdf_text(before, before_markers)
+    after_content = inspect_pdf_text(after, after_markers)
+    report["content"] = {"before": before_content, "after": after_content}
     report["within_threshold"] = (
-        report["page_count_equal"] and len(before) > 0 and len(after) > 0
+        report["page_count_equal"] and before_count > 0 and after_count > 0
         and before_content["markers_present"] and after_content["markers_present"]
         and all(p["pass"] for p in report["pages"])
     )
+    before.close()
+    after.close()
     return report
 
 
