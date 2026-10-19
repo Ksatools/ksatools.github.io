@@ -3750,6 +3750,7 @@ def selftest() -> int:
             _repair_calls[lang] += 1
             data = fixture_data(lang, topic_id="labor-art85")
             if lang == "ar" and _repair_calls[lang] == 1:
+                data = ensure_article85_notice_caveat(data, lang="ar")
                 def _remove_ar86_variable_word(value):
                     if isinstance(value, dict):
                         return {k: _remove_ar86_variable_word(v) for k, v in value.items()}
