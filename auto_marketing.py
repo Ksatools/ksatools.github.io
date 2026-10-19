@@ -3582,6 +3582,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 request_budget=request_budget, reasoning_effort=reasoning_effort)
             if (not ok and provider == "groq" and topic["id"] == "labor-art85"
                     and is_groq_incomplete_schema_failure(msg)):
+                record_generation_result(lang, "retrying", "schema_incomplete", msg)
                 log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
                 ok, data, msg = generate_json(
                     provider,
@@ -3611,6 +3612,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 record_generation_result(lang, "rejected", "deterministic_preflight", reason)
                 continue
         repaired = False
+        rejection_history = []
         try:
             article = validate_article(
                 data, topic=topic, lang=lang, published_at=today_iso(),
@@ -3618,6 +3620,8 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             )
         except Reject as exc:
             reason = str(exc)
+            rejection_history.append(reason)
+            record_generation_result(lang, "repairing", "quality_gate_rejection", reason)
             deterministic_repair_done = False
             if topic["id"] == "labor-art85":
                 repaired_data, repaired_article, applied_fixes, remaining_reason = (
@@ -3638,6 +3642,9 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     deterministic_repair_done = True
                 else:
                     reason = remaining_reason or reason
+                    if reason and reason != rejection_history[-1]:
+                        rejection_history.append(reason)
+                        record_generation_result(lang, "repairing", "deterministic_repair_rejection", reason)
 
             if not deterministic_repair_done:
                 if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
@@ -3701,10 +3708,13 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             continue
         article["content_hash"] = sha256_text(json.dumps(article["sections"], ensure_ascii=False))
         results[lang] = article
-        record_generation_result(
-            lang, "valid", "quality_gate",
-            "deterministic_fixes=" + ", ".join(deterministic_actions + (["model repair"] if repaired else [])),
-        )
+        accepted_notes = []
+        if rejection_history:
+            accepted_notes.append("rejection_history=" + " | ".join(rejection_history))
+        accepted_notes.append(
+            "deterministic_fixes=" + ", ".join(
+                deterministic_actions + (["model repair"] if repaired else [])))
+        record_generation_result(lang, "valid", "quality_gate", " ; ".join(accepted_notes))
         if repaired:
             log(f"[OK] النسخة {lang} اجتازت بوابة الجودة بعد محاولة إصلاح واحدة ({article['word_count']} كلمة).")
         else:
