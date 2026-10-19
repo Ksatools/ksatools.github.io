@@ -1915,19 +1915,19 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
             raise Reject(
                 "Article 85: clarify that two-thirds applies only after five years and before ten years"
             )
-        for sentence in re.split(r"(?<=[.!?])\\s+", text_norm):
-            if not re.search(r"\\barticle\\s*85\\b", sentence) or "notice" not in sentence:
+        for sentence in re.split(r"(?<=[.!?])\s+", text_norm):
+            if not re.search(r"\barticle\s*85\b", sentence) or "notice" not in sentence:
                 continue
             denies_notice_authority = bool(re.search(
-                r"\\b(?:does not|doesn't|never|not)\\s+(?:set|specify|determine|govern|address|waive)\\b",
+                r"\b(?:does not|doesn't|never|not)\s+(?:set|specify|determine|govern|address|waive)\b",
                 sentence,
             ))
             attributes_notice_rule = bool(re.search(
-                r"\\b(?:specifies|states|says|provides|requires|sets|waives)\\b", sentence
+                r"\b(?:specifies|states|says|provides|requires|sets|waives)\b", sentence
             ))
             asserts_no_notice = bool(re.search(
-                r"\\b(?:not required|isn't required|not necessary|unnecessary|no need|"
-                r"does not require|doesn't require|does not need|doesn't need)\\b",
+                r"\b(?:not required|isn't required|not necessary|unnecessary|no need|"
+                r"does not require|doesn't require|does not need|doesn't need)\b",
                 sentence,
             ))
             if (attributes_notice_rule or asserts_no_notice) and not denies_notice_authority:
@@ -1975,19 +1975,19 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
         # Catch a recurring malformed Arabic rendering of Article 88's settlement rule.
         # Strip diacritics and normalize hamza variants, but keep this narrowly scoped
         # so ordinary Arabic phrasing about wages and settlement remains allowed.
-        plain_ar = re.sub(r"[\\u064b-\\u065f\\u0670]", "", text_norm)
+        plain_ar = re.sub(r"[ًٌٍَُِّْٰ]", "", text_norm)
         plain_ar = plain_ar.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"}))
-        if re.search(r"يجب\\s+في\\s+الاجر.{0,50}وصفت\\s+الحقوق", plain_ar):
+        if re.search(r"يجب\s+في\s+الاجر.{0,50}وصفت\s+الحقوق", plain_ar):
             raise Reject(
                 "جودة العربية: صياغة مشوّهة في جملة دفع الأجر وتصفية الحقوق؛ أعد صياغتها بوضوح"
             )
-        for sentence in re.split(r"(?<=[.!؟])\\s+", text_norm):
-            if not re.search(r"المادة\\s*(?:85|الخامسة\\s+والثمانون)", sentence):
+        for sentence in re.split(r"(?<=[.!؟])\s+", text_norm):
+            if not re.search(r"المادة\s*(?:85|الخامسة\s+والثمانون)", sentence):
                 continue
             if not re.search(r"(?:الإشعار|اشعار|فترة الإشعار|مهلة الإشعار|ثلاثة أشهر|ثلاثين يوماً|ثلاثين يوما)", sentence):
                 continue
             denies_notice_authority = bool(re.search(
-                r"(?:لا\\s+(?:تحدد|تنظم|تتناول|تعفي|تقرر)|ليست من اختصاص المادة\\s*85)", sentence
+                r"(?:لا\s+(?:تحدد|تنظم|تتناول|تعفي|تقرر)|ليست من اختصاص المادة\s*85)", sentence
             ))
             attributes_notice_rule = bool(re.search(
                 r"(?:تنص|تذكر|تقول|تقرر|تحدد|توجب|تشترط|تعفي|لا تستلزم|لا تشترط)", sentence
