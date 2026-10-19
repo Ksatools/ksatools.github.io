@@ -3624,7 +3624,7 @@ def render_article_html(article, *, published: bool) -> str:
             else " article-section"
         )
         parts = [f'<section class="{example_class.strip()}"><h2>{esc(heading)}</h2>']
-        parts.extend(render_article_body(sec.get("body", "")))
+        parts.append(render_article_body(sec.get("body", "")))
         if sec.get("bullets"):
             bullet_items = "".join(
                 f"<li>{render_inline_prose(item)}</li>" for item in sec["bullets"]
@@ -4769,6 +4769,14 @@ def selftest() -> int:
     check("صفحة منشورة قابلة للفهرسة", "noindex" not in html_out)
     check("صفحة مسودة غير قابلة للفهرسة", "noindex" in draft_out)
     check("JSON-LD صالح", '"@type": "Article"' in html_out)
+    _format_probe = dict(art)
+    _format_probe["sections"] = [dict(section) for section in art["sections"]]
+    _format_probe["sections"][0]["body"] = "Formatting marker remains contiguous with SAR 12,000."
+    _format_probe["sections"][0]["bullets"] = []
+    _format_probe_html = render_article_html(_format_probe, published=True)
+    check("عرض المقال: يحتفظ HTML النهائي بالنص والأرقام ككتلة منسّقة",
+          "Formatting marker remains contiguous" in _format_probe_html
+          and '<bdi class="numeric" dir="ltr">SAR 12,000</bdi>' in _format_probe_html)
     _formatted_bullets = render_article_body(
         "Key points: • one **important** rule applies. • SAR 12,000 is the example amount. Further explanation follows."
     )
