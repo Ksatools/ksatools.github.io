@@ -4726,9 +4726,10 @@ def selftest() -> int:
                 _empty_shell_ar, topic=topic_by_id("labor-art85"), lang="ar",
                 published_at=today_iso())
         )
-        check("Article 85: إزالة عنوان فارغ لا تحذف محتوى وتحافظ على صلاحية المقال",
+        check("Article 85: دمج العنوان الفارغ يحافظ على العنوان ولا يسقط محتوى",
               _empty_shell_article is not None
-              and "empty section removed" in _empty_shell_fixes
+              and any("أساس الحساب" in sec["body"] for sec in _empty_shell_data["sections"])
+              and any("empty section merged" in fix for fix in _empty_shell_fixes)
               and len(_empty_shell_data["sections"]) >= MIN_SECTIONS
               and json.dumps(_empty_shell_ar, ensure_ascii=False, sort_keys=True) == _empty_shell_original
               and not _empty_shell_error)
@@ -4743,14 +4744,67 @@ def selftest() -> int:
                 _empty_bullets_en, topic=topic_by_id("labor-art85"), lang="en",
                 published_at=today_iso())
         )
-        check("Article 85: إصلاح القسم ذي body الفارغ يحافظ على bullets المفيدة",
+        check("Article 85: إصلاح القسم ذي body الفارغ يحافظ على العنوان وbullets المفيدة",
               _empty_bullets_article is not None
-              and "empty section merged" in _empty_bullets_fixes
+              and any("empty section merged" in fix for fix in _empty_bullets_fixes)
+              and any("Calculation Basis" in sec["body"] for sec in _empty_bullets_data["sections"])
               and any(_empty_note in sec["body"] for sec in _empty_bullets_data["sections"])
               and len(_empty_bullets_data["sections"]) >= MIN_SECTIONS
               and json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True) == _empty_bullets_original
               and not _empty_bullets_error)
 
+        # Critical Article 85 wording and the fixed worked example must not depend on model luck.
+        _canonicalized = {}
+        _canonical_inputs_before = {}
+        for _canonical_lang in ("ar", "en"):
+            _canonical_input = fixture_data(_canonical_lang, topic_id="labor-art85")
+            _canonical_input["calculation_example"]["payable_benefit"] = "30000"
+            _canonical_example_sec = next(
+                sec for sec in _canonical_input["sections"]
+                if re.search(r"(?:مثال|example)", sec["heading"], re.I))
+            _canonical_example_sec["body"] = (
+                "Wrong example: SAR 30,000." if _canonical_lang == "en"
+                else "مثال غير صحيح: 30,000 ريال.")
+            _canonical_inputs_before[_canonical_lang] = json.dumps(
+                _canonical_input, ensure_ascii=False, sort_keys=True)
+            _canonicalized[_canonical_lang] = ensure_article85_critical_content(
+                _canonical_input, lang=_canonical_lang)
+            check(f"Article 85: canonicalizer لا يعدّل مدخل {_canonical_lang} الأصلي",
+                  json.dumps(_canonical_input, ensure_ascii=False, sort_keys=True)
+                  == _canonical_inputs_before[_canonical_lang])
+        _critical_ar, _critical_ar_fixes = _canonicalized["ar"]
+        _critical_en, _critical_en_fixes = _canonicalized["en"]
+        _critical_ar_text = " ".join(sec["heading"] + " " + sec["body"]
+                                     for sec in _critical_ar["sections"])
+        _critical_en_text = " ".join(sec["heading"] + " " + sec["body"]
+                                     for sec in _critical_en["sections"])
+        check("Article 85: حدّ الثلثين والمثال الحسابي يُحقنان حتمياً قبل التحقق",
+              _critical_ar["calculation_example"] == ARTICLE85_CANONICAL_VALUES
+              and _critical_en["calculation_example"] == ARTICLE85_CANONICAL_VALUES
+              and "أكثر من خمس سنوات وأقل من عشر سنوات" in _critical_ar_text
+              and "more than five years and less than ten years" in _critical_en_text
+              and "28,000 ريال" in _critical_ar_text and "SAR 28,000" in _critical_en_text
+              and "30,000" not in _critical_ar_text and "30,000" not in _critical_en_text
+              and "canonical example prose enforced" in _critical_ar_fixes
+              and "canonical calculation values enforced" in _critical_en_fixes)
+
+        _overflow_data = fixture_data("en", topic_id="labor-art85")
+        for _n in range(10):
+            _overflow_data["sections"].append({
+                "heading": f"Supplemental section {_n}",
+                "body": f"Supplemental retained content marker {_n}. " * 8,
+                "bullets": [f"Supplemental bullet marker {_n}"],
+            })
+        _overflow_fixed = merge_article85_sections(_overflow_data, target_count=MAX_SECTIONS)
+        _overflow_text = " ".join(sec["heading"] + " " + sec["body"] + " " +
+                                  " ".join(sec["bullets"]) for sec in _overflow_fixed["sections"])
+        check("Article 85: تقليل الأقسام الزائدة يحافظ على العناوين والنصوص والنقاط",
+              len(_overflow_data["sections"]) == 14
+              and len(_overflow_fixed["sections"]) == MAX_SECTIONS
+              and all(f"Supplemental retained content marker {_n}." in _overflow_text
+                      and f"Supplemental bullet marker {_n}" in _overflow_text
+                      and f"Supplemental section {_n}" in _overflow_text
+                      for _n in range(10))
         _fixture_excerpt = fixture_data("en", topic_id="labor-art85")
         _fixture_excerpt["excerpt"] = ("This is a helpful introductory summary with practical information. " * 5)[:318]
         _trimmed_excerpt = trim_article85_excerpt(_fixture_excerpt)
@@ -4910,6 +4964,11 @@ def selftest() -> int:
 
         # (ي) إعادة المحاولة عند Groq: 429 مؤقّت مع Retry-After ثم نجاح
         _sleeps.clear()
+        _retry_date = datetime(2026, 1, 1, 0, 0, 45, tzinfo=timezone.utc)
+        _retry_now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        _retry_date_header = _retry_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        check("Retry-After: يقبل تاريخ HTTP ويفسره كمهلة صريحة",
+              retry_after_seconds(_retry_date_header, now=_retry_now) == 45.0)
         fake, calls = _fake_http([
             (429, {"Retry-After": "7"}, b'{"error":{"message":"rate limit reached"}}'),
             _groq_envelope(lang="ar"),
@@ -4954,10 +5013,22 @@ def selftest() -> int:
         fake, calls = _fake_http([(503, {}, b'{"error":{"message":"overloaded"}}')])
         globals()["http_request_full"] = fake
         ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
-        check("Groq: خطأ مؤقّت مستمرّ يستنفد الحدّ الأعلى (4 محاولات) ثم يفشل بوضوح",
+        check("Groq: خطأ مؤقّت مستمرّ يستنفد الحدّ الأعلى الافتراضي (4 محاولات) ثم يفشل بوضوح",
               not ok and data is None and len(calls) == GEMINI_MAX_TRIES
               and msg.startswith("http_503") and "استُنفدت المحاولات" in msg
               and len(_sleeps) == GEMINI_MAX_TRIES - 1)
+
+        _sleeps.clear()
+        _budget_http, _budget_calls = _fake_http([
+            (503, {}, b'{"error":{"message":"overloaded"}}')])
+        globals()["http_request_full"] = _budget_http
+        _hard_budget = RequestBudget(2)
+        _budget_ok, _budget_data, _budget_msg = groq_generate_json(
+            "p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            tries=4, request_budget=_hard_budget, sleep=_sleeps.append)
+        check("Groq: حدّ الاستدعاءات المشترك يوقف الطلبات فعلياً عند السقف",
+              not _budget_ok and len(_budget_calls) == 2 and _hard_budget.used == 2
+              and "request_budget_exhausted" in _budget_msg)
 
         # (ي) 401/403 ونموذج غير متاح: لا إعادة إطلاقاً، وتصنيف واضح
         _sleeps.clear()
@@ -5970,6 +6041,44 @@ def selftest() -> int:
               and (DRAFTS_DIR / "ar" / "labor-art81-ar.html").exists()
               and (DRAFTS_DIR / "en" / "labor-art81-en.html").exists()
               and _st["ar"] == "draft" and _st["en"] == "draft")
+
+        # (ظ-4) تجربة reasoning_effort=medium للإنجليزية فقط؛ العربية تبقى low، والتشخيص منظم.
+        _sandbox_root = _sandbox()
+        _effort_report = _sandbox_root / "generation_report.json"
+        _saved_effort = os.environ.get("GROQ_EN_REASONING_EFFORT")
+        _saved_report_path = os.environ.get("GENERATION_REPORT_PATH")
+        os.environ["GROQ_EN_REASONING_EFFORT"] = "medium"
+        os.environ["GENERATION_REPORT_PATH"] = str(_effort_report)
+        _observed_efforts, _observed_counts = {}, {"ar": 0, "en": 0}
+        def _fake_effort(url, **kwargs):
+            body = json.loads(kwargs["data"].decode("utf-8"))
+            prompt_text = _request_prompt(kwargs)
+            chosen_lang = "en" if "لغة المخرجات: English" in prompt_text else "ar"
+            _observed_efforts[chosen_lang] = body.get("reasoning_effort")
+            _observed_counts[chosen_lang] += 1
+            tid = _topic_id_from_prompt(prompt_text)
+            return _groq_envelope(lang=chosen_lang, topic_id=tid) + (url,)
+        try:
+            globals()["http_request_full"] = _fake_effort
+            rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                          skip_source_check=True, topic_id="labor-art85", article_lang="both")
+        finally:
+            if _saved_effort is None:
+                os.environ.pop("GROQ_EN_REASONING_EFFORT", None)
+            else:
+                os.environ["GROQ_EN_REASONING_EFFORT"] = _saved_effort
+            if _saved_report_path is None:
+                os.environ.pop("GENERATION_REPORT_PATH", None)
+            else:
+                os.environ["GENERATION_REPORT_PATH"] = _saved_report_path
+        _report_data = json.loads(_effort_report.read_text(encoding="utf-8")) if _effort_report.exists() else {}
+        check("Groq: medium اختياري للإنجليزية فقط مع صفوف تشخيص موحدة وحدّ استدعاءات",
+              rc == 0 and _observed_efforts == {"ar": "low", "en": "medium"}
+              and _observed_counts == {"ar": 1, "en": 1}
+              and len(_report_data.get("results", [])) == 2
+              and all("http_requests" in row and "stage" in row and "status" in row
+                      and "reason" in row for row in _report_data["results"])
+              and all(row.get("http_requests") == 1 for row in _report_data["results"]))
 
         # (ظ-4) main() يمرّر --article-lang إلى run_once فعلاً (بمفتاح وهمي واستجابة محاكاة).
         _sandbox()
