@@ -5206,7 +5206,7 @@ def selftest() -> int:
             )
             _critical, _critical_actions = ensure_article85_critical_content(_critical, lang=_critical_lang)
             _critical_text = " ".join(
-                str(sec.get("heading", "")) + " " + str(sec.get("body", "")
+                str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
                 for sec in _critical["sections"] if isinstance(sec, dict)
             )
             _notice_present = (
