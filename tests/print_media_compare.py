@@ -54,7 +54,10 @@ def expected_pdf_markers(page, tool):
         date_marker = digits_only(page.locator("#let-date").input_value())
         if len(normalized_text(letter)) < 80 or date_marker != "20261020":
             raise RuntimeError("Letter fixture did not generate its expected dated output.")
-        return {"digits": [date_marker], "text": []}
+        # Arabic bidirectional rendering presents this fixture's ISO input as
+        # 20-10-2026 in extracted PDF reading order; assert that visible date
+        # plus the letter's subject, not the input-field's ISO digit order.
+        return {"digits": ["20102026"], "text": [normalized_text("تقديم استقالة")]}
 
     if tool == "cv-tool":
         resume = page.locator(".cv-doc").inner_text().strip()
