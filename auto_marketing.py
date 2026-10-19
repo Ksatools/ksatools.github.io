@@ -2691,8 +2691,8 @@ def selftest() -> int:
     eosb_pair_bad["calculation_example"].update({
         "monthly_wage": "10000", "full_benefit": "35000", "payable_benefit": "23333.33",
     })
-    eosb_pair_bad["sections"][0]["body"] = (
-        eosb_pair_bad["sections"][0]["body"]
+    eosb_pair_bad["sections"][3]["body"] = (
+        eosb_pair_bad["sections"][3]["body"]
         .replace("SAR 12,000", "SAR 10,000")
         .replace("SAR 42,000", "SAR 35,000")
         .replace("SAR 28,000", "SAR 23,333.33")
@@ -2709,7 +2709,7 @@ def selftest() -> int:
               eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
 
     eosb_bad = fixture_data("ar", topic_id="labor-art85")
-    eosb_bad["sections"][0]["body"] = eosb_bad["sections"][0]["body"].replace(
+    eosb_bad["sections"][3]["body"] = eosb_bad["sections"][3]["body"].replace(
         "28,000 ريال", "48,000 ريال")
     check("تدقيق EOSB: يرفض مبلغاً خاطئاً بالنص ولو كانت بيانات الحساب سليمة",
           _rejects(lambda: validate_article(
