@@ -1862,10 +1862,19 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 raise Reject(
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements that may still apply"
                 )
-        if re.search(r"\b(?:dismissal|dismissed|fired)\s+(?:under|pursuant to)\s+article\s*81\b", text_norm):
-            raise Reject(
-                "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
-            )
+        for match in re.finditer(
+            r"\b(?:dismissal|dismissed|fired)\s+(?:under|pursuant to)\s+article\s*81\b",
+            text_norm,
+        ):
+            prefix = text_norm[max(0, match.start() - 40):match.start()]
+            is_negated = bool(re.search(
+                r"\b(?:not|isn't|never|incorrectly|do not call|don't call)\s+(?:a\s+)?$",
+                prefix,
+            ))
+            if not is_negated:
+                raise Reject(
+                    "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
+                )
         if re.search(r"\b(?:commission|commissions|sales percentages?)\b", text_norm):
             wage_rule = (
                 "commission" in text_norm
