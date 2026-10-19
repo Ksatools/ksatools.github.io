@@ -1432,6 +1432,7 @@ def build_prompt(topic, lang: str) -> str:
         '  "calculation_example": {"monthly_wage": "", "years": "", "months": "", "days": "", "scenario": "", "full_benefit": "", "payable_benefit": ""}\n'
         "}\n\n"
         f"- sections: من {MIN_SECTIONS} إلى {MAX_SECTIONS} عناصر، و bullets اختيارية (اتركها [] عند عدم الحاجة).\n"
+        "- يجب ألا يتجاوز نص body في أي قسم منفرد 5000 حرف، بما في ذلك المسافات؛ وزّع المحتوى على أقسام متعددة ولا تضع معظم المقال في قسم واحد.\n"
         "- faq: من سؤالين إلى أربعة أسئلة.\n"
         "- إجمالي المحتوى لا يقل عن 350 كلمة.\n"
         "- لا تُضِف حقولاً خارج البنية أعلاه.\n"
@@ -2788,6 +2789,9 @@ def selftest() -> int:
                             "full_benefit=42000", "payable_benefit=28000"))
           and "لا تخترع أرقاماً أخرى" in _prompt_ar85
           and "Do not invent or change any value" in _prompt_en85)
+    check("بوابة الجودة: تعليمات التوليد تحدّ طول كل قسم إلى 5000 حرف",
+          "نص body في أي قسم منفرد 5000 حرف" in _prompt_ar85
+          and "نص body في أي قسم منفرد 5000 حرف" in _prompt_en85)
 
     art81_topic = topic_by_id("labor-art81")
     art81_good = fixture_data("ar", topic_id="labor-art81")
