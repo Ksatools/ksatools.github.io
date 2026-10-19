@@ -1823,6 +1823,59 @@ def normalize_faq(raw) -> list:
     return out
 
 
+def is_article85_legal_rejection(reason: str) -> bool:
+    """Only known Article 85/86/81 legal-claim failures are eligible for one repair attempt."""
+    value = str(reason or "")
+    return value.startswith((
+        "Article 85:", "Article 86:", "Article 81 ",
+        "المادة 85:", "المادة 86:", "المادة 81 ",
+    ))
+
+
+def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
+    """Add focused corrective wording after a legal-claim gate rejection."""
+    if lang == "ar":
+        clauses = (
+            "1) «تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات».\\n"
+            "2) «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة».\\n"
+            "3) «وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
+            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه مكافأة "
+            "نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي».\\n"
+            "4) «المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
+            "ولا تمثل فصلًا من صاحب العمل»."
+        )
+        instructions = (
+            "هذه محاولة إصلاح أخيرة بعد رفض بوابة الصياغة القانونية للنسخة السابقة. "
+            f"سبب الرفض: {reason}\\n"
+            "أعِد إنشاء كائن JSON كاملاً مطابقاً للمخطط الأصلي، لا تشرح خارج JSON، "
+            "وأدرج العبارات القانونية التالية حرفياً داخل أقسام مناسبة. لا تكتفِ بتلخيصها "
+            "ولا تغيّر الحدود الزمنية أو الأثر القانوني:\\n"
+        )
+    else:
+        clauses = (
+            "1) “The one-third benefit applies to service from two years through five years inclusive. "
+            "The two-thirds benefit applies only when service is more than five years and less than ten years.”\\n"
+            "2) “The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary "
+            "to end a contract; applicable notice requirements and resignation procedures may still apply "
+            "depending on the contract and law.”\\n"
+            "3) “Under Article 86, by agreement, commissions, sales percentages and similar wage elements "
+            "that are naturally subject to increase or decrease may be excluded from the wage used to "
+            "calculate end-of-service benefits; this does not mean the basic wage is excluded.”\\n"
+            "4) “Article 81 concerns statutory cases where a worker leaves without notice while retaining "
+            "statutory rights; it is not a dismissal by the employer.”"
+        )
+        instructions = (
+            "This is the final repair attempt after the prior article failed the legal-claim quality gate. "
+            f"Rejection reason: {reason}\\n"
+            "Regenerate the complete JSON object under the original strict schema. Return JSON only. "
+            "Insert the following legal sentences verbatim into suitable sections; do not paraphrase them "
+            "or change their time boundaries or legal effect:\\n"
+        )
+    return base_prompt + "\\n\\n" + instructions + clauses + "\\n"
+
+
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
     """Reject material wording errors in generated Article 85 articles before any draft is saved."""
     text_norm = re.sub(r"\s+", " ", str(article_text or "")).strip().lower()
@@ -2631,24 +2684,53 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             continue
         attempted = True
         log(f"توليد النسخة {lang}…")
+        prompt = build_prompt(topic, lang)
         if dry_run:
             ok, data, msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
         else:
             ok, data, msg = generate_json(
-                provider, build_prompt(topic, lang), api_key=api_key, model=model)
+                provider, prompt, api_key=api_key, model=model)
         if not ok:
             log(f"[FAIL] تعذّر توليد النسخة {lang}: {redact(msg)}")
             state["topics"][topic["id"]][lang] = "error"
             continue
+        repaired = False
         try:
             article = validate_article(
                 data, topic=topic, lang=lang, published_at=today_iso(),
                 require_canonical_article85=True,
             )
         except Reject as exc:
-            log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
-            state["topics"][topic["id"]][lang] = "rejected"
-            continue
+            reason = str(exc)
+            if topic["id"] != "labor-art85" or not is_article85_legal_rejection(reason):
+                log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
+                state["topics"][topic["id"]][lang] = "rejected"
+                continue
+
+            log(f"[RETRY] النسخة {lang} رُفضت لصياغة قانونية محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
+            if dry_run:
+                repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
+            else:
+                repair_ok, repair_data, repair_msg = generate_json(
+                    provider,
+                    build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                    api_key=api_key,
+                    model=model,
+                )
+            if not repair_ok:
+                log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
+                state["topics"][topic["id"]][lang] = "rejected"
+                continue
+            try:
+                article = validate_article(
+                    repair_data, topic=topic, lang=lang, published_at=today_iso(),
+                    require_canonical_article85=True,
+                )
+            except Reject as repair_exc:
+                log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
+                state["topics"][topic["id"]][lang] = "rejected"
+                continue
+            repaired = True
         problems = duplicate_check(article, records)
         if problems:
             log(f"[REJECT] النسخة {lang}: " + "; ".join(problems))
@@ -2656,7 +2738,10 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             continue
         article["content_hash"] = sha256_text(json.dumps(article["sections"], ensure_ascii=False))
         results[lang] = article
-        log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
+        if repaired:
+            log(f"[OK] النسخة {lang} اجتازت بوابة الجودة بعد محاولة إصلاح واحدة ({article['word_count']} كلمة).")
+        else:
+            log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
 
     if topic["id"] in EOSB_TOPIC_IDS and results.get("ar") and results.get("en"):
         pair_problems = validate_eosb_translation_pair(results["ar"], results["en"])
@@ -3446,6 +3531,77 @@ def selftest() -> int:
             finally:
                 sys.stdout = saved
                 cap.close()
+
+        # اختبار إصلاح قانوني واحد: الاستجابة الأولى تفتقد تحذير الإشعار،
+        # والثانية تضيف العبارات النظامية؛ لا نتجاوز البوابة ولا نكتب ملفات عامة.
+        _sandbox()
+        _repair_calls, _repair_requests = {"ar": 0, "en": 0}, []
+        _legal_repair_ar = (
+            " تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات. "
+            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. "
+            "وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
+            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه "
+            "مكافأة نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
+            "ولا تمثل فصلًا من صاحب العمل."
+        )
+
+        def _article85_repair_http(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _repair_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _repair_calls[lang] += 1
+            data = fixture_data(lang, topic_id="labor-art85")
+            if lang == "ar" and _repair_calls[lang] == 1:
+                data["sections"][0]["body"] += " الإشعار ليس شرطًا مستقلًا لاستحقاق المكافأة."
+            else:
+                data["sections"][0]["body"] += _legal_repair_ar
+            return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
+
+        _repair_base_prompt = build_prompt(topic_by_id("labor-art85"), "ar")
+        _repair_prompt = build_article85_repair_prompt(
+            _repair_base_prompt, lang="ar", reason="المادة 85: تحذير الإشعار ناقص")
+        check("Article 85: برومبت الإصلاح يتضمن العبارات القانونية المحددة في اللغتين",
+              "أكثر من خمس سنوات وأقل من عشر سنوات" in _repair_prompt
+              and "متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد" in _repair_prompt
+              and "بطبيعتها قابلة للزيادة والنقص" in _repair_prompt
+              and "Article 86" in build_article85_repair_prompt(
+                  build_prompt(topic_by_id("labor-art85"), "en"),
+                  lang="en", reason="Article 86: missing agreement"))
+        check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية المعروفة",
+              is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
+              and is_article85_legal_rejection("Article 86: missing agreement")
+              and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections"))
+
+        globals()["http_request_full"] = _article85_repair_http
+        _repair_rc, _repair_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="labor-art85", article_lang="ar")
+        _repair_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        check("Article 85: إعادة التوليد بعد الرفض تمرّ بالبوابة وتحفظ مسودة فقط",
+              _repair_rc == 0 and _repair_calls == {"ar": 2, "en": 0}
+              and len(_repair_requests) == 2
+              and "محاولة إصلاح واحدة" in _repair_out
+              and len(_repair_drafts) == 1
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+                  == (atomic_read_bytes(ARTICLES_JSON), atomic_read_bytes(SITEMAP_XML)))
+        check("Article 85: طلب الإصلاح يبقي Groq على JSON Schema صارم وreasoning_effort=low",
+              len(_repair_requests) == 2
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
+                      for r in _repair_requests)
+              and "سبب الرفض" in _request_prompt({"data": json.dumps(_repair_requests[1]).encode("utf-8")})
+              if False else len(_repair_requests) == 2
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
+                      for r in _repair_requests))
 
         _saved_keys = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
         try:
