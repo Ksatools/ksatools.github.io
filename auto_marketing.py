@@ -2729,19 +2729,15 @@ def selftest() -> int:
     check("تدقيق EOSB: المثالان العربي والإنجليزي متطابقان عند تطابق البيانات",
           validate_eosb_translation_pair(eosb_good_article, eosb_good_en_article) == [])
 
-    eosb_pair_bad = fixture_data("en", topic_id="labor-art85")
-    eosb_pair_bad["calculation_example"].update({
+    # Exercise the translation-pair guard independently of the per-topic
+    # canonical-example guard by mutating an already-normalized valid article.
+    eosb_pair_bad_article = dict(eosb_good_en_article)
+    eosb_pair_bad_article["calculation_example"] = dict(
+        eosb_good_en_article["calculation_example"])
+    eosb_pair_bad_article["calculation_example"].update({
         "monthly_wage": "10000", "full_benefit": "35000", "payable_benefit": "23333.33",
     })
-    eosb_pair_bad["sections"][3]["body"] = (
-        eosb_pair_bad["sections"][3]["body"]
-        .replace("SAR 12,000", "SAR 10,000")
-        .replace("SAR 42,000", "SAR 35,000")
-        .replace("SAR 28,000", "SAR 23,333.33")
-    )
-    eosb_pair_bad_article = validate_article(
-        eosb_pair_bad, topic=eosb_topic, lang="en", published_at="2026-01-01")
-    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين رغم صحة كل نسخة منفردة",
+    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين",
           validate_eosb_translation_pair(eosb_good_article, eosb_pair_bad_article) != [])
 
     eosb_bad = fixture_data("ar", topic_id="labor-art85")
