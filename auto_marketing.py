@@ -264,8 +264,8 @@ QUOTA_STOP_HINTS = ("check your plan", "billing")
 # دلائل صريحة على نافذة تحديد معدّل مؤقّت، حتى إن تضمنت الرسالة نصائح عامة عن الفوترة.
 TEMPORARY_RATE_LIMIT_HINTS = ("tokens per minute", "requests per minute")
 RETRY_DELAY_RE = re.compile(
-    r"\\b(?:try again|retry(?: after)?)\\s+(?:in\\s+)?"
-    r"(?P<seconds>\\d+(?:\\.\\d+)?)\\s*(?:s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\\b",
+    r"\b(?:try again|retry(?: after)?)\s+(?:in\s+)?"
+    r"(?P<seconds>\d+(?:\.\d+)?)\s*(?:s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\b",
     re.IGNORECASE,
 )
 
