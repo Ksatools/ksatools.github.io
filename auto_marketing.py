@@ -3936,9 +3936,8 @@ def selftest() -> int:
         )
         _stacked_en = fixture_data("en", topic_id="labor-art85")
         _stacked_en["excerpt"] = (
-            "This is an illustrative introduction to Saudi end-of-service benefit eligibility and calculations. "
-            "It describes the general rule and explains why the individual contract and facts must be checked carefully."
-        ) * 2
+            "This is a helpful introductory summary with practical information. " * 5
+        )[:318]
         _stacked_en["sections"][0]["body"] += (
             " Notice may apply when a worker resigns. Article 85 discusses the two-thirds ratio. "
             "Under Article 86, qualifying commissions, sales percentages and similar wage elements naturally subject "
