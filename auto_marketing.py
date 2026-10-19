@@ -1157,7 +1157,10 @@ def _parse_eosb_number(value, field: str, *, integer: bool = False) -> Decimal:
     return number
 
 
-def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_text: str) -> None:
+def validate_eosb_calculation_example(
+    raw, *, topic, article_text: str, example_text: str,
+    require_canonical_article85: bool = False,
+) -> None:
     """يرفض مثال مكافأة نهاية خدمة إذا خالف معادلة المادتين 84/85 أو نص المقال."""
     if not isinstance(raw, dict) or set(raw) != set(EOSB_CALCULATION_FIELDS):
         raise Reject("calculation_example: الكائن أو حقوله غير مكتملة")
@@ -1196,7 +1199,7 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
         raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
     # Article 85 uses a code-owned worked example so the model cannot invent
     # a new duration or wage and drift across Arabic/English calculations.
-    if topic_id == "labor-art85" and (
+    if require_canonical_article85 and topic_id == "labor-art85" and (
         wage != Decimal("12000") or years != Decimal("6")
         or months != 0 or days != 0
     ):
@@ -1798,7 +1801,9 @@ def normalize_faq(raw) -> list:
     return out
 
 
-def validate_article(data, *, topic, lang, published_at) -> dict:
+def validate_article(
+    data, *, topic, lang, published_at, require_canonical_article85: bool = False,
+) -> dict:
     """يرفع Reject عند فشل أي بوابة، بما فيها تدقيق حتمي لأي مثال EOSB رقمي."""
     if not isinstance(data, dict):
         raise Reject("المخرجات ليست كائن JSON")
@@ -1841,6 +1846,7 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
     calculation_example = validate_eosb_calculation_example(
         data.get("calculation_example"), topic=topic, article_text=audit_text,
         example_text=example_text,
+        require_canonical_article85=require_canonical_article85,
     )
     total_chars = len(body_text) + len(faq_text) + len(title) + len(excerpt)
     if total_chars < MIN_TOTAL_CHARS:
@@ -2511,7 +2517,10 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             state["topics"][topic["id"]][lang] = "error"
             continue
         try:
-            article = validate_article(data, topic=topic, lang=lang, published_at=today_iso())
+            article = validate_article(
+                data, topic=topic, lang=lang, published_at=today_iso(),
+                require_canonical_article85=True,
+            )
         except Reject as exc:
             log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
             state["topics"][topic["id"]][lang] = "rejected"
@@ -2769,7 +2778,8 @@ def selftest() -> int:
     eosb_noncanonical["calculation_example"]["monthly_wage"] = "12500"
     check("تدقيق EOSB: يرفض تغيير الأجر في المثال الثابت للمادة 85",
           _rejects(lambda: validate_article(
-              eosb_noncanonical, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+              eosb_noncanonical, topic=eosb_topic, lang="ar", published_at="2026-01-01",
+              require_canonical_article85=True)))
     _prompt_ar85 = build_prompt(eosb_topic, "ar")
     _prompt_en85 = build_prompt(eosb_topic, "en")
     check("تدقيق EOSB: المثال الثابت 12000/6 سنوات/42000/28000 محدد للغتين",
