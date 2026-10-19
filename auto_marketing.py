@@ -3595,9 +3595,16 @@ def selftest() -> int:
               and all(r.get("reasoning_effort") == "low"
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
-                      for r in _repair_requests)
-              and "سبب الرفض: المادة 85: تحذير الإشعار ناقص"
-                  in _repair_requests[1]["messages"][-1]["content"])
+                      for r in _repair_requests))
+        check("Article 85: طلب الإصلاح يضم سبب الرفض القانوني ضمن رسائل النموذج",
+              len(_repair_requests) == 2
+              and any("سبب الرفض: المادة 85: تحذير الإشعار ناقص"
+                      in str(m.get("content", ""))
+                      for m in _repair_requests[1].get("messages", [])))
+
+        # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
+        _sandbox()
+        globals()["http_request_full"] = _no_network
 
         _saved_keys = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
         try:
