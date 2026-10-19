@@ -27,14 +27,6 @@
 name: AI Marketing
 
 on:
-  # Temporary one-run integration test, restricted to this branch and this workflow file.
-  # The push event is forced to draft mode and removed after the result is inspected.
-  push:
-    branches:
-      - fix/groq-schema-reasoning-low-20261019
-    paths:
-      - .github/workflows/ai_marketing.yml
-      - auto_marketing.py
   schedule:
     - cron: "0 9 * * *"
       timezone: "Asia/Riyadh"
@@ -160,19 +152,13 @@ jobs:
         id: mode
         env:
           # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة (لا إدراج مباشر).
-          EVENT_NAME: ${{ github.event_name }}
           MODE_INPUT: ${{ inputs.publish_mode }}
           MODE_VAR: ${{ vars.PUBLISH_MODE }}
         run: |
           set -euo pipefail
-          # The temporary branch push is never allowed to publish, regardless of repo variables.
-          if [ "${EVENT_NAME}" = "push" ]; then
-            MODE="draft"
-          else
-            MODE="${MODE_INPUT}"
-            if [ -z "$MODE" ]; then MODE="${MODE_VAR}"; fi
-            if [ -z "$MODE" ]; then MODE="draft"; fi
-          fi
+          MODE="${MODE_INPUT}"
+          if [ -z "$MODE" ]; then MODE="${MODE_VAR}"; fi
+          if [ -z "$MODE" ]; then MODE="draft"; fi
           case "$MODE" in
             draft|auto) ;;
             *) echo "::error::قيمة PUBLISH_MODE غير مدعومة: $MODE"; exit 1 ;;
@@ -196,8 +182,8 @@ jobs:
           PUBLISH_MODE: ${{ steps.mode.outputs.mode }}
           # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة؛ هكذا لا
           # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
-          TOPIC_INPUT: ${{ github.event_name == 'push' && 'labor-art85' || inputs.topic }}
-          SKIP_SOURCE_CHECK_INPUT: ${{ github.event_name == 'push' && 'false' || inputs.skip_source_check }}
+          TOPIC_INPUT: ${{ inputs.topic }}
+          SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
           DRAFT_DIR: ${{ runner.temp }}/drafts
           GENERATION_REPORT_PATH: ${{ runner.temp }}/generation_report.json
         run: |
