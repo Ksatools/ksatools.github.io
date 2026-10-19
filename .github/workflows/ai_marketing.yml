@@ -191,7 +191,7 @@ jobs:
           # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
           TOPIC_INPUT: ${{ inputs.topic }}
           ARTICLE_LANGUAGE_INPUT: ${{ inputs.article_language || 'both' }}
-      GROQ_EN_REASONING_EFFORT: ${{ inputs.groq_en_reasoning_effort || 'low' }}
+          GROQ_EN_REASONING_EFFORT: ${{ inputs.groq_en_reasoning_effort || 'low' }}
           SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
           DRAFT_DIR: ${{ runner.temp }}/drafts
           GENERATION_REPORT_PATH: ${{ runner.temp }}/generation_report.json
