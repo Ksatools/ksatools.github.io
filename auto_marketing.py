@@ -1385,14 +1385,14 @@ def build_prompt(topic, lang: str) -> str:
                     "للمادة 85: ثلث المكافأة من سنتين إلى خمس سنوات شاملةً خمس سنوات، والثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر. "
                     "المادة 85 تحدد نسبة المكافأة عند الاستقالة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام. "
                     "وفق المادة 86، لا تُستبعد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح عندما تكون بطبيعتها متغيرة بالزيادة والنقص؛ وهذا لا يستبعد الأجر الأساسي. "
-                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\\n"
+                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
                 )
             else:
                 article85_claims_rule = (
                     "For Article 85: one third applies from two through five years inclusive; two thirds applies only above five and below ten. "
                     "Article 85 sets the resignation benefit ratio, not contract notice requirements; notice and resignation procedures may still apply under the contract and law. "
                     "Under Article 86, qualifying variable commissions/sales elements may be excluded only by explicit agreement; this does not exclude basic wage. "
-                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\\n"
+                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
                 )
             if lang == "ar":
                 canonical_example_rule = (
@@ -1839,8 +1839,8 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     """Add one compact, declarative correction after a known Article 85/86/81 wording rejection."""
     reason_text = str(reason or "")
     is_notice = bool(re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE))
-    is_article86 = bool(re.search(r"(?:article\\s*86|المادة\\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
-    is_article81 = bool(re.search(r"(?:article\\s*81|المادة\\s*81)", reason_text, re.IGNORECASE))
+    is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
+    is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
 
     if lang == "ar":
         if is_notice:
@@ -1865,7 +1865,7 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
         instructions = (
             "أعد إنشاء كائن JSON كاملاً وفق المخطط الأصلي. صحح المسألة القانونية المحددة فقط، "
             "ولا تنسخ هذه التعليمات أو وصف الخطأ إلى نص المقال. أدرج التصحيح التالي كشرح واضح موجّه للقارئ، "
-            "مع إبقاء جميع بوابات التحقق كما هي:\\n"
+            "مع إبقاء جميع بوابات التحقق كما هي:\n"
         )
     else:
         if is_notice:
@@ -1890,9 +1890,9 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
         instructions = (
             "Regenerate the complete JSON object under the original strict schema. Correct only the identified legal issue; "
             "do not copy these instructions or the rejection text into the article. Insert the following clear, declarative reader-facing correction "
-            "and retain all existing validation gates:\\n"
+            "and retain all existing validation gates:\n"
         )
-    return base_prompt + "\\n\\n" + instructions + clause + "\\n"
+    return base_prompt + "\n\n" + instructions + clause + "\n"
 
 
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
