@@ -34,6 +34,7 @@ on:
       - fix/groq-schema-reasoning-low-20261019
     paths:
       - .github/workflows/ai_marketing.yml
+      - auto_marketing.py
   schedule:
     - cron: "0 9 * * *"
       timezone: "Asia/Riyadh"
