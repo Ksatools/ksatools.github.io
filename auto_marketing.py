@@ -1580,6 +1580,10 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.35,
+        # GPT-OSS supports low|medium|high reasoning_effort in Chat Completions.
+        # Low effort reduces reasoning-token overhead; strict JSON schema and all
+        # downstream validation gates remain enabled.
+        "reasoning_effort": "low",
         "max_tokens": 12000,
         "response_format": groq_response_format(),
     }
@@ -3768,8 +3772,9 @@ def selftest() -> int:
         _js = _rf.get("json_schema") or {}
         _schema = _js.get("schema") or {}
         _props = _schema.get("properties") or {}
-        check("Structured Outputs: الطلب يستخدم json_schema مع strict=true ولا يعود إلى json_object",
+        check("Structured Outputs: الطلب يستخدم json_schema وstrict=true وreasoning_effort=low بلا json_object",
               rc == 0 and len(_schema_reqs) == 2
+              and all(r.get("reasoning_effort") == "low" for r in _schema_reqs)
               and _rf.get("type") == "json_schema" and _js.get("strict") is True
               and _js.get("name") == GROQ_SCHEMA_NAME
               and _rf == groq_response_format()
@@ -3826,6 +3831,12 @@ def selftest() -> int:
         check("بوابة الجودة: نقص الحقل sections لا يتجاوز validate_article",
               _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
                                                 published_at="2026-01-01")))
+        for _missing_field in ("faq", "official_sources", "calculation_example"):
+            _bad = fixture_data("ar")
+            del _bad[_missing_field]
+            check(f"بوابة الجودة: نقص الحقل {_missing_field} لا يتجاوز validate_article",
+                  _rejects(lambda bad=_bad: validate_article(
+                      bad, topic=topic, lang="ar", published_at="2026-01-01")))
         _bad = fixture_data("ar")
         _bad["sections"] = "ليست قائمة"
         check("بوابة الجودة: نوع خاطئ في sections لا يتجاوز validate_article",
@@ -3867,7 +3878,8 @@ def selftest() -> int:
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
         check("فشل المزوّد: يبقى الطلب صارماً بلا رجوع إلى وضع أضعف وبلا إعادة",
               _fail_calls == {"ar": 1, "en": 1} and len(_fail_reqs) == 2
-              and all((r.get("response_format") or {}).get("type") == "json_schema"
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}
                            ).get("strict") is True
                       for r in _fail_reqs)
