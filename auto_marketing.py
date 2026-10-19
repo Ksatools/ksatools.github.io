@@ -81,7 +81,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -157,6 +157,13 @@ SOURCE_REQUEST_HEADERS = {
     "Accept-Language": "ar,en;q=0.8",
 }
 # مكتبة المصادر الرسمية المعتمدة: الرابط الأساسي + بديل رسمي لنفس الجهة عند تعذّر الأول.
+ARTICLE85_ENGLISH_SOURCES = (
+    ("End-of-Service Award Regulations — Ministry of Human Resources and Social Development",
+     "https://www.hrsd.gov.sa/en/knowledge-centre/articles/317"),
+    ("Saudi Labour Law (official English translation, PDF) — Ministry of Human Resources and Social Development",
+     "https://www.hrsd.gov.sa/sites/default/files/2023-02/Labor.pdf"),
+)
+
 OFFICIAL_SOURCE_LIBRARY = {
     "hrsd_home": (
         "وزارة الموارد البشرية والتنمية الاجتماعية",
@@ -316,8 +323,13 @@ def redact(text) -> str:
     return out
 
 
-def today_iso() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+def today_iso(now: datetime | None = None) -> str:
+    """Return the calendar date in Saudi Arabia (UTC+03, no daylight saving)."""
+    riyadh_tz = timezone(timedelta(hours=3), name="Asia/Riyadh")
+    current = now if now is not None else datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(riyadh_tz).date().isoformat()
 
 
 def esc(value) -> str:
@@ -1659,7 +1671,8 @@ def build_prompt(topic, lang: str) -> str:
                     "لا تقل إن عدم الالتزام بالإشعار يؤدي تلقائيًا إلى فقدان أو خفض مكافأة نهاية الخدمة؛ أي مسؤولية عن مهلة الإشعار مسألة منفصلة، ولا تستنتج أثرًا ماليًا دون سند رسمي محدد. "
                     "في سؤال الحد الأدنى لاستحقاق مكافأة الاستقالة، لا تقل إنه لا يوجد حد أدنى: تشترط المادة 85 سنتين متتاليتين كحد أدنى. "
                     "وفق المادة 86، لا تُستبعد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح عندما تكون بطبيعتها متغيرة بالزيادة والنقص؛ وهذا لا يستبعد الأجر الأساسي. "
-                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
+                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل. "
+                    "لجودة القراءة: لا تكرر شرح الإشعار نفسه في المقدمة والأسئلة الشائعة، ولا تكرر النسب نفسها في فقرة ثم قائمة؛ اجعل لكل قسم إضافة واضحة.\n"
                 )
             else:
                 article85_claims_rule = (
@@ -1668,7 +1681,8 @@ def build_prompt(topic, lang: str) -> str:
                     "Do not claim that notice non-compliance automatically forfeits or reduces the end-of-service award; any notice-period liability is separate, and no financial consequence should be asserted without a specific official basis. "
                     "In any FAQ asking about the minimum service for a resignation award, do not say there is no minimum: Article 85 requires two consecutive years as the minimum. "
                     "Under Article 86, qualifying variable commissions/sales elements may be excluded only by explicit agreement; this does not exclude basic wage. "
-                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
+                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal. "
+                    "For readability, do not repeat the same notice explanation in the introduction and FAQ, or restate the same ratios in prose and a list; each section must add distinct value.\n"
                 )
             if lang == "ar":
                 canonical_example_rule = (
@@ -3839,9 +3853,7 @@ ARTICLE_TEMPLATE = Template(
   <meta name="description" content="$meta_description" />
   <meta name="robots" content="$robots_meta" />
   <link rel="canonical" href="$canonical" />
-  <link rel="alternate" hreflang="ar" href="$alt_ar" />
-  <link rel="alternate" hreflang="en" href="$alt_en" />
-  <link rel="alternate" hreflang="x-default" href="$alt_ar" />
+  $hreflang_html
   <meta property="og:type" content="article" />
   <meta property="og:site_name" content="$site_name" />
   <meta property="og:title" content="$title" />
@@ -3928,6 +3940,12 @@ def render_article_html(article, *, published: bool) -> str:
     canonical = f"{SITE_BASE}/articles/{lang}/{article['slug']}.html"
     alt_ar = f"{SITE_BASE}/articles/ar/{tid}-ar.html"
     alt_en = f"{SITE_BASE}/articles/en/{tid}-en.html"
+    hreflang_html = (
+        f'<link rel="alternate" hreflang="ar" href="{esc(alt_ar)}" />\n  '
+        f'<link rel="alternate" hreflang="en" href="{esc(alt_en)}" />\n  '
+        f'<link rel="alternate" hreflang="x-default" href="{esc(alt_ar)}" />'
+        if published else ""
+    )
 
     section_blocks = []
     for sec in article["sections"]:
@@ -3959,9 +3977,14 @@ def render_article_html(article, *, published: bool) -> str:
             f'{items}</section>'
         )
 
+    if lang == "en" and tid == "labor-art85":
+        # The English draft must cite English-language ministry material, not Arabic page titles.
+        source_items = ARTICLE85_ENGLISH_SOURCES
+    else:
+        source_items = tuple((s["title"], s["url"]) for s in article["official_sources"])
     sources_html = "".join(
-        f'<li><a href="{esc(s["url"])}" rel="noopener noreferrer" target="_blank">{esc(s["title"])}</a></li>'
-        for s in article["official_sources"]
+        f'<li><a href="{esc(url)}" rel="noopener noreferrer" target="_blank">{esc(title)}</a></li>'
+        for title, url in source_items
     )
 
     tool = article.get("tool", "eos")
@@ -3988,9 +4011,8 @@ def render_article_html(article, *, published: bool) -> str:
 
     alt_lang_html = (
         f'<a href="{esc(alt_en)}">Read this guide in English</a>'
-        if ar
-        else f'<a href="{esc(alt_ar)}">اقرأ هذا الدليل بالعربية</a>'
-    )
+        if ar else f'<a href="{esc(alt_ar)}">اقرأ هذا الدليل بالعربية</a>'
+    ) if published else ""
 
     return ARTICLE_TEMPLATE.substitute(
         lang=lang,
@@ -4000,8 +4022,7 @@ def render_article_html(article, *, published: bool) -> str:
         meta_description=esc(article["meta_description"]),
         robots_meta="index,follow" if published else "noindex,nofollow",
         canonical=esc(canonical),
-        alt_ar=esc(alt_ar),
-        alt_en=esc(alt_en),
+        hreflang_html=hreflang_html,
         site_name=esc("KSA Tools — خدمات الموظف والمقيم" if ar else "KSA Tools"),
         meta_line=esc(meta_line).replace("&amp;middot;", "&middot;"),
         sections_html="\n    ".join(section_blocks),
@@ -4768,6 +4789,9 @@ def selftest() -> int:
         if not ok:
             problems.append(label)
 
+    check("تاريخ المقال: يحوّل UTC إلى تاريخ الرياض عند عبور منتصف الليل",
+          today_iso(datetime(2026, 10, 19, 23, 30, tzinfo=timezone.utc)) == "2026-10-20")
+
     topic = topic_by_id("eosb-basics")
 
     # 1) نموذج عربي سليم
@@ -5128,10 +5152,21 @@ def selftest() -> int:
     check("الهروب من الوسوم في العرض", "<i>" not in html_out)
     check("canonical صحيح", f"{SITE_BASE}/articles/ar/{art['slug']}.html" in html_out)
     check("hreflang متبادل (ar/en)", 'hreflang="ar"' in html_out and 'hreflang="en"' in html_out and "-en.html" in html_out)
+    _art85_en_for_render = validate_article(
+        fixture_data("en", topic_id="labor-art85"),
+        topic=eosb_topic, lang="en", published_at="2026-01-01")
+    _art85_en_html = render_article_html(_art85_en_for_render, published=True)
+    check("المادة 85 الإنجليزية: مصادر رسمية بعناوين إنجليزية وروابط الوزارة المعتمدة",
+          all(title in _art85_en_html and url in _art85_en_html
+              for title, url in ARTICLE85_ENGLISH_SOURCES))
     check("كود Social Bar مرة واحدة", html_out.count(AD_SOCIAL_BAR) == 1)
     check("حاوية الإعلان مرة واحدة", html_out.count("container-7af3b8325dba6708da88eed5e517ec89") == 1)
     check("صفحة منشورة قابلة للفهرسة", "noindex" not in html_out)
     check("صفحة مسودة غير قابلة للفهرسة", "noindex" in draft_out)
+    check("المسودة لا تعرض روابط لغة مقابلة غير متاحة",
+          'hreflang=' not in draft_out
+          and "Read this guide in English" not in draft_out
+          and "اقرأ هذا الدليل بالعربية" not in draft_out)
     check("JSON-LD صالح", '"@type": "Article"' in html_out)
     _format_probe = dict(art)
     _format_probe["sections"] = [dict(section) for section in art["sections"]]
