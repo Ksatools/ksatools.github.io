@@ -52,7 +52,7 @@ def expected_pdf_markers(page, tool):
     if tool == "letter-tool":
         letter = page.locator("#letter-output").inner_text().strip()
         date_input = digits_only(page.locator("#let-date").input_value())
-        date_match = re.search(r"\\(([^()]*)\\)", letter)
+        date_match = re.search(r"\(([^()]*)\)", letter)
         # Derive the marker from the generated letter rather than assuming the
         # display format is always ISO; the main site now localizes this date.
         date_marker = digits_only(date_match.group(1)) if date_match else ""
