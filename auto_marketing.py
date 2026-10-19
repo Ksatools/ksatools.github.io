@@ -1079,7 +1079,7 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str) -> None:
     if topic_id not in EOSB_TOPIC_IDS:
         if any(not isinstance(value, str) or value.strip() for value in raw.values()):
             raise Reject("calculation_example: يجب ترك الحقول فارغة لغير موضوعات مكافأة نهاية الخدمة")
-        return
+        return dict(raw)
 
     if any(not isinstance(raw[field], str) or not raw[field].strip()
            for field in EOSB_CALCULATION_FIELDS):
@@ -1102,12 +1102,11 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str) -> None:
     if years > 80 or months > 11 or days > 30:
         raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
 
-    total_years = years + months / Decimal(12) + days / Decimal(360)
+    total_years = years + months / Decimal(12) + days / Decimal(365)
     first_five = min(total_years, Decimal(5))
     after_five = max(Decimal(0), total_years - Decimal(5))
-    expected_full = (
-        wage * first_five / Decimal(2) + wage * after_five
-    ).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    full_raw = wage * first_five / Decimal(2) + wage * after_five
+    expected_full = full_raw.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
     if scenario == "resignation":
         if total_years < Decimal(2):
             ratio = Decimal(0)
@@ -1119,7 +1118,7 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str) -> None:
             ratio = Decimal(1)
     else:
         ratio = Decimal(1)
-    expected_payable = (expected_full * ratio).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    expected_payable = (full_raw * ratio).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
     claimed_full = claimed_full.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
     claimed_payable = claimed_payable.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
     if claimed_full != expected_full:
@@ -1156,6 +1155,15 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str) -> None:
             + ", ".join(str(amount) for amount in sorted(missing))
             + " بعملة واضحة"
         )
+    return {
+        "monthly_wage": format(wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP), "f"),
+        "years": str(int(years)),
+        "months": str(int(months)),
+        "days": str(int(days)),
+        "scenario": scenario,
+        "full_benefit": format(expected_full, "f"),
+        "payable_benefit": format(expected_payable, "f"),
+    }
 
 # --- سياسة تعويض المادة 77: منفصلة عن مكافأة نهاية الخدمة --------------------
 # المدخل المستقل الاختياري لأي احتساب مستقبلي للتعويض، وقيمته الافتراضية False.
@@ -1674,7 +1682,7 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
     body_text = " ".join(s["body"] + " " + " ".join(s["bullets"]) for s in sections)
     faq_text = " ".join(f"{f['q']} {f['a']}" for f in faq)
     audit_text = " ".join((title, meta_description, excerpt, body_text, faq_text))
-    validate_eosb_calculation_example(
+    calculation_example = validate_eosb_calculation_example(
         data.get("calculation_example"), topic=topic, article_text=audit_text
     )
     total_chars = len(body_text) + len(faq_text) + len(title) + len(excerpt)
@@ -1697,6 +1705,7 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
         "sections": sections,
         "faq": faq,
         "official_sources": sources,
+        "calculation_example": calculation_example,
         "tool": topic["tool"],
         "published_at": published_at,
         "updated_at": published_at,
@@ -1704,6 +1713,26 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
         "word_count": words,
     }
 
+
+
+def validate_eosb_translation_pair(ar_article, en_article) -> list:
+    """Return problems when Arabic and English versions disagree on their EOSB example."""
+    if not isinstance(ar_article, dict) or not isinstance(en_article, dict):
+        return ["النسختان العربية والإنجليزية غير متاحتين"]
+    if ar_article.get("translation_id") != en_article.get("translation_id"):
+        return ["النسختان لا تنتميان إلى الموضوع نفسه"]
+    if ar_article.get("lang") != "ar" or en_article.get("lang") != "en":
+        return ["ترتيب أو لغة النسختين غير صحيح"]
+    if ar_article.get("translation_id") not in EOSB_TOPIC_IDS:
+        return []
+    fields = EOSB_CALCULATION_FIELDS
+    ar_calc = ar_article.get("calculation_example")
+    en_calc = en_article.get("calculation_example")
+    if not isinstance(ar_calc, dict) or not isinstance(en_calc, dict):
+        return ["بيانات تدقيق المثال الحسابي غير موجودة في إحدى اللغتين"]
+    mismatches = [field for field in fields if ar_calc.get(field) != en_calc.get(field)]
+    return (["المثال الحسابي غير متطابق بين العربية والإنجليزية: " + ", ".join(mismatches)]
+            if mismatches else [])
 
 
 def duplicate_check(article, existing_records) -> list:
@@ -2339,6 +2368,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
         results[lang] = article
         log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
 
+    if topic["id"] in EOSB_TOPIC_IDS and results.get("ar") and results.get("en"):
+        pair_problems = validate_eosb_translation_pair(results["ar"], results["en"])
+        if pair_problems:
+            reason = "; ".join(pair_problems)
+            log("[REJECT] مثال المكافأة مختلف بين النسختين؛ لن تُحفظ أي منهما: " + reason)
+            for lang in ("ar", "en"):
+                state["topics"][topic["id"]][lang] = "rejected"
+                results.pop(lang, None)
+
     ready = [results[l] for l in lang_order if results.get(l)]
     if not ready:
         if not attempted:
@@ -2524,9 +2562,30 @@ def selftest() -> int:
         # 2-أ) تدقيق الحساب الرقمي وفق المادتين 84 و85.
     eosb_topic = topic_by_id("labor-art85")
     eosb_good = fixture_data("ar", topic_id="labor-art85")
+    eosb_good_article = validate_article(
+        eosb_good, topic=eosb_topic, lang="ar", published_at="2026-01-01")
     check("تدقيق EOSB: يقبل أساس 42,000 ومستحق 28,000 لأجر 12,000 وخدمة 6 سنوات",
-          not _rejects(lambda: validate_article(
-              eosb_good, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+          eosb_good_article["calculation_example"]["payable_benefit"] == "28000.00")
+    eosb_good_en = fixture_data("en", topic_id="labor-art85")
+    eosb_good_en_article = validate_article(
+        eosb_good_en, topic=eosb_topic, lang="en", published_at="2026-01-01")
+    check("تدقيق EOSB: المثالان العربي والإنجليزي متطابقان عند تطابق البيانات",
+          validate_eosb_translation_pair(eosb_good_article, eosb_good_en_article) == [])
+
+    eosb_pair_bad = fixture_data("en", topic_id="labor-art85")
+    eosb_pair_bad["calculation_example"].update({
+        "monthly_wage": "10000", "full_benefit": "35000", "payable_benefit": "23333.33",
+    })
+    eosb_pair_bad["sections"][0]["body"] = (
+        eosb_pair_bad["sections"][0]["body"]
+        .replace("SAR 12,000", "SAR 10,000")
+        .replace("SAR 42,000", "SAR 35,000")
+        .replace("SAR 28,000", "SAR 23,333.33")
+    )
+    eosb_pair_bad_article = validate_article(
+        eosb_pair_bad, topic=eosb_topic, lang="en", published_at="2026-01-01")
+    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين رغم صحة كل نسخة منفردة",
+          validate_eosb_translation_pair(eosb_good_article, eosb_pair_bad_article) != [])
 
     eosb_bad = fixture_data("ar", topic_id="labor-art85")
     eosb_bad["calculation_example"]["payable_benefit"] = "48000"
@@ -2747,15 +2806,15 @@ def selftest() -> int:
 
     _FAKE_GROQ_KEY = "gsk_FAKE_1234567890_SELFTEST"
 
-    def _envelope(lang):
-        text = json.dumps(fixture_data(lang), ensure_ascii=False)
+    def _envelope(lang, topic_id="eosb-basics"):
+        text = json.dumps(fixture_data(lang, topic_id=topic_id), ensure_ascii=False)
         blob = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
         return 200, {}, json.dumps(blob, ensure_ascii=False).encode("utf-8")
 
-    def _groq_envelope(content=None, lang=None, finish="stop"):
+    def _groq_envelope(content=None, lang=None, finish="stop", topic_id="eosb-basics"):
         """ظرف Groq (OpenAI-compatible) بنصّ JSON داخل message.content."""
         if content is None:
-            content = json.dumps(fixture_data(lang), ensure_ascii=False)
+            content = json.dumps(fixture_data(lang, topic_id=topic_id), ensure_ascii=False)
         blob = {
             "id": "chatcmpl-selftest",
             "object": "chat.completion",
@@ -2772,6 +2831,15 @@ def selftest() -> int:
         if "messages" in body:
             return body["messages"][-1]["content"]
         return body["contents"][0]["parts"][0]["text"]
+
+    def _topic_id_from_prompt(prompt):
+        line = next((value.strip() for value in prompt.splitlines()
+                     if value.startswith("الموضوع: ")), "")
+        title = line.removeprefix("الموضوع: ").strip()
+        for candidate in TOPICS:
+            if title in (candidate.get("title_ar"), candidate.get("title_en")):
+                return candidate["id"]
+        return "eosb-basics"
 
     def _provider_of(url):
         return "groq" if "api.groq.com" in url else "gemini"
@@ -2791,9 +2859,11 @@ def selftest() -> int:
                 return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
             prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+            topic_id = _topic_id_from_prompt(prompt)
             calls[lang] += 1
             if lang == "en" and en_ok:
-                ok_env = _groq_envelope(lang=lang) if _provider_of(url) == "groq" else _envelope(lang)
+                ok_env = (_groq_envelope(lang=lang, topic_id=topic_id)
+                          if _provider_of(url) == "groq" else _envelope(lang, topic_id=topic_id))
                 return ok_env + (url,)
             return (503, {}, b'{"error":{"status":"UNAVAILABLE","message":"high demand"}}', url)
 
@@ -3961,7 +4031,8 @@ def selftest() -> int:
                 prompt = _request_prompt(kwargs)
                 _lang = "en" if "لغة المخرجات: English" in prompt else "ar"
                 _rec[_lang] += 1
-                return _groq_envelope(lang=_lang) + (url,)
+                topic_id = _topic_id_from_prompt(prompt)
+                return _groq_envelope(lang=_lang, topic_id=topic_id) + (url,)
 
             return _fn, _rec
 
