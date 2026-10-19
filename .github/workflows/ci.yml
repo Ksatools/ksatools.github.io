@@ -6,7 +6,7 @@
 #   - لا نشر ولا دفع إلى أي فرع، والصلاحيات للقراءة فقط (contents: read).
 #   - لا أسرار في هذا الملف ولا في المستودع (لا GEMINI_API_KEY ولا غيره).
 # الفحوص: py_compile، --selftest، --verify، node --check لجافاسكربت index.html،
-#         git diff --check، واختبار الدخان (Playwright + Google Chrome).
+#         git diff --check، اتساق المقالات/sitemap، واختبار الدخان (Playwright + Chromium).
 # =============================================================================
 name: CI
 
@@ -82,6 +82,11 @@ jobs:
               sys.exit(1)
           print("node --check: ناجح (%d حرفاً)" % len(js))
           PY
+
+      - name: فحص اتساق سجل المقالات وملفاتها وsitemap
+        run: |
+          set -euo pipefail
+          python tests/repository_consistency_test.py
 
       - name: git diff --check (فراغات وأسطر غير صحيحة)
         env:
