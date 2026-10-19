@@ -1984,6 +1984,60 @@ def trim_article85_excerpt(data, *, max_chars: int = 300):
     return fixed
 
 
+def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
+    """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
+    working = json.loads(json.dumps(data, ensure_ascii=False))
+    actions = []
+
+    for _ in range(4):
+        try:
+            article = validate_article(
+                working, topic=topic, lang=lang, published_at=published_at,
+                require_canonical_article85=True,
+            )
+            return working, article, actions, ""
+        except Reject as exc:
+            reason = str(exc)
+            try:
+                if reason.startswith((
+                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
+                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
+                )):
+                    updated = ensure_article85_notice_caveat(working, lang=lang)
+                    action = "notice caveat"
+                elif reason.startswith((
+                    "المادة 85: يجب توضيح أن الثلثين يبدأان",
+                    "Article 85: clarify that two-thirds applies only after five years and before ten years",
+                )):
+                    updated = ensure_article85_boundary_caveat(working, lang=lang)
+                    action = "two-thirds boundary"
+                else:
+                    excerpt_match = re.fullmatch(r"excerpt: الطول (\d+) خارج المدى 40-300", reason)
+                    if excerpt_match and 301 <= int(excerpt_match.group(1)) <= 360:
+                        updated = trim_article85_excerpt(working, max_chars=300)
+                        action = "excerpt length"
+                    else:
+                        return working, None, actions, reason
+            except Reject as repair_exc:
+                return working, None, actions, str(repair_exc)
+
+            before = json.dumps(working, ensure_ascii=False, sort_keys=True)
+            after = json.dumps(updated, ensure_ascii=False, sort_keys=True)
+            if before == after:
+                return working, None, actions, reason
+            working = updated
+            actions.append(action)
+
+    try:
+        article = validate_article(
+            working, topic=topic, lang=lang, published_at=published_at,
+            require_canonical_article85=True,
+        )
+        return working, article, actions, ""
+    except Reject as exc:
+        return working, None, actions, str(exc)
+
+
 def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
     """Add one compact, declarative correction after a known Article 85/86/81 or section-length rejection."""
     reason_text = str(reason or "")
@@ -2940,45 +2994,28 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             reason = str(exc)
             deterministic_repair_done = False
             if topic["id"] == "labor-art85":
-                try:
-                    if reason.startswith((
-                        "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
-                        "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
-                    )):
-                        patched = ensure_article85_notice_caveat(data, lang=lang)
-                        article = validate_article(
-                            patched, topic=topic, lang=lang, published_at=today_iso(),
-                            require_canonical_article85=True,
-                        )
-                        deterministic_repair_done = True
-                        log(f"[FIX] النسخة {lang}: أُضيف توضيح الإشعار القياسي ثم اجتازت جميع الفحوص.")
-                    elif reason.startswith((
-                        "المادة 85: يجب توضيح أن الثلثين يبدأان",
-                        "Article 85: clarify that two-thirds applies only after five years and before ten years",
-                    )):
-                        patched = ensure_article85_boundary_caveat(data, lang=lang)
-                        article = validate_article(
-                            patched, topic=topic, lang=lang, published_at=today_iso(),
-                            require_canonical_article85=True,
-                        )
-                        deterministic_repair_done = True
-                        log(f"[FIX] النسخة {lang}: أُضيف توضيح حدّ الثلثين ثم اجتازت جميع الفحوص.")
-                    else:
-                        excerpt_match = re.fullmatch(r"excerpt: الطول (\d+) خارج المدى 40-300", reason)
-                        if excerpt_match and 301 <= int(excerpt_match.group(1)) <= 360:
-                            patched = trim_article85_excerpt(data, max_chars=300)
-                            article = validate_article(
-                                patched, topic=topic, lang=lang, published_at=today_iso(),
-                                require_canonical_article85=True,
-                            )
-                            deterministic_repair_done = True
-                            log(f"[FIX] النسخة {lang}: اختُصر excerpt إلى الحد المسموح ثم اجتازت جميع الفحوص.")
-                except Reject:
-                    deterministic_repair_done = False
+                repaired_data, repaired_article, applied_fixes, remaining_reason = (
+                    repair_article85_deterministic_omissions(
+                        data, topic=topic, lang=lang, published_at=today_iso()
+                    )
+                )
+                if repaired_article is not None and applied_fixes:
+                    data = repaired_data
+                    article = repaired_article
+                    deterministic_repair_done = True
+                    log(f"[FIX] النسخة {lang}: طبّقت الإصلاحات المحددة ({', '.join(applied_fixes)}) ثم اجتازت جميع الفحوص.")
+                elif repaired_article is not None:
+                    # The original rejection is unexpectedly gone on a repeat validation;
+                    # accept only the result that passed every gate.
+                    data = repaired_data
+                    article = repaired_article
+                    deterministic_repair_done = True
+                else:
+                    reason = remaining_reason or reason
 
             if not deterministic_repair_done:
                 if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
-                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
+                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(reason)}")
                     state["topics"][topic["id"]][lang] = "rejected"
                     continue
 
@@ -3884,6 +3921,47 @@ def selftest() -> int:
               and "Under Article 86" in _repair_prompt_en86_suffix
               and "Every section body must contain 120 to 5000 characters" in _repair_prompt_en_short
               and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
+        _stacked_ar = fixture_data("ar", topic_id="labor-art85")
+        _stacked_ar["sections"][0]["body"] += (
+            " يرد هنا ذكر الإشعار عند الاستقالة. وتستحق نسبة الثلثين في حالة الاستقالة. "
+            "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تخص حالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل."
+        )
+        _stacked_ar_before = json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True)
+        _stacked_ar_data, _stacked_ar_article, _stacked_ar_fixes, _stacked_ar_error = (
+            repair_article85_deterministic_omissions(
+                _stacked_ar, topic=topic_by_id("labor-art85"), lang="ar",
+                published_at=today_iso())
+        )
+        _stacked_en = fixture_data("en", topic_id="labor-art85")
+        _stacked_en["excerpt"] = (
+            "This is an illustrative introduction to Saudi end-of-service benefit eligibility and calculations. "
+            "It describes the general rule and explains why the individual contract and facts must be checked carefully."
+        ) * 2
+        _stacked_en["sections"][0]["body"] += (
+            " Notice may apply when a worker resigns. Article 85 discusses the two-thirds ratio. "
+            "Under Article 86, qualifying commissions, sales percentages and similar wage elements naturally subject "
+            "to increase or decrease may be excluded only by explicit agreement; this does not exclude basic wage. "
+            "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal."
+        )
+        _stacked_en_before = json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True)
+        _stacked_en_data, _stacked_en_article, _stacked_en_fixes, _stacked_en_error = (
+            repair_article85_deterministic_omissions(
+                _stacked_en, topic=topic_by_id("labor-art85"), lang="en",
+                published_at=today_iso())
+        )
+        check("Article 85: الإصلاحات المحددة المتراكبة تُطبق بالتتابع دون استدعاء نموذج إضافي",
+              _stacked_ar_article is not None and _stacked_en_article is not None
+              and "notice caveat" in _stacked_ar_fixes
+              and "two-thirds boundary" in _stacked_ar_fixes
+              and "excerpt length" in _stacked_en_fixes
+              and "notice caveat" in _stacked_en_fixes
+              and "two-thirds boundary" in _stacked_en_fixes
+              and len(_stacked_en_data["excerpt"]) <= 300
+              and json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True) == _stacked_ar_before
+              and json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True) == _stacked_en_before
+              and not _stacked_ar_error and not _stacked_en_error)
         _fixture_for_notice = fixture_data("ar", topic_id="labor-art85")
         _fixture_original_text = json.dumps(_fixture_for_notice, ensure_ascii=False)
         _fixture_with_caveat = ensure_article85_notice_caveat(_fixture_for_notice, lang="ar")
