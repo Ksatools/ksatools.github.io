@@ -879,7 +879,7 @@ EOSB_LEGAL_RULES = {
         "أساساً للحساب. أجزاء السنة تُحتسب بنسبة ماقضى العامل منها فعلاً — لا "
         "بقاعدة «21 يوماً عن كل سنة»، ولا بنصف يوم عن كل شهر غير مكتمل.\n"
         "2) الاستحقاق عند الاستقالة (المادة 85): المادة 85 تنظّم نسب مكافأة نهاية الخدمة عند الاستقالة فقط؛ "
-        "ولا تحدد مدة الإشعار ولا تعفي من متطلباته. يستحق العامل الثلث بعد خدمة متتالية لا تقل عن سنتين "
+        "ولا تحدد مدة الإشعار ولا تعفي من متطلباته. يستحق العامل ثلث المكافأة بعد خدمة متتالية لا تقل عن سنتين متتاليتين "
         "ولا تزيد على خمس سنوات، والثلثين إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا، والمكافأة كاملة "
         "إذا بلغت الخدمة عشر سنوات فأكثر. متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة قد تنطبق "
         "بحسب نوع العقد والأحكام النظامية. لا تقل إن المادة 85 تنص على عدم الحاجة إلى إشعار، ولا تخلط "
@@ -935,7 +935,7 @@ EOSB_LEGAL_RULES = {
         "counted in proportion to the time actually served — not by a flat "
         "\"21 days per year\" rule, and not by half a day per incomplete month.\n"
         "2) Entitlement on resignation (Article 85): Article 85 sets the end-of-service benefit ratios for resignation only; "
-        "it does not set or waive notice requirements. One third is payable after two consecutive years and up to five years; "
+        "it does not set or waive notice requirements. One third of the benefit is payable after two consecutive years of service and up to five years; "
         "two thirds applies above five but below ten years; the full benefit applies at ten years or more. "
         "Notice and resignation procedures are separate questions governed by the applicable contract and law. "
         "Do not say Article 85 specifies that notice is not required or that resignation needs no three-month notice, "
@@ -3096,7 +3096,8 @@ def selftest() -> int:
           _rejects(lambda: validate_article85_legal_claims(_en85_bad_range, lang="en")))
     check("بوابة قانونية: تقبل التصريح بأن المادة 85 لا تحدد مدة الإشعار",
           not _rejects(lambda: validate_article85_legal_claims(
-              "Article 85 sets the benefit ratios only; it does not set or waive notice requirements.",
+              "Article 85 sets the benefit ratios only; it does not set or waive notice requirements. "
+              "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.",
               lang="en")))
     _en85_bad_notice_attribution = _en85_legal_good.replace(
         "Under Article 85, one-third applies from two through five years inclusive; ",
