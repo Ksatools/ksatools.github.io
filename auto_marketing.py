@@ -2198,7 +2198,7 @@ def ensure_article85_critical_content(data, *, lang: str):
     if lang == "ar":
         boundary = (
             "عند الاستقالة وفق المادة 85، يستحق العامل ثلث المكافأة بعد سنتين متتاليتين من الخدمة وحتى خمس سنوات شاملةً خمس سنوات؛ "
-            "ولا تنطبق نسبة الثلثين إلا إذا زادت مدة الخدمة على خمس سنوات وكانت أقل من عشر سنوات؛ "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات؛ "
             "وتستحق المكافأة كاملة إذا بلغت مدة الخدمة عشر سنوات فأكثر."
         )
         example_text = (
@@ -2213,7 +2213,7 @@ def ensure_article85_critical_content(data, *, lang: str):
     else:
         boundary = (
             "For resignation under Article 85, one third applies after two consecutive years of service through exactly five years; "
-            "the two-thirds ratio applies only when service exceeds five years and is less than ten years; "
+            "the two-thirds ratio applies only when service is more than five years and less than ten years; "
             "the full benefit applies at ten years or more."
         )
         example_text = (
@@ -3512,18 +3512,74 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
 
     results = {}
     attempted = False
+    attempted_languages = set()
+    request_budgets = {}
+    generation_report = []
+    report_path = os.environ.get("GENERATION_REPORT_PATH")
+
+    try:
+        requested_english_effort = str(os.environ.get("GROQ_EN_REASONING_EFFORT", "low")).strip().lower()
+    except Exception:
+        requested_english_effort = "low"
+    if requested_english_effort not in {"low", "medium"}:
+        log(f"[WARN] GROQ_EN_REASONING_EFFORT غير صالح ({redact(requested_english_effort)}); سيُستخدم low.")
+        requested_english_effort = "low"
+    log(f"[CONFIG] Groq reasoning_effort: Arabic=low, English={requested_english_effort}; "
+        "الافتراضي low ولا يُستخدم medium إلا عند اختياره صراحةً.")
+
+    def record_generation_result(lang, status, stage, reason=""):
+        budget = request_budgets.get(lang)
+        row = {
+            "topic": topic["id"],
+            "language": lang,
+            "provider": provider,
+            "stage": stage,
+            "status": status,
+            "reason": redact(str(reason or ""))[:500],
+            "http_requests": budget.used if budget is not None else None,
+            "http_request_limit": budget.max_requests if budget is not None else None,
+            "reasoning_effort": (
+                requested_english_effort if provider == "groq" and lang == "en" else
+                "low" if provider == "groq" else None
+            ),
+        }
+        generation_report.append(row)
+        log("[RESULT] " + json.dumps(row, ensure_ascii=False, sort_keys=True))
+        if report_path:
+            report_file = Path(report_path)
+            report_file.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(report_file, {
+                "topic": topic["id"],
+                "provider": provider,
+                "model": model,
+                "results": generation_report,
+            })
+
     for lang in lang_order:
         if (topic["id"], lang) in published_pairs:
             log(f"[SKIP] النسخة {lang} منشورة سابقاً — لا إعادة إنشاء.")
             continue
+        if provider == "groq" and lang == "en" and "ar" in attempted_languages:
+            log(f"[WAIT] فاصل بين التوليد العربي والإنجليزي لتخفيف ضغط TPM: {GROQ_LANGUAGE_GAP_SECONDS:.0f}s.")
+            SLEEP(GROQ_LANGUAGE_GAP_SECONDS)
+        attempted_languages.add(lang)
         attempted = True
+        request_budget = RequestBudget(GROQ_MAX_REQUESTS_PER_LANGUAGE) if provider == "groq" else None
+        request_budgets[lang] = request_budget
+        reasoning_effort = (
+            requested_english_effort
+            if provider == "groq" and lang == "en"
+            else "low"
+        )
         log(f"توليد النسخة {lang}…")
         prompt = build_prompt(topic, lang)
         if dry_run:
             ok, data, msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
         else:
             ok, data, msg = generate_json(
-                provider, prompt, api_key=api_key, model=model)
+                provider, prompt, api_key=api_key, model=model,
+                tries=GROQ_INITIAL_HTTP_TRIES if provider == "groq" else GEMINI_MAX_TRIES,
+                request_budget=request_budget, reasoning_effort=reasoning_effort)
             if (not ok and provider == "groq" and topic["id"] == "labor-art85"
                     and is_groq_incomplete_schema_failure(msg)):
                 log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
@@ -3533,11 +3589,27 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     api_key=api_key,
                     model=model,
                     tries=1,
+                    request_budget=request_budget,
+                    reasoning_effort=reasoning_effort,
                 )
         if not ok:
             log(f"[FAIL] تعذّر توليد النسخة {lang}: {redact(msg)}")
             state["topics"][topic["id"]][lang] = "error"
+            record_generation_result(lang, "error", "generation", msg)
             continue
+        deterministic_actions = []
+        if topic["id"] == "labor-art85":
+            try:
+                data, deterministic_actions = ensure_article85_critical_content(data, lang=lang)
+                if deterministic_actions:
+                    log(f"[FIX] النسخة {lang}: فرض النص القانوني والمثال الحسابي الثابتين برمجياً "
+                        f"مع حفظ البنية والمحتوى القابل للدمج ({', '.join(deterministic_actions)}).")
+            except Reject as exc:
+                reason = str(exc)
+                log(f"[REJECT] النسخة {lang} لم تجتز إصلاح البنية الآمن: {redact(reason)}")
+                state["topics"][topic["id"]][lang] = "rejected"
+                record_generation_result(lang, "rejected", "deterministic_preflight", reason)
+                continue
         repaired = False
         try:
             article = validate_article(
@@ -3571,6 +3643,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
                     log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(reason)}")
                     state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "quality_gate", reason)
                     continue
 
                 log(f"[RETRY] النسخة {lang} رُفضت لجودة/صياغة محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
@@ -3582,28 +3655,56 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         build_article85_repair_prompt(prompt, lang=lang, reason=reason),
                         api_key=api_key,
                         model=model,
+                        tries=1 if provider == "groq" else GEMINI_MAX_TRIES,
+                        request_budget=request_budget,
+                        reasoning_effort=reasoning_effort,
                     )
                 if not repair_ok:
-                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
+                    repair_failure = (
+                        f"المحاولة الإضافية غير متاحة ضمن حد الاستدعاءات: {redact(repair_msg)}"
+                        if "request_budget_exhausted" in str(repair_msg)
+                        else f"تعذّر التوليد ({redact(repair_msg)})"
+                    )
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {repair_failure}.")
                     state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "content_repair", repair_failure)
                     continue
+                if topic["id"] == "labor-art85":
+                    try:
+                        repair_data, repair_actions = ensure_article85_critical_content(repair_data, lang=lang)
+                        if repair_actions:
+                            log(f"[FIX] النسخة {lang}: فرض النص القانوني والمثال الثابتين بعد الإصلاح ({', '.join(repair_actions)}).")
+                    except Reject as prep_exc:
+                        repair_failure = str(prep_exc)
+                        log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد الإصلاح البنيوي: {redact(repair_failure)}")
+                        state["topics"][topic["id"]][lang] = "rejected"
+                        record_generation_result(lang, "rejected", "deterministic_repair", repair_failure)
+                        continue
                 try:
                     article = validate_article(
                         repair_data, topic=topic, lang=lang, published_at=today_iso(),
                         require_canonical_article85=True,
                     )
                 except Reject as repair_exc:
-                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
+                    repair_failure = str(repair_exc)
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_failure)}")
                     state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "final_validation", repair_failure)
                     continue
                 repaired = True
         problems = duplicate_check(article, records)
         if problems:
-            log(f"[REJECT] النسخة {lang}: " + "; ".join(problems))
+            duplicate_reason = "; ".join(problems)
+            log(f"[REJECT] النسخة {lang}: " + duplicate_reason)
             state["topics"][topic["id"]][lang] = "rejected"
+            record_generation_result(lang, "rejected", "duplicate_check", duplicate_reason)
             continue
         article["content_hash"] = sha256_text(json.dumps(article["sections"], ensure_ascii=False))
         results[lang] = article
+        record_generation_result(
+            lang, "valid", "quality_gate",
+            "deterministic_fixes=" + ", ".join(deterministic_actions + (["model repair"] if repaired else [])),
+        )
         if repaired:
             log(f"[OK] النسخة {lang} اجتازت بوابة الجودة بعد محاولة إصلاح واحدة ({article['word_count']} كلمة).")
         else:
@@ -3616,6 +3717,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             log("[REJECT] مثال المكافأة مختلف بين النسختين؛ لن تُحفظ أي منهما: " + reason)
             for lang in ("ar", "en"):
                 state["topics"][topic["id"]][lang] = "rejected"
+                record_generation_result(lang, "rejected", "translation_pair", reason)
                 results.pop(lang, None)
 
     ready = [results[l] for l in lang_order if results.get(l)]
