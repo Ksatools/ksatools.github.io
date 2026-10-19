@@ -720,6 +720,8 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
     - model : 404 أو رسالة تدلّ على نموذج غير متاح — لا يُعاد (العِلاج تغيير النموذج).
     - quota : 429 مع دلالة حصة يومية صريحة — لا يُعاد (تكراره بلا فائدة).
     - rate_limit : 429 مؤقّت، ومنها TPM أو Retry-After أو مهلة مذكورة في النص.
+    - structured_output : 400 ذو الرمز json_validate_failed في Groq — إعادة محدودة
+      بنفس JSON Schema الصارم لمعالجة فشل توليد عابر؛ لا تغيير إلى JSON mode.
     - transient  : 408/425/5xx — يُعاد بتراجع تصاعدي.
     - other : أي رمز آخر — لا يُعاد.
     """
@@ -742,6 +744,13 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
         if any(h in low for h in QUOTA_STOP_HINTS):
             return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
         return True, "rate_limit", "تجاوز معدّل مؤقّت"
+    if status == 400 and (
+        "json_validate_failed" in low or "failed to generate json" in low
+    ):
+        # Groq may intermittently report a constrained-generation failure even for
+        # a schema that passed our strict-schema checks. Retry only this exact
+        # signature a bounded number of times with the same strict request.
+        return True, "structured_output", "تعذّر توليد JSON المنظّم؛ ستُعاد المحاولة بنفس المخطط الصارم"
     if status in RETRYABLE_STATUS:
         return True, "transient", "خطأ مؤقّت"
     return False, "other", "خطأ غير قابل لإعادة المحاولة"
@@ -4241,9 +4250,64 @@ def selftest() -> int:
               _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
                                                 published_at="2026-01-01")))
 
-        # 5) فشل المزوّد كما في التشغيل 38946220138 (http_400 json_validate_failed):
-        #    لا نشر ولا مسودة ولا أي كتابة في ملفات عامة، وبلا رجوع إلى وضع أضعف
-        #    وبلا إعادة لهذا الخطأ (غير قابل لإعادة المحاولة: محاولة واحدة لكل نسخة).
+        # 5) فشل متكرر في Groq Structured Outputs:
+        #    تُعاد نفس الاستجابة الصارمة حتى الحدّ الأعلى، ثم يفشل المسار
+        #    من دون نشر أو مسودات أو تعديل الملفات العامة.
+        # 5-أ) 400 json_validate_failed مرة واحدة ثم نجاح: التكرار لا يخفف المخطط.
+        _sandbox()
+        _recovery_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _recovery_calls, _recovery_requests = {"ar": 0, "en": 0}, []
+
+        _repair_ar_markers = (
+            " تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات. "
+            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. "
+            "وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
+            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه "
+            "مكافأة نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
+            "ولا تمثل فصلًا من صاحب العمل."
+        )
+
+        def _schema_recovery(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _recovery_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _recovery_calls[lang] += 1
+            if _recovery_calls[lang] == 1:
+                return (400, {}, b'{"error":{"message":"Failed to generate JSON",'
+                        b'"code":"json_validate_failed"}}', url)
+            data = fixture_data(lang, topic_id="labor-art85")
+            if lang == "ar":
+                data["sections"][0]["body"] += _repair_ar_markers
+            return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
+
+        globals()["http_request_full"] = _schema_recovery
+        _recovery_rc, _recovery_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="labor-art85", article_lang="ar")
+        _recovery_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        check("Groq Structured Outputs: نجاح بعد 400 json_validate_failed بإعادة محدودة",
+              _recovery_rc == 0 and _recovery_calls == {"ar": 2, "en": 0}
+              and len(_recovery_requests) == 2
+              and "استجابة مؤقّتة http_400" in _recovery_out
+              and len(_recovery_drafts) == 1)
+        check("Groq Structured Outputs: إعادة المحاولة تحتفظ بـjson_schema strict بلا json_object",
+              len(_recovery_requests) == 2
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
+                      for r in _recovery_requests)
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _recovery_before
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and "json_object" not in json.dumps(_recovery_requests, ensure_ascii=False))
+
+        # 5-ب) فشل مستمر: لا نشر ولا مسودة، ولا تعديل على الملفات العامة.
+        _sandbox()
+        _fail_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         _fail_reqs, _fail_calls = [], {"ar": 0, "en": 0}
 
         def _schema_400(url, **kwargs):
@@ -4259,20 +4323,21 @@ def selftest() -> int:
         globals()["http_request_full"] = _schema_400
         rc, out = _capture_run(mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY)
         st = load_state()["topics"][TOPICS[0]["id"]]
-        check("فشل المزوّد (http_400 json_validate_failed): لا نشر ولا أي كتابة في ملفات عامة",
+        check("فشل Groq المتكرر (json_validate_failed): لا نشر ولا أي كتابة في ملفات عامة",
               rc == EXIT_GENERATION_FAILED and st.get("ar") == "error"
               and st.get("en") == "error" and not DRAFTS_DIR.exists()
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
-              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
-        check("فشل المزوّد: يبقى الطلب صارماً بلا رجوع إلى وضع أضعف وبلا إعادة",
-              _fail_calls == {"ar": 1, "en": 1} and len(_fail_reqs) == 2
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _fail_before)
+        check("فشل Groq المتكرر: المحاولات محدودة وتبقى على المخطط الصارم",
+              _fail_calls == {"ar": GEMINI_MAX_TRIES, "en": GEMINI_MAX_TRIES}
+              and len(_fail_reqs) == 2 * GEMINI_MAX_TRIES
               and all(r.get("reasoning_effort") == "low"
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}
                            ).get("strict") is True
                       for r in _fail_reqs)
               and "json_validate_failed" in out
-              and "غير قابل لإعادة المحاولة" in out
+              and "استُنفدت المحاولات" in out
               and "json_object" not in out)
 
         # (ض) دقة المحتوى القانوني لمكافأة نهاية الخدمة — إصلاح الأخطاء المكتشفة
