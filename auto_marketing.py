@@ -1864,13 +1864,20 @@ def is_article85_legal_rejection(reason: str) -> bool:
 
 
 def is_article85_repairable_rejection(reason: str) -> bool:
-    """Article 85 gets one re-generation for known legal defects or a section-body length failure."""
+    """Article 85 gets one bounded re-generation for known legal/shape defects."""
     value = str(reason or "")
     short_section = bool(re.search(
         r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
     ))
     overlong_excerpt = bool(re.search(r"excerpt: الطول \d+ خارج المدى 40-300", value))
-    return is_article85_legal_rejection(value) or short_section or overlong_excerpt
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    # Permit one full-JSON repair only for a small overflow (e.g. 13-16 sections),
+    # rather than silently dropping any generated content or retrying unboundedly.
+    too_many_sections = bool(
+        section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
+    )
+    return (is_article85_legal_rejection(value) or short_section
+            or overlong_excerpt or too_many_sections)
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -2044,12 +2051,41 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     is_short_section = bool(re.search(
         r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason_text
     ))
+    section_count_match = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", reason_text)
+    is_sections_count = bool(
+        section_count_match and MAX_SECTIONS < int(section_count_match.group(1)) <= MAX_SECTIONS + 4
+    )
     is_notice = bool(re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE))
+    is_notice_loss = bool(
+        re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE)
+        and re.search(r"(?:loss|forfeit|reduc|deduct|فقدان|خسارة|حرمان|خصم|حسم|خفض|المكافأة)", reason_text, re.IGNORECASE)
+    )
+    is_minimum_conflict = bool(
+        re.search(r"(?:minimum|حد أدنى|الحد الأدنى)", reason_text, re.IGNORECASE)
+        and re.search(r"(?:two years|2 years|سنتين|عامين)", reason_text, re.IGNORECASE)
+    )
     is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
     is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
 
     if lang == "ar":
-        if is_short_section:
+        if is_sections_count:
+            clause = (
+                "يجب أن يحتوي sections على 3 إلى 12 قسمًا فقط. أعد تنظيم المحتوى بدمج الأقسام المتقاربة موضوعيًا عند الحاجة، "
+                "ولا تحذف أي قاعدة قانونية أساسية أو المثال الحسابي أو التحذيرات. اجعل كل body بطول صالح وأعد كائن JSON كاملًا مطابقًا للمخطط."
+            )
+        elif is_notice_loss:
+            clause = (
+                "لا تقل إن عدم الالتزام بمهلة الإشعار يؤدي تلقائيًا إلى فقدان جزء من مكافأة نهاية الخدمة. "
+                "افصل بين نسبة مكافأة الاستقالة وفق المادة 85 وأي مسؤولية مستقلة عن مهلة الإشعار قد تنطبق بحسب نوع العقد والوقائع والنظام؛ "
+                "ولا تجزم بأثر مالي دون سند رسمي محدد."
+            )
+        elif is_minimum_conflict:
+            clause = (
+                "في سياق مكافأة الاستقالة وفق المادة 85، لا تقل إنه لا يوجد حد أدنى للخدمة: لا يستحق العامل مكافأة الاستقالة قبل سنتين متتاليتين؛ "
+                "من سنتين إلى خمس سنوات شاملًا خمس سنوات يستحق الثلث، وبعد خمس سنوات وقبل عشر سنوات يستحق الثلثين، وعشر سنوات فأكثر تستحق المكافأة كاملة. "
+                "لا تعمم نسب الاستقالة على جميع حالات انتهاء علاقة العمل."
+            )
+        elif is_short_section:
             clause = (
                 "يجب أن يتراوح نص body في كل قسم بين 120 و5000 حرف. وسّع أي قسم قصير بمعلومات مفيدة ودقيقة مرتبطة بعنوانه، "
                 "ولا تحذف معلومات أو تنسخ تعليمات التحرير إلى المقال."
@@ -2079,7 +2115,25 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
             "مع إبقاء جميع بوابات التحقق كما هي:\n"
         )
     else:
-        if is_short_section:
+        if is_sections_count:
+            clause = (
+                "The schema permits only 3 to 12 sections. Reorganize by merging closely related sections where needed; "
+                "preserve every material legal rule, the worked calculation, and the caveats. Do not silently omit substantive content. "
+                "Keep every section body within the valid length bounds and return the complete JSON object under the original schema."
+            )
+        elif is_notice_loss:
+            clause = (
+                "Do not claim that failure to comply with notice requirements automatically forfeits or reduces part of the end-of-service award. "
+                "Keep the Article 85 resignation-benefit ratio separate from any distinct notice-period liability that may apply under the contract and law; "
+                "do not assert a financial consequence without a specific official legal basis."
+            )
+        elif is_minimum_conflict:
+            clause = (
+                "For resignation under Article 85, do not say there is no minimum service period: no resignation award is due before two consecutive years; "
+                "one third applies from two through five years inclusive, two thirds applies above five but below ten years, and the full award applies at ten years or more. "
+                "Do not generalize these resignation ratios to every kind of employment termination."
+            )
+        elif is_short_section:
             clause = (
                 "Every section body must contain 120 to 5000 characters. Expand any short section with useful, accurate detail relevant to its heading; "
                 "do not delete information or copy editing instructions into the article."
@@ -2114,6 +2168,43 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
     """Reject material wording errors in generated Article 85 articles before any draft is saved."""
     text_norm = re.sub(r"\s+", " ", str(article_text or "")).strip().lower()
+
+    # A notice-period issue must not be presented as an automatic loss/reduction
+    # of the end-of-service award. Keep this detector sentence-scoped and allow
+    # explicit negation so a correct disclaimer is not rejected.
+    sentences = re.split(r"(?<=[.!?؟])\s+", text_norm)
+    if lang == "en":
+        for sentence in sentences:
+            loss_claim = re.search(
+                r"\b(?:may|can|could|might|will|would)\s+(?:(?:automatically|directly)\s+)?"
+                r"(?:lead to|result in|cause)\b.{0,100}\b(?:loss|forfeit(?:ure)?|deduct(?:ion)?|reduction|withholding)\b"
+                r".{0,100}\b(?:eosb|end[- ]of[- ]service|indemnity|severance|award|benefit)\b",
+                sentence,
+            )
+            negated = bool(re.search(
+                r"\b(?:does not|doesn't|cannot|can't|will not|won't|would not|wouldn't)\s+"
+                r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
+                sentence,
+            ))
+            if loss_claim and not negated:
+                raise Reject(
+                    "Article 85: do not claim notice non-compliance automatically reduces or forfeits the EOSB award"
+                )
+    else:
+        for sentence in sentences:
+            loss_claim = re.search(
+                r"(?:قد\s+)?(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)\s*(?:إلى|الى|في|عن)?\s*"
+                r".{0,50}(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,80}(?:المكافأة|مكافأة نهاية الخدمة)",
+                sentence,
+            )
+            negated = bool(re.search(
+                r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)",
+                sentence,
+            ))
+            if loss_claim and not negated:
+                raise Reject(
+                    "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا إلى عدم الالتزام بالإشعار"
+                )
 
     if lang == "en":
         # Exactly five years still falls in the one-third band. Two-thirds starts
@@ -2266,6 +2357,57 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 )
 
 
+def validate_article85_faq_consistency(faq: list, *, lang: str) -> None:
+    """Reject FAQ answers that deny a service threshold while also describing it."""
+    for item in faq:
+        question = str(item.get("q", "")).strip().lower()
+        answer = re.sub(r"\s+", " ", str(item.get("a", ""))).strip().lower()
+        if lang == "en":
+            asks_minimum = bool(re.search(
+                r"\b(?:minimum|minimum service|minimum period|how long).{0,100}\b(?:service|eligible|entitled|award|eosb)?\b",
+                question,
+            ))
+            denies_minimum = bool(re.search(
+                r"\b(?:there is|there's|is) no minimum\b|\bno minimum (?:service|period|threshold)\b",
+                answer,
+            ))
+            states_two_year_bar = bool(re.search(
+                r"\b(?:no award|no entitlement|not entitled|not eligible|cannot receive|can't receive).{0,90}"
+                r"\b(?:before|less than|under)\s+(?:two|2)\s+consecutive?\s+years?\b",
+                answer,
+            ))
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "Article 85: FAQ about minimum service cannot say there is no minimum for resignation entitlement"
+                )
+            if denies_minimum and states_two_year_bar:
+                raise Reject(
+                    "Article 85: contradictory minimum-service FAQ; Article 85 has a two-consecutive-year threshold for resignation"
+                )
+        else:
+            asks_minimum = bool(re.search(
+                r"(?:الحد الأدنى|حد أدنى|أقل مدة|أدنى مدة).{0,100}(?:الخدمة|الاستحقاق|المكافأة)?",
+                question,
+            ))
+            denies_minimum = bool(re.search(
+                r"(?:لا\s+يوجد|ليس\s+هناك|لا\s+يتوفر|لا\s+توجد)\s+(?:أي\s+)?حد\s+أدنى|لا\s+حد\s+أدنى",
+                answer,
+            ))
+            states_two_year_bar = bool(re.search(
+                r"(?:لا\s*(?:يُ?ستحق|يستحق|استحقاق)|لا\s+تستحق).{0,90}"
+                r"(?:قبل|أقل\s+من|دون).{0,25}(?:سنتين|عامين|سنتين\s+متتاليتين)",
+                answer,
+            ))
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى"
+                )
+            if denies_minimum and states_two_year_bar:
+                raise Reject(
+                    "المادة 85: إجابة الحد الأدنى متناقضة؛ تشترط المادة 85 سنتين متتاليتين لاستحقاق مكافأة الاستقالة"
+                )
+
+
 def validate_article(
     data, *, topic, lang, published_at, require_canonical_article85: bool = False,
 ) -> dict:
@@ -2296,6 +2438,8 @@ def validate_article(
     sections = normalize_sections(data.get("sections"))
     faq = normalize_faq(data.get("faq"))
     sources = normalize_sources(data.get("official_sources"))
+    if require_canonical_article85 and topic.get("id") == "labor-art85":
+        validate_article85_faq_consistency(faq, lang=lang)
 
     body_text = " ".join(s["body"] + " " + " ".join(s["bullets"]) for s in sections)
     faq_text = " ".join(f"{f['q']} {f['a']}" for f in faq)
@@ -3371,6 +3515,34 @@ def selftest() -> int:
     check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
               _ar85_bad_notice_attribution, lang="ar")))
+    check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              "عدم الالتزام قد يؤدي إلى فقدان جزء من المكافأة أو تعويضات أخرى. "
+              "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة.",
+              lang="ar")))
+    check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (إنجليزي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              "Failure to comply may lead to loss of part of the end-of-service award. "
+              "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.",
+              lang="en")))
+    _ar85_bad_minimum_faq = [{
+        "q": "ما الحد الأدنى لسن الخدمة لاستحقاق المكافأة؟",
+        "a": "لا يوجد حد أدنى، لكن لا يُستحق أي مكافأة قبل سنتين متتاليتين من الخدمة."
+    }]
+    _ar85_good_minimum_faq = [{
+        "q": "ما الحد الأدنى لسن الخدمة لاستحقاق مكافأة الاستقالة؟",
+        "a": "وفق المادة 85، لا يستحق العامل مكافأة الاستقالة قبل سنتين متتاليتين من الخدمة."
+    }]
+    _en85_bad_minimum_faq = [{
+        "q": "What is the minimum service period for a resignation award?",
+        "a": "There is no minimum, but no award is due before two consecutive years of service."
+    }]
+    check("بوابة FAQ: ترفض تناقض عدم وجود حد أدنى مع شرط السنتين (عربي)",
+          _rejects(lambda: validate_article85_faq_consistency(_ar85_bad_minimum_faq, lang="ar")))
+    check("بوابة FAQ: ترفض تناقض عدم وجود حد أدنى مع شرط السنتين (إنجليزي)",
+          _rejects(lambda: validate_article85_faq_consistency(_en85_bad_minimum_faq, lang="en")))
+    check("بوابة FAQ: تقبل بيان شرط السنتين بوضوح (عربي)",
+          not _rejects(lambda: validate_article85_faq_consistency(_ar85_good_minimum_faq, lang="ar")))
     check("بوابة جودة العربية: ترفض الجملة المشوّهة في تصفية الحقوق",
           _rejects(lambda: validate_article85_legal_claims(
               "إذا انتهت الخدمة من جهة صاحب العمل، يجب فُي الأجر وصُفِّت الحقوق خلال أسبوع على الأكثر.",
@@ -3914,12 +4086,24 @@ def selftest() -> int:
         _repair_prompt_en_short = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="sections[10].body: الطول 73 خارج المدى 120-8000")
+        _repair_prompt_en_sections = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections: العدد 14 خارج المدى 3-12")
+        _repair_prompt_ar_minimum = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"),
+            lang="ar", reason="المادة 85: إجابة الحد الأدنى متناقضة مع شرط السنتين")
+        _repair_prompt_en_notice_loss = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="Article 85: do not claim notice non-compliance automatically reduces the award")
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
               "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
               and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
               and "وفق المادة 86" not in _repair_prompt_ar_suffix
               and "Under Article 86" in _repair_prompt_en86_suffix
               and "Every section body must contain 120 to 5000 characters" in _repair_prompt_en_short
+              and "schema permits only 3 to 12 sections" in _repair_prompt_en_sections
+              and "لا تقل إنه لا يوجد حد أدنى" in _repair_prompt_ar_minimum
+              and "Do not claim that failure to comply with notice requirements" in _repair_prompt_en_notice_loss
               and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
         _stacked_ar = fixture_data("ar", topic_id="labor-art85")
         _stacked_ar["sections"][0]["body"] += (
@@ -3994,6 +4178,8 @@ def selftest() -> int:
               and is_article85_legal_rejection("Article 86: missing agreement")
               and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
               and is_article85_repairable_rejection("excerpt: الطول 318 خارج المدى 40-300")
+              and is_article85_repairable_rejection("sections: العدد 14 خارج المدى 3-12")
+              and not is_article85_repairable_rejection("sections: العدد 18 خارج المدى 3-12")
               and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections")
               and not is_article85_repairable_rejection("حقول مطلوبة مفقودة: sections"))
 
