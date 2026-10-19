@@ -52,6 +52,8 @@ auto_marketing.py — KSA Tools | مولّد ومُدير مقالات ثنائ�
     3 = فشل الإعداد: مفتاح المزوّد المحدَّد غير مضبوط (EXIT_CONFIG_FAILED)
         — GROQ_API_KEY لمزوّد groq أو GEMINI_API_KEY لمزوّد gemini.
         لا محاولة تُستهلك، ولا ملف يُكتب، ولا نداء شبكة.
+    4 = إعداد نشر غير آمن: mode=auto مع skip_source_check=true —
+        يُرفض قبل قراءة/كتابة الحالة أو الاتصال بالشبكة.
 
 الإعادة عند أخطاء المزوّد المؤقّتة:
     يُعاد الطلب عند 408/425/500/502/503/504 وعند 429 المؤقّت (تجاوز معدّل) بحدّ أقصى
@@ -235,6 +237,8 @@ GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار بين محاولتين
 EXIT_GENERATION_FAILED = 2
 # رمز خروج مميّز لفشل الإعداد (غياب مفتاح المزوّد): لا توليد ولا نشر ولا استهلاك محاولات.
 EXIT_CONFIG_FAILED = 3
+# منع fail-closed للنشر التلقائي إذا طُلب تخطي التحقق من المصادر الرسمية.
+EXIT_UNSAFE_PUBLISH_CONFIG = 4
 
 # ---------------------------------------------------------------------------------
 # مزوّدو المحتوى: Groq هو الافتراضي (خطة مجانية)، وGemini خيار صريح.
@@ -2030,6 +2034,13 @@ def resolve_provider(value=None) -> str:
 
 def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dry_run=False,
              skip_source_check=False, provider=None, api_key=None, model=None) -> int:
+    # حاجز أمان: لا نسمح بمسار النشر auto عند تجاوز تحقق المصادر.
+    # يسبق قراءة الحالة/المقالات وفحص المفتاح وطلبات الشبكة وأي كتابة للملفات.
+    if mode == "auto" and skip_source_check:
+        log("[FAIL] إعداد نشر غير آمن: auto يتطلب التحقق من المصادر الرسمية؛ "
+            "--skip-source-check مسموح فقط مع draft.")
+        return EXIT_UNSAFE_PUBLISH_CONFIG
+
     # لغة المقال مستقلة عن social_lang: تحدد أي نسخة لغوية تُولَّد في هذه الدورة.
     # القيمة غير المعروفة تعود إلى "both" (نفس سلوك --social-lang و--mode).
     if article_lang not in ("ar", "en", "both"):
@@ -2532,6 +2543,39 @@ def selftest() -> int:
 
     try:
         globals()["SLEEP"] = _sleeps.append
+
+        # (أ-0) حماية fail-closed: auto + skip_source_check يُرفض قبل شبكة/كتابة.
+        _sandbox()
+        _publish_guard_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _publish_guard_calls = []
+
+        def _publish_guard_http(url, **kwargs):
+            _publish_guard_calls.append(url)
+            return 500, {}, b'{"error":{"message":"must not be called"}}', url
+
+        globals()["http_request_full"] = _publish_guard_http
+        _publish_guard_rc = run_once(
+            mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY,
+            skip_source_check=True)
+        check("حماية النشر: auto + skip_source_check مرفوض قبل الشبكة والكتابة",
+              _publish_guard_rc == EXIT_UNSAFE_PUBLISH_CONFIG
+              and not _publish_guard_calls
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _publish_guard_before
+              and not DRAFTS_DIR.exists() and not ARTICLES_DIR.exists()
+              and not STATE_JSON.exists())
+
+        # (أ-1) حماية طبقة GitHub Actions: البوابة تسبق خطوة تشغيل التوليد.
+        _workflow_path = BASE_DIR / ".github" / "workflows" / "ai_marketing.yml"
+        try:
+            _workflow_text = _workflow_path.read_text(encoding="utf-8")
+        except OSError:
+            _workflow_text = ""
+        _workflow_gate = 'if [ "${MODE}" = "auto" ] && [ "${SKIP_SOURCE_CHECK_INPUT}" = "true" ]; then'
+        _workflow_gate_pos = _workflow_text.find(_workflow_gate)
+        _workflow_run_pos = _workflow_text.find("- name: تشغيل دورة إنتاج المحتوى")
+        check("Workflow: يرفض auto + skip_source_check قبل بدء توليد المحتوى",
+              _workflow_gate_pos >= 0 and _workflow_run_pos >= 0
+              and _workflow_gate_pos < _workflow_run_pos)
 
         # (أ) نجاح بعد خطأ 503 مؤقّت واحد
         fake, calls = _fake_http([
