@@ -3750,7 +3750,18 @@ def selftest() -> int:
             _repair_calls[lang] += 1
             data = fixture_data(lang, topic_id="labor-art85")
             if lang == "ar" and _repair_calls[lang] == 1:
-                data["sections"][0]["body"] += " الإشعار ليس شرطًا مستقلًا لاستحقاق المكافأة."
+                def _remove_ar85_boundary(value):
+                    if isinstance(value, dict):
+                        return {k: _remove_ar85_boundary(v) for k, v in value.items()}
+                    if isinstance(value, list):
+                        return [_remove_ar85_boundary(v) for v in value]
+                    if isinstance(value, str):
+                        value = re.sub(r"أكثر من خمس", "حتى خمس", value)
+                        value = re.sub(r"زادت(?: مدة خدمته| الخدمة)? على خمس", "بلغت خمس", value)
+                        value = re.sub(r"أقل من عشر", "حتى عشر", value)
+                        value = re.sub(r"لم تبلغ عشر", "بلغت عشر", value)
+                    return value
+                data = _remove_ar85_boundary(data)
             else:
                 data["sections"][0]["body"] += _legal_repair_ar
             return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
@@ -4882,7 +4893,9 @@ def selftest() -> int:
               and legal_rules_for(topic_by_id("eosb-resignation"), "ar")
                   == EOSB_LEGAL_RULES["ar"]
               and legal_rules_for(topic_by_id("labor-art85"), "en")
-                  == EOSB_LEGAL_RULES["en"]
+                  == EOSB_ARTICLE85_LEGAL_RULES["en"]
+              and "Article 84" in legal_rules_for(topic_by_id("labor-art85"), "en")
+              and "Article 87" not in legal_rules_for(topic_by_id("labor-art85"), "en")
               and legal_rules_for(topic_by_id("cv-ats-optimization"), "ar") == ""
               and legal_rules_for(topic_by_id("daily-monthly-wage"), "en") == ""
               and legal_rules_for(topic_by_id("eosb-basics"), "fr")
