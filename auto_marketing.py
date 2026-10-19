@@ -1003,11 +1003,39 @@ EOSB_LEGAL_RULES = {
 }
 
 
+EOSB_ARTICLE85_LEGAL_RULES = {
+    "ar": (
+        "قواعد قانونية خاصة بموضوع المادة 85:\n"
+        "المادة 84: نصف أجر عن كل سنة من السنوات الخمس الأولى، ثم أجر شهر عن كل سنة تالية؛ الأجر الأخير أساس الحساب، "
+        "وأجزاء السنة تُحسب بنسبة المدة الفعلية.\n"
+        "المادة 85 عند الاستقالة: لا استحقاق قبل سنتين متتاليتين؛ الثلث من سنتين إلى خمس سنوات شاملةً خمس سنوات؛ "
+        "الثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر؛ والمكافأة كاملة عند عشر سنوات فأكثر.\n"
+        "المادة 85 تحدد نسبة المكافأة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ قد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام.\n"
+        "المادة 86: لا يجوز استبعاد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح إذا كانت بطبيعتها متغيرة بالزيادة والنقص؛ لا تصف ذلك باستبعاد الأجر الأساسي.\n"
+        "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
+    ),
+    "en": (
+        "Legal rules specific to this Article 85 article:\n"
+        "Article 84: half a month's wage for each of the first five years, then one full month's wage for each subsequent year; "
+        "the last wage is the basis, and partial years are prorated to actual service.\n"
+        "Article 85 on resignation: no entitlement before two consecutive years; one third from two through five years inclusive; "
+        "two thirds only above five and below ten years; full benefit at ten years or more.\n"
+        "Article 85 sets the benefit ratio, not contract notice requirements, and does not waive notice; notice and resignation procedures may still apply under the contract and law.\n"
+        "Article 86: qualifying commissions, sales percentages and similar naturally variable wage elements may be excluded only by explicit agreement; this does not exclude basic wage.\n"
+        "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
+    ),
+}
+
+
 def legal_rules_for(topic, lang: str) -> str:
-    """قواعد المواد 80 و81 و84–88 لبرومبت الموضوع — لموضوعات المكافأة فقط وبلا تعميم."""
-    if topic.get("id") not in EOSB_TOPIC_IDS:
+    """Return topic-scoped EOSB rules; unrelated legal clauses are omitted to reduce prompt tokens."""
+    topic_id = topic.get("id")
+    if topic_id not in EOSB_TOPIC_IDS:
         return ""
-    return EOSB_LEGAL_RULES["ar" if lang == "ar" else "en"]
+    language = "ar" if lang == "ar" else "en"
+    if topic_id == "labor-art85":
+        return EOSB_ARTICLE85_LEGAL_RULES[language]
+    return EOSB_LEGAL_RULES[language]
 
 
 def eosb_reference_amount(total_years, monthly_wage, *, resigned: bool) -> float:
@@ -1835,15 +1863,68 @@ def is_article85_legal_rejection(reason: str) -> bool:
     ))
 
 
+def is_article85_repairable_rejection(reason: str) -> bool:
+    """Article 85 gets one re-generation for known legal defects or a section-body length failure."""
+    value = str(reason or "")
+    short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
+    ))
+    return is_article85_legal_rejection(value) or short_section
+
+
+def ensure_article85_notice_caveat(data, *, lang: str):
+    """Copy an article and add only the standard notice caveat when that specific caveat is missing."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 notice caveat: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "المادة 85 تحدد نسب مكافأة نهاية الخدمة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+            "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+        )
+        heading_pattern = r"(استقالة|المادة\s*85|الإشعار)"
+    else:
+        clause = (
+            "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+            "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+        )
+        heading_pattern = r"(resignation|article\s*85|notice)"
+    combined = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in fixed["sections"] if isinstance(sec, dict)
+    )
+    if clause not in combined:
+        target = next((
+            sec for sec in fixed["sections"]
+            if isinstance(sec, dict)
+            and re.search(heading_pattern, str(sec.get("heading", "")) + " " + str(sec.get("body", "")), re.IGNORECASE)
+        ), None)
+        if target is None:
+            target = next((sec for sec in fixed["sections"] if isinstance(sec, dict)), None)
+        if target is None:
+            raise Reject("Article 85 notice caveat: no section is available")
+        existing_body = str(target.get("body", "")).strip()
+        target["body"] = existing_body + ("\n\n" if existing_body else "") + clause
+    return fixed
+
+
 def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
-    """Add one compact, declarative correction after a known Article 85/86/81 wording rejection."""
+    """Add one compact, declarative correction after a known Article 85/86/81 or section-length rejection."""
     reason_text = str(reason or "")
+    is_short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason_text
+    ))
     is_notice = bool(re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE))
     is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
     is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
 
     if lang == "ar":
-        if is_notice:
+        if is_short_section:
+            clause = (
+                "يجب أن يتراوح نص body في كل قسم بين 120 و5000 حرف. وسّع أي قسم قصير بمعلومات مفيدة ودقيقة مرتبطة بعنوانه، "
+                "ولا تحذف معلومات أو تنسخ تعليمات التحرير إلى المقال."
+            )
+        elif is_notice:
             clause = (
                 "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
                 "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
@@ -1863,12 +1944,17 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
                 "ثلث المكافأة يكون من سنتين إلى خمس سنوات شاملًا خمس سنوات، والثلثان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا."
             )
         instructions = (
-            "أعد إنشاء كائن JSON كاملاً وفق المخطط الأصلي. صحح المسألة القانونية المحددة فقط، "
-            "ولا تنسخ هذه التعليمات أو وصف الخطأ إلى نص المقال. أدرج التصحيح التالي كشرح واضح موجّه للقارئ، "
+            "أعد إنشاء كائن JSON كاملاً وفق المخطط الأصلي. صحح المسألة المحددة فقط، "
+            "ولا تنسخ هذه التعليمات أو وصف الخطأ إلى نص المقال. أدرج التصحيح التالي بوضوح موجّه للقارئ، "
             "مع إبقاء جميع بوابات التحقق كما هي:\n"
         )
     else:
-        if is_notice:
+        if is_short_section:
+            clause = (
+                "Every section body must contain 120 to 5000 characters. Expand any short section with useful, accurate detail relevant to its heading; "
+                "do not delete information or copy editing instructions into the article."
+            )
+        elif is_notice:
             clause = (
                 "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
                 "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
@@ -1888,7 +1974,7 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
                 "One third applies from two years through five years inclusive; two thirds applies only above five years and below ten years."
             )
         instructions = (
-            "Regenerate the complete JSON object under the original strict schema. Correct only the identified legal issue; "
+            "Regenerate the complete JSON object under the original strict schema. Correct only the identified issue; "
             "do not copy these instructions or the rejection text into the article. Insert the following clear, declarative reader-facing correction "
             "and retain all existing validation gates:\n"
         )
@@ -2767,35 +2853,54 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             )
         except Reject as exc:
             reason = str(exc)
-            if topic["id"] != "labor-art85" or not is_article85_legal_rejection(reason):
-                log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
-                state["topics"][topic["id"]][lang] = "rejected"
-                continue
+            deterministic_notice_repair = (
+                topic["id"] == "labor-art85"
+                and reason.startswith((
+                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
+                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
+                ))
+            )
+            if deterministic_notice_repair:
+                try:
+                    patched = ensure_article85_notice_caveat(data, lang=lang)
+                    article = validate_article(
+                        patched, topic=topic, lang=lang, published_at=today_iso(),
+                        require_canonical_article85=True,
+                    )
+                    repaired = True
+                    log(f"[FIX] النسخة {lang}: أُضيف توضيح الإشعار القياسي ثم اجتازت جميع الفحوص.")
+                except Reject:
+                    deterministic_notice_repair = False
+            if not deterministic_notice_repair:
+                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
+                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
 
-            log(f"[RETRY] النسخة {lang} رُفضت لصياغة قانونية محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
-            if dry_run:
-                repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
-            else:
-                repair_ok, repair_data, repair_msg = generate_json(
-                    provider,
-                    build_article85_repair_prompt(prompt, lang=lang, reason=reason),
-                    api_key=api_key,
-                    model=model,
-                )
-            if not repair_ok:
-                log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
-                state["topics"][topic["id"]][lang] = "rejected"
-                continue
-            try:
-                article = validate_article(
-                    repair_data, topic=topic, lang=lang, published_at=today_iso(),
-                    require_canonical_article85=True,
-                )
-            except Reject as repair_exc:
-                log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
-                state["topics"][topic["id"]][lang] = "rejected"
-                continue
-            repaired = True
+                log(f"[RETRY] النسخة {lang} رُفضت لجودة/صياغة محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
+                if dry_run:
+                    repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
+                else:
+                    repair_ok, repair_data, repair_msg = generate_json(
+                        provider,
+                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                        api_key=api_key,
+                        model=model,
+                    )
+                if not repair_ok:
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
+                try:
+                    article = validate_article(
+                        repair_data, topic=topic, lang=lang, published_at=today_iso(),
+                        require_canonical_article85=True,
+                    )
+                except Reject as repair_exc:
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
+                repaired = True
         problems = duplicate_check(article, records)
         if problems:
             log(f"[REJECT] النسخة {lang}: " + "; ".join(problems))
@@ -3658,16 +3763,32 @@ def selftest() -> int:
             lang="en", reason="Article 86: missing agreement")
         _repair_prompt_ar_suffix = _repair_prompt.rsplit(chr(10) * 2, 1)[-1]
         _repair_prompt_en86_suffix = _repair_prompt_en86.rsplit(chr(10) * 2, 1)[-1]
+        _repair_prompt_en_short = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections[10].body: الطول 73 خارج المدى 120-8000")
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
               "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
               and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
               and "وفق المادة 86" not in _repair_prompt_ar_suffix
               and "Under Article 86" in _repair_prompt_en86_suffix
+              and "Every section body must contain 120 to 5000 characters" in _repair_prompt_en_short
               and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
-        check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية المعروفة",
+        _fixture_for_notice = fixture_data("ar", topic_id="labor-art85")
+        _fixture_original_text = json.dumps(_fixture_for_notice, ensure_ascii=False)
+        _fixture_with_caveat = ensure_article85_notice_caveat(_fixture_for_notice, lang="ar")
+        _fixture_with_caveat_text = " ".join(
+            str(sec.get("body", "")) for sec in _fixture_with_caveat.get("sections", [])
+            if isinstance(sec, dict))
+        check("Article 85: إدراج توضيح الإشعار القياسي لا يغيّر الكائن الأصلي",
+              "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+              in _fixture_with_caveat_text
+              and json.dumps(_fixture_for_notice, ensure_ascii=False) == _fixture_original_text)
+        check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية أو قِصر القسم",
               is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
               and is_article85_legal_rejection("Article 86: missing agreement")
-              and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections"))
+              and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
+              and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections")
+              and not is_article85_repairable_rejection("حقول مطلوبة مفقودة: sections"))
 
         globals()["http_request_full"] = _article85_repair_http
         _repair_rc, _repair_out = _capture_run(
@@ -4528,10 +4649,21 @@ def selftest() -> int:
         for _tid in sorted(EOSB_TOPIC_IDS):
             for _lang in ("ar", "en"):
                 _p = build_prompt(topic_by_id(_tid), _lang)
+                if _tid == "labor-art85":
+                    _critical_markers = (
+                        ("المادة 84", "المادة 85", "المادة 86", "المادة 81",
+                         "مدة إشعار العقد", "الثلثان بعد تجاوز خمس سنوات")
+                        if _lang == "ar" else
+                        ("Article 84", "Article 85", "Article 86", "Article 81",
+                         "contract notice requirements", "two thirds only above five")
+                    )
+                    if any(_m not in _p for _m in _critical_markers):
+                        _bad_eosb_prompts.append(f"{_tid}/{_lang}:scoped")
+                    continue
                 _markers = _eosb_ar_markers if _lang == "ar" else _eosb_en_markers
                 if any(_m not in _p for _m in _markers):
                     _bad_eosb_prompts.append(f"{_tid}/{_lang}")
-        check("EOSB: قواعد المواد 84-88 تصل بروموت كل موضوعات المكافأة في اللغتين",
+        check("EOSB: قواعد كل موضوع تصل للبرومبت بنطاق قانوني مناسب لكل لغة",
               bool(EOSB_TOPIC_IDS) and not _bad_eosb_prompts)
 
         # التمييز المنصوص عليه في التقرير: الأساس (84) قسم مستقل عن نِسَب
