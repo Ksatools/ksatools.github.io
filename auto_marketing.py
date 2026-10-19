@@ -3598,8 +3598,9 @@ def selftest() -> int:
                       for r in _repair_requests))
         check("Article 85: طلب الإصلاح يضم سبب الرفض القانوني ضمن رسائل النموذج",
               len(_repair_requests) == 2
-              and any("سبب الرفض: المادة 85: تحذير الإشعار ناقص"
-                      in str(m.get("content", ""))
+              and any("سبب الرفض:" in str(m.get("content", ""))
+                      and "متطلبات الإشعار وإجراءات الاستقالة المطبقة"
+                          in str(m.get("content", ""))
                       for m in _repair_requests[1].get("messages", [])))
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
