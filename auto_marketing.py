@@ -1869,7 +1869,8 @@ def is_article85_repairable_rejection(reason: str) -> bool:
     short_section = bool(re.search(
         r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
     ))
-    return is_article85_legal_rejection(value) or short_section
+    overlong_excerpt = bool(re.search(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    return is_article85_legal_rejection(value) or short_section or overlong_excerpt
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -1905,6 +1906,81 @@ def ensure_article85_notice_caveat(data, *, lang: str):
             raise Reject("Article 85 notice caveat: no section is available")
         existing_body = str(target.get("body", "")).strip()
         target["body"] = existing_body + ("\n\n" if existing_body else "") + clause
+    return fixed
+
+
+def ensure_article85_boundary_caveat(data, *, lang: str):
+    """Copy the article and add the precise two-thirds boundary explanation when missing."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 boundary: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "تكون نسبة ثلثي المكافأة عند الاستقالة فقط إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات؛ "
+            "أما خمس سنوات بالضبط فتقع ضمن نطاق الثلث."
+        )
+        heading_pattern = r"(استقالة|المادة\s*85|الثلث|المكافأة)"
+        bad_range = re.compile(
+            r"(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?).{0,100}(?:ثلثي|الثلثين)|"
+            r"(?:ثلثي|الثلثين).{0,100}(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?)"
+        )
+    else:
+        clause = (
+            "The two-thirds resignation ratio applies only when service is more than five years and less than ten years; "
+            "exactly five years remains in the one-third band."
+        )
+        heading_pattern = r"(resignation|article\s*85|two.thirds|benefit)"
+        bad_range = re.compile(
+            r"(?:two[\s-]+thirds|2\s*/\s*3).{0,100}\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?\b|"
+            r"\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?.{0,100}(?:two[\s-]+thirds|2\s*/\s*3)",
+            re.IGNORECASE,
+        )
+    combined = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in fixed["sections"] if isinstance(sec, dict)
+    )
+    if bad_range.search(combined):
+        raise Reject("Article 85 boundary: conflicting five-to-ten-year two-thirds claim")
+    if clause not in combined:
+        target = next((
+            sec for sec in fixed["sections"]
+            if isinstance(sec, dict)
+            and re.search(heading_pattern, str(sec.get("heading", "")) + " " + str(sec.get("body", "")), re.IGNORECASE)
+        ), None)
+        if target is None:
+            target = next((sec for sec in fixed["sections"] if isinstance(sec, dict)), None)
+        if target is None:
+            raise Reject("Article 85 boundary: no section is available")
+        existing_body = str(target.get("body", "")).strip()
+        target["body"] = existing_body + ("\n\n" if existing_body else "") + clause
+    return fixed
+
+
+def trim_article85_excerpt(data, *, max_chars: int = 300):
+    """Copy and minimally shorten a slightly overlong excerpt; all downstream gates still rerun."""
+    if not isinstance(data, dict) or not isinstance(data.get("excerpt"), str):
+        raise Reject("Article 85 excerpt: invalid excerpt")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    excerpt = strip_ws(fixed["excerpt"])
+    if len(excerpt) <= max_chars:
+        return fixed
+    if len(excerpt) > max_chars + 60:
+        raise Reject("Article 85 excerpt: too far beyond the length limit for deterministic trimming")
+    prefix = excerpt[:max_chars]
+    sentence_ends = [
+        m.end() for m in re.finditer(r"[.!?؟](?:\s|$)", prefix)
+        if m.end() >= 200
+    ]
+    if sentence_ends:
+        trimmed = prefix[:sentence_ends[-1]].strip()
+    else:
+        cut = prefix.rfind(" ")
+        if cut < 40:
+            raise Reject("Article 85 excerpt: no safe word boundary within the limit")
+        trimmed = prefix[:cut].rstrip(" ,;:—-") + "…"
+    if not (40 <= len(trimmed) <= max_chars):
+        raise Reject("Article 85 excerpt: deterministic trim did not meet the length bounds")
+    fixed["excerpt"] = trimmed
     return fixed
 
 
@@ -2093,6 +2169,15 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 )
         has_resignation_ratio = any(x in text_norm for x in ("ثلث", "ثلثي", "الثلث"))
         if has_resignation_ratio:
+            bad_range = re.search(
+                r"(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?).{0,100}(?:ثلثي|الثلثين)|"
+                r"(?:ثلثي|الثلثين).{0,100}(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?)",
+                text_norm,
+            )
+            if bad_range:
+                raise Reject(
+                    "المادة 85: لا تُدرج خمس سنوات ضمن نطاق الثلثين؛ النسبة تبدأ بعد خمس سنوات"
+                )
             correct_boundary = (
                 ("أكثر من خمس" in text_norm or "زادت مدة خدمته على خمس" in text_norm)
                 and ("أقل من عشر" in text_norm or "لم تبلغ عشر" in text_norm)
@@ -2853,21 +2938,74 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             )
         except Reject as exc:
             reason = str(exc)
-            deterministic_notice_repair = (
-                topic["id"] == "labor-art85"
-                and reason.startswith((
-                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
-                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
-                ))
-            )
-            if deterministic_notice_repair:
+            deterministic_repair_done = False
+            if topic["id"] == "labor-art85":
                 try:
-                    patched = ensure_article85_notice_caveat(data, lang=lang)
+                    if reason.startswith((
+                        "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
+                        "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
+                    )):
+                        patched = ensure_article85_notice_caveat(data, lang=lang)
+                        article = validate_article(
+                            patched, topic=topic, lang=lang, published_at=today_iso(),
+                            require_canonical_article85=True,
+                        )
+                        deterministic_repair_done = True
+                        log(f"[FIX] النسخة {lang}: أُضيف توضيح الإشعار القياسي ثم اجتازت جميع الفحوص.")
+                    elif reason.startswith((
+                        "المادة 85: يجب توضيح أن الثلثين يبدأان",
+                        "Article 85: clarify that two-thirds applies only after five years and before ten years",
+                    )):
+                        patched = ensure_article85_boundary_caveat(data, lang=lang)
+                        article = validate_article(
+                            patched, topic=topic, lang=lang, published_at=today_iso(),
+                            require_canonical_article85=True,
+                        )
+                        deterministic_repair_done = True
+                        log(f"[FIX] النسخة {lang}: أُضيف توضيح حدّ الثلثين ثم اجتازت جميع الفحوص.")
+                    else:
+                        excerpt_match = re.fullmatch(r"excerpt: الطول (\d+) خارج المدى 40-300", reason)
+                        if excerpt_match and 301 <= int(excerpt_match.group(1)) <= 360:
+                            patched = trim_article85_excerpt(data, max_chars=300)
+                            article = validate_article(
+                                patched, topic=topic, lang=lang, published_at=today_iso(),
+                                require_canonical_article85=True,
+                            )
+                            deterministic_repair_done = True
+                            log(f"[FIX] النسخة {lang}: اختُصر excerpt إلى الحد المسموح ثم اجتازت جميع الفحوص.")
+                except Reject:
+                    deterministic_repair_done = False
+
+            if not deterministic_repair_done:
+                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
+                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
+
+                log(f"[RETRY] النسخة {lang} رُفضت لجودة/صياغة محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
+                if dry_run:
+                    repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
+                else:
+                    repair_ok, repair_data, repair_msg = generate_json(
+                        provider,
+                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                        api_key=api_key,
+                        model=model,
+                    )
+                if not repair_ok:
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
+                try:
                     article = validate_article(
-                        patched, topic=topic, lang=lang, published_at=today_iso(),
+                        repair_data, topic=topic, lang=lang, published_at=today_iso(),
                         require_canonical_article85=True,
                     )
-                    repaired = True
+                except Reject as repair_exc:
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    continue
+                repaired = True
                     log(f"[FIX] النسخة {lang}: أُضيف توضيح الإشعار القياسي ثم اجتازت جميع الفحوص.")
                 except Reject:
                     deterministic_notice_repair = False
@@ -3205,6 +3343,11 @@ def selftest() -> int:
         "exceeds five years but has not reached ten", "5 to 10 years")
     check("بوابة قانونية: ترفض إدراج الخمس سنوات ضمن نسبة الثلثين",
           _rejects(lambda: validate_article85_legal_claims(_en85_bad_range, lang="en")))
+    _ar85_bad_range = _ar85_legal_good.replace(
+        "ويستحق العامل الثلثين إذا زادت مدة خدمته على خمس سنوات ولم تبلغ عشر سنوات، ",
+        "ويستحق العامل الثلثين من خمس إلى عشر سنوات، ")
+    check("بوابة قانونية: ترفض نطاق خمس إلى عشر سنوات للثلثين (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(_ar85_bad_range, lang="ar")))
     check("بوابة قانونية: تقبل التصريح بأن المادة 85 لا تحدد مدة الإشعار",
           not _rejects(lambda: validate_article85_legal_claims(
               "Article 85 sets the benefit ratios only; it does not set or waive notice requirements. "
@@ -3784,10 +3927,29 @@ def selftest() -> int:
               "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
               in _fixture_with_caveat_text
               and json.dumps(_fixture_for_notice, ensure_ascii=False) == _fixture_original_text)
+        _fixture_for_boundary = fixture_data("ar", topic_id="labor-art85")
+        _fixture_for_boundary["sections"][0]["body"] = re.sub(
+            r"أكثر من خمس سنوات", "حتى خمس سنوات", _fixture_for_boundary["sections"][0]["body"])
+        _boundary_original = json.dumps(_fixture_for_boundary, ensure_ascii=False)
+        _fixture_with_boundary = ensure_article85_boundary_caveat(_fixture_for_boundary, lang="ar")
+        _fixture_boundary_text = " ".join(
+            str(sec.get("body", "")) for sec in _fixture_with_boundary.get("sections", [])
+            if isinstance(sec, dict))
+        check("Article 85: إضافة حدّ الثلثين القياسي تنجح ولا تعدل الكائن الأصلي",
+              "أكثر من خمس سنوات وأقل من عشر سنوات" in _fixture_boundary_text
+              and json.dumps(_fixture_for_boundary, ensure_ascii=False) == _boundary_original)
+        _fixture_excerpt = fixture_data("en", topic_id="labor-art85")
+        _fixture_excerpt["excerpt"] = ("This is a helpful introductory summary with practical information. " * 5)[:318]
+        _trimmed_excerpt = trim_article85_excerpt(_fixture_excerpt)
+        check("Article 85: قص excerpt الزائد قصاً محدوداً يحافظ على الحد الأعلى",
+              len(_trimmed_excerpt["excerpt"]) <= 300
+              and len(_trimmed_excerpt["excerpt"]) >= 40
+              and len(_fixture_excerpt["excerpt"]) == 318)
         check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية أو قِصر القسم",
               is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
               and is_article85_legal_rejection("Article 86: missing agreement")
               and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
+              and is_article85_repairable_rejection("excerpt: الطول 318 خارج المدى 40-300")
               and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections")
               and not is_article85_repairable_rejection("حقول مطلوبة مفقودة: sections"))
 
