@@ -410,6 +410,9 @@ def _render_numeric_text(value: str) -> str:
 def render_inline_prose(value: str) -> str:
     """Render the small, safe inline-markup subset used in article drafts (bold/italic/numbers)."""
     text = str(value or "")
+    # Correct punctuation spacing before numeric isolation; generated text occasionally
+    # contains "Article 84 ." or "المادة 84 :" which looks unpolished in the final page.
+    text = re.sub(r"\s+([.,;:!?؟،؛])", r"\1", text)
     chunks = ARTICLE_INLINE_MARKUP_PATTERN.split(text)
     out = []
     for chunk in chunks:
@@ -445,6 +448,9 @@ def _expand_inline_article_lists(value: str) -> str:
     # in Arabic LLM output and prevent "5." or "٢." from matching at line start.
     text = re.sub(r"[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]", "", text)
     text = re.sub(r"^\s*[-–]\s+", "• ", text)
+    # A single hyphen after a colon is a sub-step marker, not prose punctuation.
+    # Split it even when the generator emits only one sub-step in the paragraph.
+    text = re.sub(r":\s+[-–]\s+", ":\n• ", text)
     text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", text)
     # Only split single-digit inline markers here: Article references such as "Article 86. The"
     # must remain normal prose, not be mistaken for numbered list items. Accept
@@ -2543,6 +2549,12 @@ def repair_article85_notice_loss_claim(data, *, lang: str):
         negated_pattern = re.compile(
             r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)"
         )
+        unsupported_exception_pattern = re.compile(
+            r"(?:عدم الالتزام|مخالفة|الإخلال).{0,80}(?:الإشعار|اشعار|مهلة الإشعار)"
+            r".{0,180}لا\s*(?:يؤدي|يترتب|يسبب|ينتج).{0,150}"
+            r"(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,120}(?:المكافأة|مكافأة نهاية الخدمة)"
+            r".{0,120}(?:إلا\s+إذا|ما\s+لم).{0,120}(?:بند|شرط|العقد|قرار قضائي|حكم قضائي)"
+        )
     else:
         replacement = (
             "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
@@ -2560,6 +2572,15 @@ def repair_article85_notice_loss_claim(data, *, lang: str):
             r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
             re.IGNORECASE,
         )
+        unsupported_exception_pattern = re.compile(
+            r"(?:failure to (?:give|comply with)|non-compliance with|breach of).{0,80}\bnotice(?: period)?\b"
+            r".{0,160}\b(?:does not|doesn't|will not|won't)\s+(?:automatically\s+)?"
+            r"(?:lead to|result in|cause|reduce|forfeit|deduct).{0,120}\b"
+            r"(?:eosb|end[- ]of[- ]service|award|benefit|loss|reduction)\b"
+            r".{0,100}\b(?:unless|except when|except if)\b.{0,100}\b"
+            r"(?:contract|clause|court|judgment|ruling)\b",
+            re.IGNORECASE,
+        )
 
     changed = False
 
@@ -2570,7 +2591,9 @@ def repair_article85_notice_loss_claim(data, *, lang: str):
         parts = re.split(r"(?<=[.!?؟])\s+|\n+", value)
         repaired = []
         for part in parts:
-            if claim_pattern.search(part) and not negated_pattern.search(part):
+            if unsupported_exception_pattern.search(part) or (
+                claim_pattern.search(part) and not negated_pattern.search(part)
+            ):
                 repaired.append(replacement)
                 changed = True
             else:
@@ -3087,6 +3110,8 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                 elif reason.startswith((
                     "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا",
                     "Article 85: do not claim notice non-compliance automatically reduces or forfeits",
+                    "المادة 85: لا تربط أثر الإشعار على المكافأة باستثناء تعاقدي أو قضائي غير موثق",
+                    "Article 85: do not add an unsupported contract/court exception to notice-related EOSB effects",
                 )):
                     updated = repair_article85_notice_loss_claim(working, lang=lang)
                     action = "notice loss claim"
@@ -3362,6 +3387,19 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
                 sentence,
             ))
+            unsupported_notice_exception = bool(re.search(
+                r"(?:failure to (?:give|comply with)|non-compliance with|breach of).{0,80}\bnotice(?: period)?\b"
+                r".{0,160}\b(?:does not|doesn't|will not|won't)\s+(?:automatically\s+)?"
+                r"(?:lead to|result in|cause|reduce|forfeit|deduct).{0,120}\b"
+                r"(?:eosb|end[- ]of[- ]service|award|benefit|loss|reduction)\b"
+                r".{0,100}\b(?:unless|except when|except if)\b.{0,100}\b"
+                r"(?:contract|clause|court|judgment|ruling)\b",
+                sentence,
+            ))
+            if unsupported_notice_exception:
+                raise Reject(
+                    "Article 85: do not add an unsupported contract/court exception to notice-related EOSB effects"
+                )
             if loss_claim and not negated:
                 raise Reject(
                     "Article 85: do not claim notice non-compliance automatically reduces or forfeits the EOSB award"
@@ -3377,6 +3415,22 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)",
                 sentence,
             ))
+            unsupported_notice_exception = bool(
+                re.search(r"(?:عدم الالتزام|مخالفة|الإخلال).{0,80}(?:الإشعار|اشعار|مهلة الإشعار)", sentence)
+                and re.search(
+                    r"لا\s*(?:يؤدي|يترتب|يسبب|ينتج).{0,150}"
+                    r"(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,120}(?:المكافأة|مكافأة نهاية الخدمة)",
+                    sentence,
+                )
+                and re.search(
+                    r"(?:إلا\s+إذا|ما\s+لم).{0,120}(?:بند|شرط|العقد|قرار قضائي|حكم قضائي)",
+                    sentence,
+                )
+            )
+            if unsupported_notice_exception:
+                raise Reject(
+                    "المادة 85: لا تربط أثر الإشعار على المكافأة باستثناء تعاقدي أو قضائي غير موثق"
+                )
             if loss_claim and not negated:
                 raise Reject(
                     "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا إلى عدم الالتزام بالإشعار"
@@ -4889,6 +4943,22 @@ def selftest() -> int:
               "عدم الالتزام قد يؤدي إلى فقدان جزء من المكافأة أو تعويضات أخرى. "
               "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة.",
               lang="ar")))
+
+    _unsupported_notice_exception_ar = (
+        "عدم الالتزام بالإشعار لا يؤدي تلقائيًا إلى فقدان أو خفض المكافأة، إلا إذا كان هناك بند خاص في العقد أو قرار قضائي يحدد ذلك."
+    )
+    check("بوابة قانونية: ترفض استثناءً تعاقديًا أو قضائيًا غير موثق لأثر الإشعار (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(_unsupported_notice_exception_ar, lang="ar")))
+    _notice_exception_fix, _ = ensure_article85_critical_content(
+        fixture_data("ar", topic_id="labor-art85"), lang="ar")
+    _notice_exception_fix["sections"][0]["body"] += "\n\n" + _unsupported_notice_exception_ar
+    (_notice_exception_fixed, _notice_exception_article,
+     _notice_exception_actions, _notice_exception_reason) = repair_article85_deterministic_omissions(
+        _notice_exception_fix, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("إصلاح حتمي: يستبدل استثناء أثر الإشعار غير الموثق ويعيد اجتياز كل البوابات",
+          _notice_exception_article is not None
+          and _unsupported_notice_exception_ar not in json.dumps(_notice_exception_fixed, ensure_ascii=False)
+          and "notice loss claim" in _notice_exception_actions)
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (إنجليزي)",
           _rejects(lambda: validate_article85_legal_claims(
               "Failure to comply may lead to loss of part of the end-of-service award. "
@@ -5096,6 +5166,20 @@ def selftest() -> int:
           '<ol class="article-list" start="2">' in _stable_lists
           and '<ul class="article-list"><li>half a month per year.</li><li>a full month after five years.</li></ul>' in _stable_lists
           and '<bdi class="numeric" dir="ltr">2</bdi>.' not in _stable_lists)
+
+    _single_colon_substep = render_article_body(
+        "3. Apply the ratio: - from two years to five years. 4. Check the result."
+    )
+    check("عرض المقال: يحوّل الشرطة المفردة بعد النقطتين إلى تعداد فرعي مستقل",
+          '<ul class="article-list"><li>from two years to five years.</li></ul>' in _single_colon_substep
+          and '<ol class="article-list" start="4">' in _single_colon_substep)
+    _punctuation_spacing = render_inline_prose("Article 84 . المادة 85 : SAR 12,000 .")
+    check("عرض المقال: يصلح المسافة الخاطئة قبل علامات الترقيم والأرقام",
+          "84</bdi>." in _punctuation_spacing
+          and "85</bdi>:" in _punctuation_spacing
+          and "12,000</bdi>." in _punctuation_spacing
+          and "</bdi> ." not in _punctuation_spacing
+          and "</bdi> :" not in _punctuation_spacing)
     _article_numbers_prose = render_article_body(
         "Articles 84 and 86. The key points are: • first rule applies. • second rule applies."
     )
