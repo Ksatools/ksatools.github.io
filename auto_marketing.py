@@ -1837,43 +1837,43 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     if lang == "ar":
         clauses = (
             "1) «تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
-            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات».\\n"
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات».\n"
             "2) «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
-            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة».\\n"
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة».\n"
             "3) «وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
             "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه مكافأة "
-            "نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي».\\n"
+            "نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي».\n"
             "4) «المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
             "ولا تمثل فصلًا من صاحب العمل»."
         )
         instructions = (
             "هذه محاولة إصلاح أخيرة بعد رفض بوابة الصياغة القانونية للنسخة السابقة. "
-            f"سبب الرفض: {reason}\\n"
+            f"سبب الرفض: {reason}\n"
             "أعِد إنشاء كائن JSON كاملاً مطابقاً للمخطط الأصلي، لا تشرح خارج JSON، "
             "وأدرج العبارات القانونية التالية حرفياً داخل أقسام مناسبة. لا تكتفِ بتلخيصها "
-            "ولا تغيّر الحدود الزمنية أو الأثر القانوني:\\n"
+            "ولا تغيّر الحدود الزمنية أو الأثر القانوني:\n"
         )
     else:
         clauses = (
             "1) “The one-third benefit applies to service from two years through five years inclusive. "
-            "The two-thirds benefit applies only when service is more than five years and less than ten years.”\\n"
+            "The two-thirds benefit applies only when service is more than five years and less than ten years.”\n"
             "2) “The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary "
             "to end a contract; applicable notice requirements and resignation procedures may still apply "
-            "depending on the contract and law.”\\n"
+            "depending on the contract and law.”\n"
             "3) “Under Article 86, by agreement, commissions, sales percentages and similar wage elements "
             "that are naturally subject to increase or decrease may be excluded from the wage used to "
-            "calculate end-of-service benefits; this does not mean the basic wage is excluded.”\\n"
+            "calculate end-of-service benefits; this does not mean the basic wage is excluded.”\n"
             "4) “Article 81 concerns statutory cases where a worker leaves without notice while retaining "
             "statutory rights; it is not a dismissal by the employer.”"
         )
         instructions = (
             "This is the final repair attempt after the prior article failed the legal-claim quality gate. "
-            f"Rejection reason: {reason}\\n"
+            f"Rejection reason: {reason}\n"
             "Regenerate the complete JSON object under the original strict schema. Return JSON only. "
             "Insert the following legal sentences verbatim into suitable sections; do not paraphrase them "
-            "or change their time boundaries or legal effect:\\n"
+            "or change their time boundaries or legal effect:\n"
         )
-    return base_prompt + "\\n\\n" + instructions + clauses + "\\n"
+    return base_prompt + "\n\n" + instructions + clauses + "\n"
 
 
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
@@ -3535,6 +3535,7 @@ def selftest() -> int:
         # اختبار إصلاح قانوني واحد: الاستجابة الأولى تفتقد تحذير الإشعار،
         # والثانية تضيف العبارات النظامية؛ لا نتجاوز البوابة ولا نكتب ملفات عامة.
         _sandbox()
+        _repair_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         _repair_calls, _repair_requests = {"ar": 0, "en": 0}, []
         _legal_repair_ar = (
             " تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
@@ -3588,20 +3589,15 @@ def selftest() -> int:
               and "محاولة إصلاح واحدة" in _repair_out
               and len(_repair_drafts) == 1
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
-              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
-                  == (atomic_read_bytes(ARTICLES_JSON), atomic_read_bytes(SITEMAP_XML)))
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _repair_before)
         check("Article 85: طلب الإصلاح يبقي Groq على JSON Schema صارم وreasoning_effort=low",
               len(_repair_requests) == 2
               and all(r.get("reasoning_effort") == "low"
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
                       for r in _repair_requests)
-              and "سبب الرفض" in _request_prompt({"data": json.dumps(_repair_requests[1]).encode("utf-8")})
-              if False else len(_repair_requests) == 2
-              and all(r.get("reasoning_effort") == "low"
-                      and (r.get("response_format") or {}).get("type") == "json_schema"
-                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
-                      for r in _repair_requests))
+              and "سبب الرفض: المادة 85: تحذير الإشعار ناقص"
+                  in _repair_requests[1]["messages"][-1]["content"])
 
         _saved_keys = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
         try:
