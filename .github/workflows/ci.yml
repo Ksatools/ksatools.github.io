@@ -102,3 +102,23 @@ jobs:
             echo "::warning::Google Chrome غير موجود في الـrunner — قد يُتخطّى فحص المتصفّح."
           fi
           python tests/smoke_test.py
+
+      - name: مقارنة PDF قبل/بعد عند تغيير قواعد الطباعة
+        id: print_compare
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          BASE_SHA="$(git rev-parse "refs/remotes/origin/${BASE_REF}")"
+          echo "[INFO] Comparing print output against ${BASE_REF} at ${BASE_SHA}"
+          python tests/print_media_compare.py --base-sha "${BASE_SHA}"
+
+      - name: إرفاق ملفات مقارنة PDF للمراجعة
+        if: always() && steps.print_compare.outputs.generated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: print-review-${{ github.run_id }}
+          path: print-review/
+          if-no-files-found: error
+          retention-days: 1
