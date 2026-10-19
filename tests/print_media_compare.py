@@ -3,6 +3,8 @@
 import argparse
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +13,91 @@ import tempfile
 OUT = Path("print-review")
 TOOLS = ("eos-tool", "salary-tool", "letter-tool", "cv-tool")
 MAX_DIFF = 0.0005
+
+_DIGIT_TRANSLATION = str.maketrans(
+    "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789"
+)
+
+
+def digits_only(value):
+    """Return ASCII digits, ignoring locale-specific separators and bidi marks."""
+    value = unicodedata.normalize("NFKC", str(value)).translate(_DIGIT_TRANSLATION)
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+def normalized_text(value):
+    """Normalize extracted PDF text enough to compare stable fixture markers."""
+    value = unicodedata.normalize("NFKC", str(value)).translate(_DIGIT_TRANSLATION)
+    return "".join(ch for ch in value.casefold() if ch.isalnum())
+
+
+def expected_pdf_markers(page, tool):
+    """Capture real rendered output values that must also exist in the generated PDF."""
+    if tool == "eos-tool":
+        selectors = ("#eos-total-val", "#eos-net-gratuity")
+        values = [page.locator(selector).inner_text().strip() for selector in selectors]
+        markers = [digits_only(value) for value in values]
+        if any(len(marker) < 5 for marker in markers):
+            raise RuntimeError(f"EOS calculation output missing before PDF export: {values!r}")
+        return {"digits": markers, "text": []}
+
+    if tool == "salary-tool":
+        selectors = ("#sal-net-val", "#sal-gross-out")
+        values = [page.locator(selector).inner_text().strip() for selector in selectors]
+        markers = [digits_only(value) for value in values]
+        if any(len(marker) < 5 for marker in markers):
+            raise RuntimeError(f"Salary calculation output missing before PDF export: {values!r}")
+        return {"digits": markers, "text": []}
+
+    if tool == "letter-tool":
+        letter = page.locator("#letter-output").inner_text().strip()
+        date_marker = digits_only(page.locator("#let-date").input_value())
+        if len(normalized_text(letter)) < 80 or date_marker != "20261020":
+            raise RuntimeError("Letter fixture did not generate its expected dated output.")
+        return {"digits": [date_marker], "text": []}
+
+    if tool == "cv-tool":
+        resume = page.locator(".cv-doc").inner_text().strip()
+        marker = normalized_text("mohammed.otaibi@example.com")
+        resume_text = normalized_text(resume)
+        if len(resume_text) < 80 or marker not in resume_text:
+            raise RuntimeError("CV demo did not generate the expected sample resume content.")
+        return {"digits": [], "text": [marker]}
+
+    raise ValueError(f"Unsupported PDF fixture: {tool}")
+
+
+def inspect_pdf_text(pdf, expected_markers):
+    """Validate that the PDF is non-empty and contains the fixture's actual output."""
+    pages = []
+    for i in range(len(pdf)):
+        page = pdf[i]
+        text_page = page.get_textpage()
+        try:
+            pages.append(text_page.get_text_range() or "")
+        finally:
+            text_page.close()
+            page.close()
+
+    raw_text = "\\n".join(pages)
+    normalized = normalized_text(raw_text)
+    extracted_digits = digits_only(raw_text)
+    missing_digits = [
+        marker for marker in expected_markers.get("digits", [])
+        if not marker or marker not in extracted_digits
+    ]
+    missing_text = [
+        marker for marker in expected_markers.get("text", [])
+        if not marker or marker not in normalized
+    ]
+    return {
+        "pages": len(pages),
+        "text_chars": len(normalized),
+        "markers_present": len(pages) > 0 and len(normalized) >= 80
+            and not missing_digits and not missing_text,
+        "missing_digits": missing_digits,
+        "missing_text": missing_text,
+    }
 
 
 def out_flag(value):
@@ -120,21 +207,28 @@ def render(html_path, tool, pdf_path):
         page.goto(html_path.resolve().as_uri(), wait_until="load", timeout=30000)
         page.wait_for_timeout(150)
         populate(page, tool)
+        markers = expected_pdf_markers(page, tool)
         page.emulate_media(media="print")
         page.pdf(path=str(pdf_path), format="A4", print_background=True,
                  display_header_footer=False, prefer_css_page_size=True)
         context.close()
         browser.close()
+        return markers
 
 
-def compare_pdfs(before_path, after_path, tool):
+def compare_pdfs(before_path, after_path, tool, before_markers, after_markers):
     import pypdfium2 as pdfium
     from PIL import ImageChops
 
     before = pdfium.PdfDocument(str(before_path))
     after = pdfium.PdfDocument(str(after_path))
-    report = {"tool": tool, "before_pages": len(before), "after_pages": len(after),
-              "page_count_equal": len(before) == len(after), "pages": []}
+    before_content = inspect_pdf_text(before, before_markers)
+    after_content = inspect_pdf_text(after, after_markers)
+    report = {
+        "tool": tool, "before_pages": len(before), "after_pages": len(after),
+        "page_count_equal": len(before) == len(after), "pages": [],
+        "content": {"before": before_content, "after": after_content},
+    }
     for i in range(max(len(before), len(after))):
         if i >= len(before) or i >= len(after):
             continue
@@ -143,6 +237,10 @@ def compare_pdfs(before_path, after_path, tool):
         bi.save(OUT / f"before-{tool}-page-{i + 1}.png")
         ai.save(OUT / f"after-{tool}-page-{i + 1}.png")
         same_size = bi.size == ai.size
+        before_ink = sum(1 for pixel in bi.getdata() if pixel != (255, 255, 255))
+        after_ink = sum(1 for pixel in ai.getdata() if pixel != (255, 255, 255))
+        before_ink_ratio = before_ink / (bi.width * bi.height) if bi.width and bi.height else 0.0
+        after_ink_ratio = after_ink / (ai.width * ai.height) if ai.width and ai.height else 0.0
         if same_size:
             diff = ImageChops.difference(bi, ai)
             changed = sum(1 for p in diff.getdata() if p != (0, 0, 0))
@@ -151,15 +249,21 @@ def compare_pdfs(before_path, after_path, tool):
             diff.save(OUT / f"diff-{tool}-page-{i + 1}.png")
         else:
             changed, total, ratio = -1, 0, 1.0
+        nonblank = before_ink >= 100 and after_ink >= 100
         report["pages"].append({
             "page": i + 1, "same_size": same_size, "changed_pixels": changed,
             "total_pixels": total, "diff_ratio": round(ratio, 8),
-            "pass": same_size and ratio <= MAX_DIFF,
+            "before_ink_ratio": round(before_ink_ratio, 6),
+            "after_ink_ratio": round(after_ink_ratio, 6),
+            "nonblank": nonblank,
+            "pass": same_size and nonblank and ratio <= MAX_DIFF,
         })
     before.close()
     after.close()
-    report["within_threshold"] = report["page_count_equal"] and all(
-        p["pass"] for p in report["pages"]
+    report["within_threshold"] = (
+        report["page_count_equal"] and len(before) > 0 and len(after) > 0
+        and before_content["markers_present"] and after_content["markers_present"]
+        and all(p["pass"] for p in report["pages"])
     )
     return report
 
@@ -213,13 +317,15 @@ def main():
         (adir / "index.html").write_text(candidate, encoding="utf-8")
         for tool in TOOLS:
             bp, ap = OUT / f"before-{tool}.pdf", OUT / f"after-{tool}.pdf"
-            render(bdir / "index.html", tool, bp)
-            render(adir / "index.html", tool, ap)
-            result = compare_pdfs(bp, ap, tool)
+            before_markers = render(bdir / "index.html", tool, bp)
+            after_markers = render(adir / "index.html", tool, ap)
+            result = compare_pdfs(bp, ap, tool, before_markers, after_markers)
             results.append(result)
-            print("[PDF] %s: pages %s/%s, diff=%s" % (
+            print("[PDF] %s: pages %s/%s, diff=%s, content=%s/%s" % (
                 tool, result["before_pages"], result["after_pages"],
-                [p["diff_ratio"] for p in result["pages"]]
+                [p["diff_ratio"] for p in result["pages"]],
+                result["content"]["before"]["markers_present"],
+                result["content"]["after"]["markers_present"],
             ))
 
     (OUT / "summary.json").write_text(
@@ -229,10 +335,10 @@ def main():
     )
     fails = [r["tool"] for r in results if not r["within_threshold"]]
     if fails:
-        print("::error::PDF output changed beyond threshold for: " + ", ".join(fails)
-              + ". Inspect the before/after PDFs and PNG diffs in the artifact.")
+        print("::error::PDF comparison failed for: " + ", ".join(fails)
+              + ". Check page counts, nonblank output, fixture markers, and visual diffs.")
         return 1
-    print("[PASS] Before/after print PDFs visually match for all four tools.")
+    print("[PASS] Before/after PDFs contain expected output and visually match for all four tools.")
     return 0
 
 
