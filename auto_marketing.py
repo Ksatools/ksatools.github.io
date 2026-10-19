@@ -254,11 +254,19 @@ MODEL_STOP_HINTS = (
     "model_not_found", "model does not exist", "model not found",
     "decommissioned", "no longer supported", "unknown model", "invalid model",
 )
-# رسائل تدلّ على حصة يومية أو مشكلة فوترة: تكرار الطلب بلا فائدة (خلاف تجاوز المعدّل اللحظي).
-QUOTA_STOP_HINTS = (
+# دلائل قاطعة على حصة يومية/منتهية: لا تُعاد حتى لو وُجدت ترويسة Retry-After.
+DAILY_QUOTA_STOP_HINTS = (
     "requests per day", "per day", "daily limit", "daily quota",
-    "insufficient_quota", "exceeded your current quota", "check your plan",
-    "billing", "payment required",
+    "insufficient_quota", "exceeded your current quota", "payment required",
+)
+# عبارات الخطة/الفوترة العامة قد تظهر مع حدّ TPM مؤقّت، لذا لا تكفي وحدها لمنع الإعادة.
+QUOTA_STOP_HINTS = ("check your plan", "billing")
+# دلائل صريحة على نافذة تحديد معدّل مؤقّت، حتى إن تضمنت الرسالة نصائح عامة عن الفوترة.
+TEMPORARY_RATE_LIMIT_HINTS = ("tokens per minute", "requests per minute")
+RETRY_DELAY_RE = re.compile(
+    r"\\b(?:try again|retry(?: after)?)\\s+(?:in\\s+)?"
+    r"(?P<seconds>\\d+(?:\\.\\d+)?)\\s*(?:s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\\b",
+    re.IGNORECASE,
 )
 
 # نقطة استبدال للاختبارات: نصمت الانتظار الحقيقي في الاختبار الذاتي.
@@ -639,13 +647,24 @@ def backoff_delay(attempt, *, retry_after=None, base=GEMINI_BACKOFF_BASE,
     return float(delay)
 
 
-def classify_failure(status, raw) -> tuple:
+def _has_numeric_retry_after(value) -> bool:
+    """True عند وجود Retry-After رقمي صالح بالثواني (تُدعَم الأرقام فقط حالياً)."""
+    if value is None:
+        return False
+    try:
+        seconds = float(str(value).strip())
+    except (TypeError, ValueError):
+        return False
+    return seconds >= 0 and seconds == seconds
+
+
+def classify_failure(status, raw, *, retry_after=None) -> tuple:
     """يصنّف استجابة فشل من مزوّد المحتوى إلى (retryable, code, note).
 
     - auth  : 401/403 (مفتاح ناقص/غير صالح/بلا صلاحية) — لا يُعاد.
     - model : 404 أو رسالة تدلّ على نموذج غير متاح — لا يُعاد (العِلاج تغيير النموذج).
-    - quota : 429 مع دلالة حصة يومية أو فوترة — لا يُعاد (تكراره بلا فائدة).
-    - rate_limit : 429 مؤقّت — يُعاد مع احترام Retry-After.
+    - quota : 429 مع دلالة حصة يومية صريحة — لا يُعاد (تكراره بلا فائدة).
+    - rate_limit : 429 مؤقّت، ومنها TPM أو Retry-After أو مهلة مذكورة في النص.
     - transient  : 408/425/5xx — يُعاد بتراجع تصاعدي.
     - other : أي رمز آخر — لا يُعاد.
     """
@@ -657,6 +676,14 @@ def classify_failure(status, raw) -> tuple:
     if status == 404 or any(h in low for h in MODEL_STOP_HINTS):
         return False, "model", "النموذج غير متاح — لا يُعاد الطلب"
     if status == 429:
+        # الحصة اليومية الصريحة تتقدّم على أي مهلة؛ إعادة الطلب لن تحلّ نفادها.
+        if any(h in low for h in DAILY_QUOTA_STOP_HINTS):
+            return False, "quota", "حصة/فوترة يومية — تكرار الطلب بلا فائدة"
+        # إشارات المعدّل/المهلة تتقدّم على عبارات عامة مثل "check your plan" أو "billing".
+        if (any(h in low for h in TEMPORARY_RATE_LIMIT_HINTS)
+                or RETRY_DELAY_RE.search(low)
+                or _has_numeric_retry_after(retry_after)):
+            return True, "rate_limit", "تجاوز معدّل مؤقّت"
         if any(h in low for h in QUOTA_STOP_HINTS):
             return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
         return True, "rate_limit", "تجاوز معدّل مؤقّت"
@@ -705,9 +732,17 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
             sleep(delay)
             continue
 
-        retryable, _code, _note = classify_failure(status, raw)
+        retry_after = header_get(resp_headers, "Retry-After")
+        retryable, _code, _note = classify_failure(status, raw, retry_after=retry_after)
         if retryable and attempt + 1 < tries:
-            delay = backoff_delay(attempt, retry_after=header_get(resp_headers, "Retry-After"))
+            # بعض استجابات Groq تذكر مهلة في نص الخطأ من دون ترويسة Retry-After.
+            if not retry_after:
+                response_text = raw.decode("utf-8", "replace") if isinstance(
+                    raw, (bytes, bytearray)) else str(raw or "")
+                wait_match = RETRY_DELAY_RE.search(response_text)
+                if wait_match:
+                    retry_after = wait_match.group("seconds")
+            delay = backoff_delay(attempt, retry_after=retry_after)
             log(f"[RETRY] {provider}: استجابة مؤقّتة http_{status} — "
                 f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
             sleep(delay)
@@ -2717,6 +2752,36 @@ def selftest() -> int:
         check("Groq: 429 مؤقّت يُعاد ويحترم Retry-After (ثوانٍ) ثم ينجح",
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _sleeps == [7.0])
+
+        # (ي-1) استجابة TPM الواقعية: عبارات plan/billing لا تتغلب على مؤشّر المعدّل والمهلة.
+        _sleeps.clear()
+        _tpm_body = (
+            b'{"error":{"message":"Rate limit reached for openai/gpt-oss-20b on tokens per '
+            b'minute (TPM): Limit 8000, Used 6718, Requested 2581. Please try again in '
+            b'9.7425s. Please check your plan and billing details."}}'
+        )
+        fake, calls = _fake_http([
+            (429, {}, _tpm_body),
+            _groq_envelope(lang="ar"),
+        ])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: TPM 429 مع مهلة نصية يتجاوز عبارات plan/billing ويُعاد في الوقت المطلوب",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [9.7425])
+
+        # (ي-2) Retry-After الرقمي يتقدّم على تلميحات فوترة عامة، لكن الحصة اليومية أدناه تبقى استثناءً.
+        _sleeps.clear()
+        fake, calls = _fake_http([
+            (429, {"Retry-After": "6"},
+             b'{"error":{"message":"Please check your plan and billing details."}}'),
+            _groq_envelope(lang="ar"),
+        ])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
+        check("Groq: Retry-After رقمي يسمح بإعادة المحاولة رغم عبارات plan/billing العامة",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [6.0])
 
         _sleeps.clear()
         fake, calls = _fake_http([(503, {}, b'{"error":{"message":"overloaded"}}')])
