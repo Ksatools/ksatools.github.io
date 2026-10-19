@@ -43,6 +43,14 @@ on:
         description: "معرّف موضوع محدّد (اتركه فارغاً للاختيار التلقائي)"
         type: string
         default: ""
+      article_language:
+        description: "لغة المقال المراد توليدها؛ اختر en لإعادة المحاولة الإنجليزية وحدها."
+        type: choice
+        options:
+          - ar
+          - en
+          - both
+        default: both
       skip_source_check:
         description: "تخطّي التحقّق الشبكي من المصادر الرسمية (يدوي فقط)"
         type: boolean
@@ -183,6 +191,7 @@ jobs:
           # نمرّر المدخلات عبر env ثم نستعملها كمتغيّرات shell مقتبسة؛ هكذا لا
           # يستطيع مدخل topic تغيير الأوامر أو تنفيذ أمر إضافي.
           TOPIC_INPUT: ${{ inputs.topic }}
+          ARTICLE_LANGUAGE_INPUT: ${{ inputs.article_language || 'both' }}
           SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
           DRAFT_DIR: ${{ runner.temp }}/drafts
           GENERATION_REPORT_PATH: ${{ runner.temp }}/generation_report.json
@@ -190,6 +199,10 @@ jobs:
           set -euo pipefail
           ARGS=()
           if [ -n "${TOPIC_INPUT}" ]; then ARGS+=(--topic "${TOPIC_INPUT}"); fi
+          case "${ARTICLE_LANGUAGE_INPUT}" in
+            ar|en|both) ARGS+=(--article-lang "${ARTICLE_LANGUAGE_INPUT}") ;;
+            *) echo "::error::قيمة لغة المقال غير مدعومة"; exit 1 ;;
+          esac
           if [ "${SKIP_SOURCE_CHECK_INPUT}" = "true" ]; then ARGS+=(--skip-source-check); fi
           python auto_marketing.py "${ARGS[@]}"
 
