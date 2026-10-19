@@ -1057,7 +1057,7 @@ def _normalize_eosb_digits(value: str) -> str:
 
 
 EOSB_DURATION_NUMBER = (
-    r"(?:[0-9]+(?:\\.[0-9]+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"(?:[0-9]+(?:\.[0-9]+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|"
     r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
     r"nineteen|twenty|صفر|واحد|واحدة|احد|إحدى|اثنان|اثنين|اثنتان|اثنتين|"
     r"ثلاث|ثلاثة|أربع|أربعة|اربع|اربعة|خمس|خمسة|ست|ستة|سبع|سبعة|"
@@ -1088,7 +1088,7 @@ EOSB_SERVICE_DURATION_PATTERNS = (
 
 def _duration_number(value: str) -> Decimal:
     token = _normalize_eosb_digits(value).strip().lower()
-    if re.fullmatch(r"[0-9]+(?:\\.[0-9]+)?", token):
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", token):
         return Decimal(token)
     words = {
         "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
