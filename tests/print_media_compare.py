@@ -219,6 +219,19 @@ def render(html_path, tool, pdf_path):
         return markers
 
 
+def validate_pdf_file(path, tool, variant):
+    """Fail clearly before PDFium if Chromium did not emit a plausible PDF."""
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise RuntimeError(f"{tool} {variant} PDF was not created: {exc}") from exc
+    if size < 500:
+        raise RuntimeError(
+            f"{tool} {variant} PDF is unexpectedly small ({size} bytes); "
+            "refusing to treat missing/empty output as a passing comparison."
+        )
+
+
 def compare_pdfs(before_path, after_path, tool, before_markers, after_markers):
     import pypdfium2 as pdfium
     from PIL import ImageChops
@@ -325,6 +338,8 @@ def main():
             bp, ap = OUT / f"before-{tool}.pdf", OUT / f"after-{tool}.pdf"
             before_markers = render(bdir / "index.html", tool, bp)
             after_markers = render(adir / "index.html", tool, ap)
+            validate_pdf_file(bp, tool, "before")
+            validate_pdf_file(ap, tool, "after")
             result = compare_pdfs(bp, ap, tool, before_markers, after_markers)
             results.append(result)
             print("[PDF] %s: pages %s/%s, diff=%s, content=%s/%s" % (
