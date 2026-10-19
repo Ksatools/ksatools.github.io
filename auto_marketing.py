@@ -2121,6 +2121,7 @@ def is_article85_repairable_rejection(reason: str) -> bool:
     overlong_excerpt = bool(re.search(r"excerpt: الطول \d+ خارج المدى 40-300", value))
     unexpected_money = value.startswith("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")
     missing_money = value.startswith("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
+    unparseable_money = value.startswith("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
     canonical_example = value.startswith("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
     section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
     # Permit one full-JSON repair only for a small overflow (e.g. 13-16 sections),
@@ -2132,7 +2133,7 @@ def is_article85_repairable_rejection(reason: str) -> bool:
     boundary_conflict = value.startswith(("Article 85 boundary:", "المادة 85 boundary:"))
     return (is_article85_legal_rejection(value) or short_section
             or overlong_excerpt or too_many_sections or unexpected_money
-            or missing_money or canonical_example or empty_section or boundary_conflict)
+            or missing_money or unparseable_money or canonical_example or empty_section or boundary_conflict)
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -2862,6 +2863,202 @@ def ensure_article85_minimum_faq(data, *, lang: str):
     return fixed, changed
 
 
+def repair_article85_notice_attribution_claim(data, *, lang: str):
+    """Replace sentences that wrongly assign notice rules or a notice waiver to Article 85."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 notice-attribution repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "المادة 85 تحدد نسب مكافأة نهاية الخدمة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+            "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+        )
+        safe_title = "شرح نسب مكافأة الاستقالة وفق المادة 85"
+        safe_heading = "مكافأة الاستقالة"
+        safe_question = "ما الذي تحدده المادة 85 بشأن مكافأة الاستقالة؟"
+    else:
+        clause = (
+            "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+            "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+        )
+        safe_title = "Article 85: resignation benefit ratios explained"
+        safe_heading = "Resignation benefits"
+        safe_question = "What does Article 85 determine about resignation benefits?"
+
+    def is_bad_sentence(value):
+        sentence = re.sub(r"\s+", " ", str(value or "")).strip().lower()
+        if lang == "en":
+            if not re.search(r"\barticle\s*85\b", sentence) or "notice" not in sentence:
+                return False
+            denies = bool(re.search(
+                r"\b(?:does not|doesn't|never|not)\s+(?:set|specify|determine|govern|address|waive)\b",
+                sentence,
+            ))
+            attributes = bool(re.search(
+                r"\b(?:specifies|states|says|provides|requires|sets|waives)\b", sentence
+            ))
+            asserts_no_notice = bool(re.search(
+                r"\b(?:not required|isn't required|not necessary|unnecessary|no need|"
+                r"does not require|doesn't require|does not need|doesn't need)\b",
+                sentence,
+            ))
+        else:
+            if not re.search(r"المادة\s*(?:85|الخامسة\s+والثمانون)", sentence):
+                return False
+            if not re.search(
+                r"(?:الإشعار|اشعار|فترة الإشعار|مهلة الإشعار|ثلاثة أشهر|ثلاثين يوماً|ثلاثين يوما)",
+                sentence,
+            ):
+                return False
+            denies = bool(re.search(
+                r"(?:لا\s+(?:تحدد|تنظم|تتناول|تعفي|تقرر)|ليست من اختصاص المادة\s*85)",
+                sentence,
+            ))
+            attributes = bool(re.search(
+                r"(?:تنص|تذكر|تقول|تقرر|تحدد|توجب|تشترط|تعفي|لا تستلزم|لا تشترط)",
+                sentence,
+            ))
+            asserts_no_notice = bool(re.search(
+                r"(?:غير مطلوب|لا يلزم|لا يتطلب|لا تحتاج|لا يستلزم|لا تشترط)",
+                sentence,
+            ))
+        return (attributes or asserts_no_notice) and not denies
+
+    changed = False
+
+    def repair_text(value, *, role="prose"):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+", value)
+        repaired = []
+        for part in parts:
+            if is_bad_sentence(part):
+                if role == "question":
+                    replacement = safe_question
+                elif role == "heading":
+                    replacement = safe_heading
+                elif role == "title":
+                    replacement = safe_title
+                else:
+                    replacement = clause
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(fixed[key], role="title" if key == "title" else "prose")
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        if "heading" in section:
+            section["heading"] = repair_text(section["heading"], role="heading")
+        if "body" in section:
+            section["body"] = repair_text(section["body"])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_text(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                if "q" in item:
+                    item["q"] = repair_text(item["q"], role="question")
+                if "a" in item:
+                    item["a"] = repair_text(item["a"])
+    if not changed:
+        raise Reject("Article 85 notice-attribution repair: no offending sentence found")
+    return fixed
+
+
+def repair_article85_unexpected_money_claims(data, *, lang: str):
+    """Replace sentences with extra currency amounts; Article 85 uses a fixed canonical example."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 money repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    allowed = {
+        Decimal("12000.00"),
+        Decimal("42000.00"),
+        Decimal("28000.00"),
+    }
+    if lang == "ar":
+        safe_sentence = (
+            "يُحسب أي مبلغ فعلي وفق بيانات الحالة والأحكام النظامية المنطبقة، ولا يُستنتج من مبلغ افتراضي إضافي."
+        )
+        safe_heading = "تقدير المبلغ وفق بيانات الحالة"
+        safe_question = "كيف يُحسب المبلغ المستحق وفق بيانات الحالة؟"
+        safe_title = "حساب مكافأة نهاية الخدمة وفق بيانات الحالة"
+    else:
+        safe_sentence = (
+            "Any actual entitlement must be calculated from the relevant case data under the applicable rules, "
+            "not from an additional illustrative amount."
+        )
+        safe_heading = "Calculating the applicable amount"
+        safe_question = "How is the applicable benefit calculated?"
+        safe_title = "Calculating end-of-service benefits from case data"
+
+    changed = False
+
+    def contains_unexpected_money(value):
+        normalized = _normalize_eosb_digits(re.sub(r"\s+", " ", str(value or "")))
+        for match in EOSB_MONEY_CLAIM_RE.finditer(normalized):
+            token = next((group for group in match.groups() if group), "")
+            try:
+                amount = Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP)
+            except (InvalidOperation, ValueError):
+                return True
+            if amount not in allowed:
+                return True
+        return False
+
+    def repair_text(value, *, role="prose"):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+", value)
+        repaired = []
+        for part in parts:
+            if contains_unexpected_money(part):
+                if role == "question":
+                    replacement = safe_question
+                elif role == "heading":
+                    replacement = safe_heading
+                elif role == "title":
+                    replacement = safe_title
+                else:
+                    replacement = safe_sentence
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(fixed[key], role="title" if key == "title" else "prose")
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        if "heading" in section:
+            section["heading"] = repair_text(section["heading"], role="heading")
+        if "body" in section:
+            section["body"] = repair_text(section["body"])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_text(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                if "q" in item:
+                    item["q"] = repair_text(item["q"], role="question")
+                if "a" in item:
+                    item["a"] = repair_text(item["a"])
+    if not changed:
+        raise Reject("Article 85 money repair: no unexpected currency amount found")
+    return fixed
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -2893,6 +3090,24 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                 )):
                     updated = repair_article85_notice_loss_claim(working, lang=lang)
                     action = "notice loss claim"
+                elif reason.startswith((
+                    "المادة 85: لا تنسب مدة الإشعار أو الإعفاء منه إلى المادة 85",
+                    "Article 85: do not attribute notice-period rules or a notice waiver to Article 85",
+                )):
+                    updated = repair_article85_notice_attribution_claim(working, lang=lang)
+                    action = "notice authority claim"
+                elif reason.startswith((
+                    "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب",
+                    "المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة",
+                )):
+                    updated = repair_article85_unexpected_money_claims(working, lang=lang)
+                    action = "unexpected currency amount removed"
+                elif reason.startswith((
+                    "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق",
+                    "calculation_example: موضوع المادة 85 يتطلب المثال الثابت",
+                )):
+                    updated, canonical_actions = ensure_article85_critical_content(working, lang=lang)
+                    action = "canonical example restored"
                 elif reason.startswith((
                     "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى",
                     "Article 85: FAQ about minimum service cannot say there is no minimum",
@@ -4285,17 +4500,23 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         state["topics"][topic["id"]][lang] = "rejected"
                         record_generation_result(lang, "rejected", "deterministic_repair", repair_failure)
                         continue
-                try:
-                    article = validate_article(
-                        repair_data, topic=topic, lang=lang, published_at=today_iso(),
-                        require_canonical_article85=True,
+                repair_data, article, post_repair_fixes, post_repair_reason = (
+                    repair_article85_deterministic_omissions(
+                        repair_data, topic=topic, lang=lang, published_at=today_iso()
                     )
-                except Reject as repair_exc:
-                    repair_failure = str(repair_exc)
-                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_failure)}")
+                )
+                if article is None:
+                    repair_failure = post_repair_reason or "تعذّر اجتياز التحقق النهائي بعد الإصلاح"
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة الإصلاح: {redact(repair_failure)}")
                     state["topics"][topic["id"]][lang] = "rejected"
                     record_generation_result(lang, "rejected", "final_validation", repair_failure)
                     continue
+                if post_repair_fixes:
+                    deterministic_actions.extend(
+                        f"post-model: {fix}" for fix in post_repair_fixes
+                    )
+                    log(f"[FIX] النسخة {lang}: إصلاحات تحقق حتمية بعد استجابة النموذج "
+                        f"({', '.join(post_repair_fixes)}).")
                 repaired = True
         problems = duplicate_check(article, records)
         if problems:
@@ -4635,6 +4856,34 @@ def selftest() -> int:
     check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
               _ar85_bad_notice_attribution, lang="ar")))
+
+    _notice_repair_probe, _ = ensure_article85_critical_content(
+        fixture_data("en", topic_id="labor-art85"), lang="en")
+    _notice_repair_probe["sections"][0]["body"] += (
+        "\n\nArticle 85 specifies that resignation does not require a three-month notice."
+    )
+    (_notice_repaired_data, _notice_repaired_article,
+     _notice_repair_actions, _notice_repair_reason) = repair_article85_deterministic_omissions(
+        _notice_repair_probe, topic=eosb_topic, lang="en", published_at="2026-01-01")
+    check("إصلاح حتمي: يصحح نسبة الإعفاء من الإشعار إلى المادة 85 دون طلب نموذج جديد",
+          _notice_repaired_article is not None
+          and "Article 85 specifies that resignation does not require" not in json.dumps(
+              _notice_repaired_data, ensure_ascii=False)
+          and "notice authority claim" in _notice_repair_actions)
+
+    _money_repair_probe, _ = ensure_article85_critical_content(
+        fixture_data("ar", topic_id="labor-art85"), lang="ar")
+    _money_repair_probe["sections"][0]["body"] += (
+        "\n\nوقد يذكر وصف غير معتمد مبلغ 30,000 ريال في مثال منفصل."
+    )
+    (_money_repaired_data, _money_repaired_article,
+     _money_repair_actions, _money_repair_reason) = repair_article85_deterministic_omissions(
+        _money_repair_probe, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("إصلاح حتمي: يعالج المبالغ النقدية غير المعتمدة مع إبقاء المثال الثابت",
+          _money_repaired_article is not None
+          and "30,000 ريال" not in json.dumps(_money_repaired_data, ensure_ascii=False)
+          and "unexpected currency amount removed" in _money_repair_actions)
+
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
               "عدم الالتزام قد يؤدي إلى فقدان جزء من المكافأة أو تعويضات أخرى. "
