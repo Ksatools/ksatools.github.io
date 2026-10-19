@@ -3066,10 +3066,10 @@ def selftest() -> int:
           "نص body في أي قسم منفرد 5000 حرف" in _prompt_ar85
           and "نص body في أي قسم منفرد 5000 حرف" in _prompt_en85)
     check("بوابة قانونية: تعليمات المادة 85 توضّح حدود الخمس سنوات والإشعار والمادة 86",
-          "لا تقل «من 5 إلى 10 سنوات» للثلثين" in _prompt_ar85
-          and "never write '5 to 10 years' for two-thirds" in _prompt_en85
-          and "بحسب نوع العقد" in _prompt_ar85
-          and "depending on the contract and law" in _prompt_en85)
+          "الثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر" in _prompt_ar85
+          and "two thirds applies only above five and below ten" in _prompt_en85
+          and "متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام" in _prompt_ar85
+          and "notice and resignation procedures may still apply under the contract and law" in _prompt_en85)
 
     _ar85_legal_good = (
         "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، "
@@ -3656,12 +3656,14 @@ def selftest() -> int:
         _repair_prompt_en86 = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="Article 86: missing agreement")
+        _repair_prompt_ar_suffix = _repair_prompt.rsplit("\\n\\n", 1)[-1]
+        _repair_prompt_en86_suffix = _repair_prompt_en86.rsplit("\\n\\n", 1)[-1]
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
-              "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt
-              and "متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد" in _repair_prompt
-              and "وفق المادة 86" not in _repair_prompt
-              and "Under Article 86" in _repair_prompt_en86
-              and "Do not attribute to Article 85" not in _repair_prompt_en86)
+              "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
+              and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
+              and "وفق المادة 86" not in _repair_prompt_ar_suffix
+              and "Under Article 86" in _repair_prompt_en86_suffix
+              and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
         check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية المعروفة",
               is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
               and is_article85_legal_rejection("Article 86: missing agreement")
