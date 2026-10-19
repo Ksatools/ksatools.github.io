@@ -5169,24 +5169,23 @@ def selftest() -> int:
             model=DEFAULT_GROQ_MODEL, skip_source_check=True,
             topic_id="labor-art85", article_lang="ar")
         _repair_drafts = list(DRAFTS_DIR.glob("**/*.html"))
-        check("Article 85: إعادة التوليد بعد الرفض تمرّ بالبوابة وتحفظ مسودة فقط",
-              _repair_rc == 0 and _repair_calls == {"ar": 2, "en": 0}
-              and len(_repair_requests) == 2
-              and "محاولة إصلاح واحدة" in _repair_out
+        check("Article 85: إصلاح المادة 86 حتمياً يجتاز البوابات ويحفظ مسودة فقط",
+              _repair_rc == 0 and _repair_calls == {"ar": 1, "en": 0}
+              and len(_repair_requests) == 1
+              and "Article 86 legal clause" in _repair_out
               and len(_repair_drafts) == 1
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _repair_before)
-        check("Article 85: طلب الإصلاح يبقي Groq على JSON Schema صارم وreasoning_effort=low",
-              len(_repair_requests) == 2
+        check("Article 85: التوليد يبقي Groq على JSON Schema صارم وreasoning_effort=low",
+              len(_repair_requests) == 1
               and all(r.get("reasoning_effort") == "low"
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
                       for r in _repair_requests))
-        check("Article 85: طلب الإصلاح يرسل التصحيح المستهدف دون نسخ وصف الرفض",
-              len(_repair_requests) == 2
-              and any("وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" in str(m.get("content", ""))
-                      and "المادة 86: لا تصف الحكم بأنه استبعاد للأجر الأساسي" not in str(m.get("content", ""))
-                      for m in _repair_requests[1].get("messages", [])))
+        check("Article 85: إصلاح المادة 86 الحتمي لا يستدعي النموذج ثانية",
+              len(_repair_requests) == 1
+              and _repair_calls == {"ar": 1, "en": 0}
+              and "Article 86 legal clause" in _repair_out)
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
         _sandbox()
