@@ -1194,6 +1194,16 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
         raise Reject("calculation_example.monthly_wage: يجب أن يكون الأجر أكبر من الصفر")
     if years > 80 or months > 11 or days > 30:
         raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
+    # Article 85 uses a code-owned worked example so the model cannot invent
+    # a new duration or wage and drift across Arabic/English calculations.
+    if topic_id == "labor-art85" and (
+        wage != Decimal("12000") or years != Decimal("6")
+        or months != 0 or days != 0
+    ):
+        raise Reject(
+            "calculation_example: موضوع المادة 85 يتطلب المثال الثابت "
+            "(أجر 12000، خدمة 6 سنوات، أشهر وأيام صفر)"
+        )
 
     total_years = years + months / Decimal(12) + days / Decimal(365)
     first_five = min(total_years, Decimal(5))
@@ -1356,6 +1366,26 @@ def build_prompt(topic, lang: str) -> str:
                 "اختر scenario يطابق المثال بدقة: base (أساس المادة 84 قبل أي نسبة خاصة)، "
                 "resignation (نسبة المادة 85)، article81 (حالة المادة 81)، أو article87 (استثناء المادة 87).\n"
             )
+        canonical_example_rule = ""
+        if topic.get("id") == "labor-art85":
+            if lang == "ar":
+                canonical_example_rule = (
+                    "مثال هذا الموضوع ثابت ومحسوب مسبقاً؛ لا تخترع أرقاماً أخرى ولا تغيّر أي قيمة: "
+                    "monthly_wage=12000, years=6, months=0, days=0, scenario=resignation, "
+                    "full_benefit=42000, payable_benefit=28000. "
+                    "اكتب داخل قسم «مثال» هذه الفكرة بالأرقام نفسها: الأجر الشهري 12,000 ريال، "
+                    "مدة الخدمة 6 سنوات، المكافأة الأساسية 42,000 ريال، والمبلغ المستحق بعد نسبة الاستقالة 28,000 ريال. "
+                    "لا تضف أي مبلغ نقدي آخر.\n"
+                )
+            else:
+                canonical_example_rule = (
+                    "This topic uses a fixed, pre-calculated example. Do not invent or change any value: "
+                    "monthly_wage=12000, years=6, months=0, days=0, scenario=resignation, "
+                    "full_benefit=42000, payable_benefit=28000. "
+                    "In the Example section state these same figures: monthly wage SAR 12,000, "
+                    "six years of service, full base benefit SAR 42,000, and payable benefit after the resignation ratio SAR 28,000. "
+                    "Do not add any other currency amount.\n"
+                )
         calculation_rule = (
             "7) calculation_example: املأ الحقول كلها بنصوص رقمية تستخدم أرقاماً غربية بلا فواصل داخل JSON؛ "
             "monthly_wage هو الأجر الشهري، وyears/months/days مدة الخدمة (الأشهر 0–11 والأيام 0–30). "
@@ -1366,6 +1396,7 @@ def build_prompt(topic, lang: str) -> str:
             "ضع المثال الرقمي داخل قسم عنوانه يتضمن كلمة «مثال» أو “Example”، واذكر مدة الخدمة فيه صراحةً "
             "بصيغة مرتبطة بالخدمة؛ يجب أن تتطابق السنوات والأشهر والأيام المكتوبة في هذا القسم مع الحقول المنظمة.\n"
             + scenario_instruction
+            + canonical_example_rule
             + "يُعاد حساب هذه القيم آلياً؛ إن لم تستطع ضبط المثال حسابياً فلا تخمّن ولا تكتب مثالاً مخالفاً. "
             "كل مبلغ نقدي مذكور في نص المقال يجب أن يكون أحد هذه المبالغ فقط، ويجب إظهاره بعملة واضحة مثل ريال أو SAR. وعند إنتاج النسختين، استخدم الأجر ومدة الخدمة والسيناريو والنتائج الحسابية نفسها في العربية والإنجليزية.\n"
         )
@@ -2737,6 +2768,20 @@ def selftest() -> int:
     check("تدقيق EOSB: موضوع المادة 85 يتطلب نسبة الاستقالة",
           _rejects(lambda: validate_article(
               eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_noncanonical = fixture_data("ar", topic_id="labor-art85")
+    eosb_noncanonical["calculation_example"]["monthly_wage"] = "12500"
+    check("تدقيق EOSB: يرفض تغيير الأجر في المثال الثابت للمادة 85",
+          _rejects(lambda: validate_article(
+              eosb_noncanonical, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+    _prompt_ar85 = build_prompt(eosb_topic, "ar")
+    _prompt_en85 = build_prompt(eosb_topic, "en")
+    check("تدقيق EOSB: المثال الثابت 12000/6 سنوات/42000/28000 محدد للغتين",
+          all(value in _prompt_ar85 and value in _prompt_en85
+              for value in ("monthly_wage=12000", "years=6", "scenario=resignation",
+                            "full_benefit=42000", "payable_benefit=28000"))
+          and "لا تخترع أرقاماً أخرى" in _prompt_ar85
+          and "Do not invent or change any value" in _prompt_en85)
 
     art81_topic = topic_by_id("labor-art81")
     art81_good = fixture_data("ar", topic_id="labor-art81")
