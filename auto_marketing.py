@@ -2041,29 +2041,39 @@ def ensure_article85_boundary_caveat(data, *, lang: str):
     return fixed
 
 
-def repair_empty_article85_section(data, *, reason: str):
-    """Repair a truly empty Article 85 section without losing its substantive bullets."""
+def repair_empty_article85_section(data, *, reason: str, lang: str = "ar"):
+    """Repair an empty Article 85 body while preserving its heading and any bullets."""
     match = re.fullmatch(r"sections\[(\d+)\]\.body: فارغ", str(reason or "").strip())
     if not match or not isinstance(data, dict) or not isinstance(data.get("sections"), list):
-        raise Reject("Article 85 empty section: unsupported rejection or invalid structure")
+        raise Reject(str(reason or "Article 85 empty section: unsupported rejection"))
 
     fixed = json.loads(json.dumps(data, ensure_ascii=False))
     sections = fixed["sections"]
     index = int(match.group(1))
     if not (0 <= index < len(sections)) or not isinstance(sections[index], dict):
-        raise Reject("Article 85 empty section: section index is invalid")
+        raise Reject(str(reason))
 
     empty_section = sections[index]
     if str(empty_section.get("body") or "").strip():
-        raise Reject("Article 85 empty section: body is not actually empty")
+        raise Reject(str(reason))
+    heading = str(empty_section.get("heading") or "").strip()
+    if not heading:
+        raise Reject(str(reason))
     raw_bullets = empty_section.get("bullets") or []
     if not isinstance(raw_bullets, list) or any(not isinstance(item, str) for item in raw_bullets):
-        raise Reject("Article 85 empty section: bullets cannot be preserved safely")
+        raise Reject(str(reason))
     bullet_text = "\n".join(item.strip() for item in raw_bullets if item.strip())
+    preserved_payload = heading + (("\n" + bullet_text) if bullet_text else "")
 
-    if bullet_text:
-        # Preserve useful bullet text by folding it into a neighboring section body.
+    if len(sections) > MIN_SECTIONS:
+        # Put the empty heading and its bullets in another body before removing the shell.
         candidates = [index - 1, index + 1]
+        candidates.extend(i for i in range(len(sections)) if i not in candidates and i != index)
+        candidates.sort(key=lambda i: (
+            bool(re.search(r"(?:مثال|example)", str(sections[i].get("heading", "")), re.I)),
+            abs(i - index),
+            len(str(sections[i].get("body") or "")),
+        ))
         for target_index in candidates:
             if not (0 <= target_index < len(sections)) or target_index == index:
                 continue
@@ -2071,19 +2081,218 @@ def repair_empty_article85_section(data, *, reason: str):
             if not isinstance(target, dict) or not isinstance(target.get("body"), str):
                 continue
             existing_body = target["body"].strip()
-            combined = existing_body + ("\n\n" if existing_body else "") + bullet_text
+            combined = existing_body + ("\n\n" if existing_body else "") + preserved_payload
             if existing_body and len(combined) <= 8000:
                 target["body"] = combined
                 sections.pop(index)
-                return fixed, "empty section merged"
-        raise Reject("Article 85 empty section: bullet content cannot be merged within the body limit")
+                return fixed, "empty section merged with heading and bullets preserved"
 
-    if len(sections) > MIN_SECTIONS:
-        # An empty heading has no prose or bullets to preserve, so removing this
-        # shell loses no substantive content and keeps the section-count gate intact.
-        sections.pop(index)
-        return fixed, "empty section removed"
-    raise Reject("Article 85 empty section: cannot remove a blank section at minimum section count")
+    # At the minimum section count, keep the section and give it a short, factual body.
+    if lang == "ar":
+        context = (
+            f"يتناول هذا القسم موضوع «{heading}» ضمن شرح الاستحقاق عند الاستقالة. "
+            "تُقرأ التفاصيل مع بقية قواعد المادة 85، ويجب التحقق من انطباقها بحسب مدة الخدمة وسبب انتهاء العلاقة "
+            "والوقائع ذات الصلة، بالرجوع إلى النص الرسمي لنظام العمل السعودي."
+        )
+    else:
+        context = (
+            f"This section covers “{heading}” in the context of resignation benefits. "
+            "Read it alongside the other Article 85 rules and assess applicability using the length of service, "
+            "the reason employment ended, the relevant facts, and the official Saudi Labour Law text."
+        )
+    empty_section["body"] = context
+    return fixed, "empty section populated without removing its heading or bullets"
+
+
+def merge_article85_sections(data, *, target_count=MAX_SECTIONS):
+    """Merge surplus sections into another body without dropping headings, prose, or bullets."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 section merge: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    if len(sections) > MAX_SECTIONS + 4:
+        raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}")
+    if target_count < MIN_SECTIONS or target_count > MAX_SECTIONS:
+        raise Reject("Article 85 section merge: invalid target count")
+
+    while len(sections) > target_count:
+        pairs = []
+        for source_index, source in enumerate(sections):
+            if not isinstance(source, dict):
+                continue
+            source_heading = str(source.get("heading") or "").strip()
+            source_body = str(source.get("body") or "").strip()
+            source_bullets = source.get("bullets") or []
+            if not source_heading or not source_body or not isinstance(source_bullets, list):
+                continue
+            bullets = [str(item).strip() for item in source_bullets if str(item).strip()]
+            source_payload = source_heading + "\n" + source_body
+            if bullets:
+                source_payload += "\n\n" + ("Key points:\n" if source_heading.isascii() else "نقاط مرتبطة:\n")
+                source_payload += "\n".join(f"- {item}" for item in bullets)
+            source_is_example = bool(re.search(r"(?:مثال|example)", source_heading, re.I))
+            for target_index, target in enumerate(sections):
+                if target_index == source_index or not isinstance(target, dict):
+                    continue
+                target_heading = str(target.get("heading") or "").strip()
+                target_body = str(target.get("body") or "").strip()
+                if not target_heading or not target_body:
+                    continue
+                target_is_example = bool(re.search(r"(?:مثال|example)", target_heading, re.I))
+                combined = target_body + "\n\n" + source_payload
+                if len(combined) <= 8000:
+                    # Preserve an Example section as a dedicated section where possible.
+                    priority = (
+                        source_is_example,
+                        target_is_example,
+                        abs(target_index - source_index),
+                        len(target_body),
+                    )
+                    pairs.append((priority, source_index, target_index, combined))
+        if not pairs:
+            raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}؛ لا يوجد دمج آمن ضمن حد طول القسم")
+        _, source_index, target_index, combined = min(pairs, key=lambda item: item[0])
+        sections[target_index]["body"] = combined
+        sections.pop(source_index)
+    return fixed
+
+
+ARTICLE85_CANONICAL_VALUES = {
+    "monthly_wage": "12000", "years": "6", "months": "0", "days": "0",
+    "scenario": "resignation", "full_benefit": "42000", "payable_benefit": "28000",
+}
+
+
+def ensure_article85_critical_content(data, *, lang: str):
+    """Inject canonical Article 85 boundary and worked-example text before any content gate."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 canonical content: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    actions = []
+
+    # Repair empty sections before overflow: titles and bullets are moved or kept, never silently dropped.
+    for _ in range(MAX_SECTIONS + 5):
+        empty_index = next((
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and not str(sec.get("body") or "").strip()
+        ), None)
+        if empty_index is not None:
+            fixed, action = repair_empty_article85_section(
+                fixed, reason=f"sections[{empty_index}].body: فارغ", lang=lang)
+            sections = fixed["sections"]
+            actions.append(action)
+            continue
+        if len(sections) > MAX_SECTIONS:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS)
+            sections = fixed["sections"]
+            actions.append("excess sections merged with full text preserved")
+            continue
+        break
+    else:
+        raise Reject("Article 85 canonical content: bounded structure repair did not converge")
+
+    if not (MIN_SECTIONS <= len(sections) <= MAX_SECTIONS):
+        raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}")
+
+    if lang == "ar":
+        boundary = (
+            "عند الاستقالة وفق المادة 85، يستحق العامل ثلث المكافأة بعد سنتين متتاليتين من الخدمة وحتى خمس سنوات شاملةً خمس سنوات؛ "
+            "ولا تنطبق نسبة الثلثين إلا إذا زادت مدة الخدمة على خمس سنوات وكانت أقل من عشر سنوات؛ "
+            "وتستحق المكافأة كاملة إذا بلغت مدة الخدمة عشر سنوات فأكثر."
+        )
+        example_text = (
+            "مثال توضيحي ثابت: إذا كان الأجر الشهري الأخير 12,000 ريال وكانت مدة الخدمة 6 سنوات، "
+            "فإن المكافأة الأساسية المحسوبة وفق المادة 84 تبلغ 42,000 ريال. "
+            "وعند انتهاء العلاقة بسبب استقالة العامل، وبعد انطباق نسبة الثلثين وفق المادة 85، "
+            "يكون المبلغ المستحق 28,000 ريال. هذا المثال خاص بالاستقالة بعد استيفاء شرط الخدمة، "
+            "ولا يغيّر القواعد التي تنطبق على أسباب انتهاء الخدمة الأخرى."
+        )
+        example_heading = "مثال حسابي توضيحي"
+        boundary_pattern = r"(استقالة|المادة\s*85|الثلث|المكافأة)"
+    else:
+        boundary = (
+            "For resignation under Article 85, one third applies after two consecutive years of service through exactly five years; "
+            "the two-thirds ratio applies only when service exceeds five years and is less than ten years; "
+            "the full benefit applies at ten years or more."
+        )
+        example_text = (
+            "Fixed illustrative example: With a last monthly wage of SAR 12,000 and six years of service, "
+            "the base end-of-service benefit calculated under Article 84 is SAR 42,000. "
+            "Where employment ends by the employee’s resignation and Article 85’s two-thirds ratio applies, "
+            "the payable amount is SAR 28,000. This example is specific to resignation after the qualifying service threshold; "
+            "other termination reasons follow their own applicable rules."
+        )
+        example_heading = "Worked Example"
+        boundary_pattern = r"(resignation|article\s*85|two.thirds|benefit)"
+
+    # Ensure a dedicated canonical example section exists. If at capacity, merge first without losing text.
+    example_indices = [
+        i for i, sec in enumerate(sections)
+        if isinstance(sec, dict) and re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+    ]
+    if not example_indices:
+        if len(sections) >= MAX_SECTIONS:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS - 1)
+            sections = fixed["sections"]
+            actions.append("sections merged to make room for canonical example")
+        sections.append({"heading": example_heading, "body": example_text, "bullets": []})
+        actions.append("canonical example section added")
+    else:
+        target_example = sections[example_indices[0]]
+        if target_example.get("body") != example_text:
+            target_example["body"] = example_text
+            actions.append("canonical example prose enforced")
+        # Keep all generated bullets; they remain subject to the monetary/legal validation gates.
+        for duplicate_index in example_indices[1:]:
+            if lang == "ar":
+                raise Reject("أكثر من قسم مثال في موضوع المادة 85؛ لا يمكن دمجه تلقائياً دون خطر إسقاط محتوى")
+            raise Reject("Multiple example sections for Article 85; refusing to merge them automatically")
+
+    # Structured values for this fixed example are constants, not model-controlled fields.
+    if fixed.get("calculation_example") != ARTICLE85_CANONICAL_VALUES:
+        fixed["calculation_example"] = dict(ARTICLE85_CANONICAL_VALUES)
+        actions.append("canonical calculation values enforced")
+
+    # Inject the critical ratio sentence into the most relevant non-example section with sufficient capacity.
+    all_text = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in sections if isinstance(sec, dict)
+    )
+    if boundary not in all_text:
+        candidates = [
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and not re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        ]
+        candidates.sort(key=lambda i: (
+            not bool(re.search(boundary_pattern, str(sections[i].get("heading", "")), re.I)),
+            len(str(sections[i].get("body") or "")),
+        ))
+        target_index = next((
+            i for i in candidates
+            if len(str(sections[i].get("body") or "").strip()) + 2 + len(boundary) <= 8000
+        ), None)
+        if target_index is not None:
+            body = str(sections[target_index].get("body") or "").strip()
+            sections[target_index]["body"] = body + "\n\n" + boundary
+        elif len(sections) < MAX_SECTIONS:
+            sections.append({
+                "heading": "نسب الاستقالة" if lang == "ar" else "Resignation benefit ratios",
+                "body": boundary, "bullets": [],
+            })
+        else:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS - 1)
+            sections = fixed["sections"]
+            sections.append({
+                "heading": "نسب الاستقالة" if lang == "ar" else "Resignation benefit ratios",
+                "body": boundary, "bullets": [],
+            })
+            actions.append("sections merged to make room for canonical boundary")
+        actions.append("canonical two-thirds boundary enforced")
+
+    # Reapply local binding after any structure merge copied the object.
+    fixed["sections"] = sections
+    return fixed, actions
 
 
 def trim_article85_excerpt(data, *, max_chars: int = 300):
@@ -2131,8 +2340,12 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
         except Reject as exc:
             reason = str(exc)
             try:
-                if re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
-                    updated, action = repair_empty_article85_section(working, reason=reason)
+                section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", reason)
+                if section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4:
+                    updated = merge_article85_sections(working, target_count=MAX_SECTIONS)
+                    action = "excess sections merged with full text preserved"
+                elif re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
+                    updated, action = repair_empty_article85_section(working, reason=reason, lang=lang)
                 elif reason.startswith((
                     "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
