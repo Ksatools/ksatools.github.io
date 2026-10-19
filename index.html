@@ -1154,25 +1154,7 @@
       }
     }
 
-    @media print {
-      body > header, body > footer, .nav-tabs, .ad-slot, .seo-faq, .no-print, .disclaimer-banner, #toast, .share-modal {
-        display: none !important;
-      }
-      .grid-2 {
-        grid-template-columns: 1fr;
-      }
-      .ats-panel {
-        display: none !important;
-      }
-      .tool-section {
-        border: none;
-        box-shadow: none;
-        padding: 0;
-      }
-      .letter-preview {
-        border: none;
-      }
-    }
+    
     /* ==================== منسق السيرة الذاتية: تصميم جديد (خطوات مرتبة) ==================== */
     .cv-quickbar {
       display: flex;
@@ -1997,6 +1979,24 @@
         text-align: center;
       }
       #cv-tool::after { content: none !important; }
+
+      body > header, body > footer, .nav-tabs, .ad-slot, .seo-faq, .no-print, .disclaimer-banner, #toast, .share-modal {
+        display: none !important;
+      }
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+      .ats-panel {
+        display: none !important;
+      }
+      .tool-section {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+      }
+      .letter-preview {
+        border: none;
+      }
     }
     @page { margin: 12mm 13mm; }
 
