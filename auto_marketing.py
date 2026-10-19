@@ -384,6 +384,132 @@ def collapse_paragraphs(body: str) -> list:
     return [re.sub(r"\s*\n\s*", " ", p).strip() for p in parts if p.strip()]
 
 
+ARTICLE_NUMBER_PATTERN = re.compile(
+    r"(?<![\w])(?:SAR\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s?%)?(?![\w])",
+    re.IGNORECASE,
+)
+ARTICLE_INLINE_MARKUP_PATTERN = re.compile(r"(\*\*.+?\*\*|__.+?__|\*[^*\n]+\*)")
+
+
+def _render_numeric_text(value: str) -> str:
+    """Escape plain text and isolate numeric values for consistent LTR rendering in both languages."""
+    text = str(value or "")
+    parts = []
+    cursor = 0
+    for match in ARTICLE_NUMBER_PATTERN.finditer(text):
+        parts.append(esc(text[cursor:match.start()]))
+        parts.append(f'<bdi class="numeric" dir="ltr">{esc(match.group(0))}</bdi>')
+        cursor = match.end()
+    parts.append(esc(text[cursor:]))
+    return "".join(parts)
+
+
+def render_inline_prose(value: str) -> str:
+    """Render the small, safe inline-markup subset used in article drafts (bold/italic/numbers)."""
+    text = str(value or "")
+    chunks = ARTICLE_INLINE_MARKUP_PATTERN.split(text)
+    out = []
+    for chunk in chunks:
+        if not chunk:
+            continue
+        if chunk.startswith("**") and chunk.endswith("**"):
+            out.append("<strong>" + _render_numeric_text(chunk[2:-2]) + "</strong>")
+        elif chunk.startswith("__") and chunk.endswith("__"):
+            out.append("<strong>" + _render_numeric_text(chunk[2:-2]) + "</strong>")
+        elif chunk.startswith("*") and chunk.endswith("*"):
+            out.append("<em>" + _render_numeric_text(chunk[1:-1]) + "</em>")
+        else:
+            out.append(_render_numeric_text(chunk))
+    return "".join(out)
+
+
+def _split_article_sentences(value: str) -> list:
+    """Conservative sentence splitting used only to break very long text walls into readable paragraphs."""
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [
+        part.strip()
+        for part in re.split(r"(?<=[.!?؟])\s+(?=[A-Z0-9\u0600-\u06FF])", text)
+        if part.strip()
+    ]
+
+
+def _expand_inline_article_lists(value: str) -> str:
+    """Turn inline bullets/numbered steps into line markers before HTML rendering."""
+    text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", str(value or ""))
+    text = re.sub(r"(?<!\d)\s+(\d{1,2}[.)])\s+", r"\n\1 ", text)
+    # Arabic drafts sometimes encode every sub-step as '- item' inside a single sentence.
+    # Require repeated spaced hyphens so a normal dash in prose is not mistaken for a list.
+    if len(re.findall(r"\s+-\s+", text)) >= 2:
+        text = re.sub(r"\s+-\s+", "\n• ", text)
+    return text
+
+
+def render_article_body(body: str) -> str:
+    """Render paragraphs, Markdown-like inline emphasis, bullets and numbered steps without allowing raw HTML."""
+    text = str(body or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Models occasionally leak a duplicated FAQ heading into a regular paragraph. The article
+    # renderer adds a dedicated FAQ section below, so remove only the repeated heading artifact.
+    text = re.sub(
+        r"(?:\bCommon Questions\s+)?\bFAQ(?:\s+FAQ){1,}\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[ \t]+\n", "\n", text).strip()
+    paragraphs = [part for part in re.split(r"\n\s*\n", text) if part.strip()]
+    blocks = []
+
+    for paragraph in paragraphs:
+        expanded = _expand_inline_article_lists(re.sub(r"[ \t]*\n[ \t]*", " ", paragraph).strip())
+        lines = [line.strip() for line in expanded.split("\n") if line.strip()]
+        tokens = []
+        for line in lines:
+            ordered = re.match(r"^(\d{1,2})[.)]\s+(.+)$", line)
+            bullet = re.match(r"^[•●▪]\s+(.+)$", line)
+            if ordered:
+                tokens.append(("ol", ordered.group(2).strip()))
+            elif bullet:
+                tokens.append(("ul", bullet.group(1).strip()))
+            else:
+                sentences = _split_article_sentences(line)
+                # Keep short text intact; split long walls into pairs of sentences.
+                if len(sentences) >= 4:
+                    for index in range(0, len(sentences), 2):
+                        tokens.append(("p", " ".join(sentences[index:index + 2])))
+                else:
+                    tokens.append(("p", line))
+
+        # If a model placed additional explanation after the final inline bullet, keep the first
+        # sentence as the list item and move the explanation back into normal paragraphs.
+        list_indexes = [i for i, (kind, _) in enumerate(tokens) if kind in ("ul", "ol")]
+        if list_indexes and list_indexes[-1] == len(tokens) - 1:
+            last_index = list_indexes[-1]
+            last_kind, last_text = tokens[last_index]
+            sentences = _split_article_sentences(last_text)
+            if len(sentences) > 1:
+                tokens[last_index] = (last_kind, sentences[0])
+                trailing = sentences[1:]
+                tokens.extend(("p", sentence) for sentence in trailing)
+
+        index = 0
+        while index < len(tokens):
+            kind, value = tokens[index]
+            if kind == "p":
+                blocks.append(f"<p>{render_inline_prose(value)}</p>")
+                index += 1
+                continue
+            items = []
+            while index < len(tokens) and tokens[index][0] == kind:
+                items.append(f"<li>{render_inline_prose(tokens[index][1])}</li>")
+                index += 1
+            tag = "ol" if kind == "ol" else "ul"
+            blocks.append(f'<{tag} class="article-list">' + "".join(items) + f"</{tag}>")
+
+    return "\n      ".join(blocks)
+
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -3411,20 +3537,36 @@ ARTICLE_TEMPLATE = Template(
     header.site a { color:#fff; text-decoration:none; font-weight:700; }
     main { max-width:820px; margin:0 auto; padding:22px 18px 56px; background:var(--card); }
     h1 { font-size:1.7rem; line-height:1.4; margin:0 0 10px; }
-    h2 { font-size:1.2rem; margin:26px 0 8px; color:var(--brand); }
-    p { margin:0 0 12px; }
-    .meta { color:var(--muted); font-size:.86rem; margin-bottom:18px; }
-    ul { padding-inline-start:22px; }
-    .cta { margin:26px 0; padding:14px 16px; background:#eef6f2; border:1px solid var(--line); border-radius:10px; }
+    h2 { font-size:1.2rem; line-height:1.55; margin:0 0 12px; color:var(--brand); }
+    p { margin:0 0 14px; }
+    .meta { color:var(--muted); font-size:.86rem; margin-bottom:22px; }
+    .article-section + .article-section { border-top:1px solid var(--line); margin-top:24px; padding-top:20px; }
+    .article-section p { max-width:74ch; }
+    .article-list { margin:10px 0 18px; padding-inline-start:1.5rem; }
+    .article-list li { padding-inline-start:.22rem; margin:0 0 .58rem; }
+    .article-list li:last-child { margin-bottom:0; }
+    .numeric { direction:ltr; unicode-bidi:isolate; white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:750; color:var(--brand); }
+    .article-section strong { font-weight:750; color:#173f30; }
+    .worked-example { margin-top:22px; padding:16px 18px; border:1px solid #cfe0d6; border-radius:12px; background:#f1f7f3; }
+    .worked-example h2 { margin-top:0; }
+    .faq { margin-top:24px; }
+    .faq details { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; background:#fff; }
+    .faq summary { cursor:pointer; font-weight:750; line-height:1.6; }
+    .faq details p { margin:10px 0 0; }
+    .cta { margin:28px 0; padding:16px 18px; background:#eef6f2; border:1px solid var(--line); border-radius:12px; }
     .cta a { color:var(--brand); font-weight:700; }
-    details { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0; }
-    summary { cursor:pointer; font-weight:700; }
+    .sources ul { padding-inline-start:1.5rem; }
+    .sources li { margin:0 0 8px; }
     .sources a { color:var(--brand); }
     .note { font-size:.88rem; color:var(--muted); border-top:1px solid var(--line); margin-top:24px; padding-top:14px; }
     .ad-slot { max-width:820px; margin:18px auto; padding:0 18px; text-align:center; }
     footer.site { max-width:820px; margin:0 auto; padding:18px; color:var(--muted); font-size:.85rem; text-align:center; }
     footer.site a { color:var(--brand); }
-    @media (max-width:600px) { main { padding:16px 14px 42px; } h1 { font-size:1.35rem; } }
+    @media (max-width:600px) {
+      main { padding:16px 14px 42px; }
+      h1 { font-size:1.35rem; }
+      .worked-example { padding:14px 12px; }
+    }
   </style>
   <script type="application/ld+json">$json_ld</script>
   $ad_social_bar
@@ -3469,21 +3611,33 @@ def render_article_html(article, *, published: bool) -> str:
 
     section_blocks = []
     for sec in article["sections"]:
-        parts = [f"<h2>{esc(sec['heading'])}</h2>"]
-        for para in collapse_paragraphs(sec["body"]):
-            parts.append(f"<p>{esc(para)}</p>")
-        if sec["bullets"]:
-            parts.append("<ul>" + "".join(f"<li>{esc(b)}</li>" for b in sec["bullets"]) + "</ul>")
+        heading = str(sec.get("heading") or "")
+        example_class = (
+            " article-section worked-example"
+            if re.search(r"(?:مثال|example)", heading, re.IGNORECASE)
+            else " article-section"
+        )
+        parts = [f'<section class="{example_class.strip()}"><h2>{esc(heading)}</h2>']
+        parts.extend(render_article_body(sec.get("body", "")))
+        if sec.get("bullets"):
+            bullet_items = "".join(
+                f"<li>{render_inline_prose(item)}</li>" for item in sec["bullets"]
+            )
+            parts.append(f'<ul class="article-list">{bullet_items}</ul>')
+        parts.append("</section>")
         section_blocks.append("\n      ".join(parts))
     sections_html = "\n      ".join(section_blocks)
 
     faq_html = ""
     if article["faq"]:
         items = "".join(
-            f"<details><summary>{esc(f['q'])}</summary><p>{esc(f['a'])}</p></details>\n      "
+            f"<details><summary>{render_inline_prose(f['q'])}</summary><p>{render_inline_prose(f['a'])}</p></details>\n      "
             for f in article["faq"]
         )
-        faq_html = f"<h2>{esc('الأسئلة الشائعة' if ar else 'Frequently asked questions')}</h2>\n      {items}"
+        faq_html = (
+            f'<section class="faq"><h2>{esc("الأسئلة الشائعة" if ar else "Frequently asked questions")}</h2>\n      '
+            f'{items}</section>'
+        )
 
     sources_html = "".join(
         f'<li><a href="{esc(s["url"])}" rel="noopener noreferrer" target="_blank">{esc(s["title"])}</a></li>'
@@ -4609,6 +4763,26 @@ def selftest() -> int:
     check("صفحة منشورة قابلة للفهرسة", "noindex" not in html_out)
     check("صفحة مسودة غير قابلة للفهرسة", "noindex" in draft_out)
     check("JSON-LD صالح", '"@type": "Article"' in html_out)
+    _formatted_bullets = render_article_body(
+        "Key points: • one **important** rule applies. • SAR 12,000 is the example amount. Further explanation follows."
+    )
+    check("عرض المقال: تحويل التعداد المضمّن إلى قائمة HTML",
+          '<ul class="article-list">' in _formatted_bullets
+          and _formatted_bullets.count("<li>") == 2)
+    check("عرض المقال: تنسيق النص الغامق والأرقام النقدية",
+          "<strong>important</strong>" in _formatted_bullets
+          and '<bdi class="numeric" dir="ltr">SAR 12,000</bdi>' in _formatted_bullets)
+    _formatted_steps = render_article_body("Steps: 1. Calculate the base amount. 2. Apply the ratio.")
+    check("عرض المقال: تحويل الخطوات المرقمة إلى قائمة مرتبة",
+          '<ol class="article-list">' in _formatted_steps
+          and _formatted_steps.count("<li>") == 2)
+    _clean_faq_artifact = render_article_body("Common Questions FAQ FAQ FAQ FAQ For resignation, check the rules.")
+    check("عرض المقال: حذف تكرار FAQ الذي يسرّب من التوليد",
+          "FAQ" not in _clean_faq_artifact and "Common Questions" not in _clean_faq_artifact)
+    _escaped_formatted = render_article_body("Do not render <script>alert(1)</script>; use 28,000.")
+    check("عرض المقال: لا يسمح بتمرير HTML خام مع تنسيق الأرقام",
+          "<script>" not in _escaped_formatted and "&lt;script&gt;" in _escaped_formatted
+          and '<bdi class="numeric" dir="ltr">28,000</bdi>' in _escaped_formatted)
 
     # 7-أ) أكواد الإعلان المعتمدة في القالب المولَّد (bauval.org) وغياب النطاق القديم
     check("قالب المقال يستخدم كود Social Bar المعتمد (bauval.org)",
