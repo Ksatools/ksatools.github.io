@@ -3006,39 +3006,6 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     state["topics"][topic["id"]][lang] = "rejected"
                     continue
                 repaired = True
-                    log(f"[FIX] النسخة {lang}: أُضيف توضيح الإشعار القياسي ثم اجتازت جميع الفحوص.")
-                except Reject:
-                    deterministic_notice_repair = False
-            if not deterministic_notice_repair:
-                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
-                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
-                    state["topics"][topic["id"]][lang] = "rejected"
-                    continue
-
-                log(f"[RETRY] النسخة {lang} رُفضت لجودة/صياغة محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
-                if dry_run:
-                    repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
-                else:
-                    repair_ok, repair_data, repair_msg = generate_json(
-                        provider,
-                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
-                        api_key=api_key,
-                        model=model,
-                    )
-                if not repair_ok:
-                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: تعذّر التوليد ({redact(repair_msg)}).")
-                    state["topics"][topic["id"]][lang] = "rejected"
-                    continue
-                try:
-                    article = validate_article(
-                        repair_data, topic=topic, lang=lang, published_at=today_iso(),
-                        require_canonical_article85=True,
-                    )
-                except Reject as repair_exc:
-                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_exc)}")
-                    state["topics"][topic["id"]][lang] = "rejected"
-                    continue
-                repaired = True
         problems = duplicate_check(article, records)
         if problems:
             log(f"[REJECT] النسخة {lang}: " + "; ".join(problems))
