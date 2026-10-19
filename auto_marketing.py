@@ -82,6 +82,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from string import Template
 
@@ -488,8 +489,39 @@ _EN_BODY = (
 ) * 3
 
 
-def fixture_data(lang: str) -> dict:
+def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
+    """نموذج اختباري داخلي؛ يتضمن مثال مكافأة مضبوطاً للموضوعات القانونية فقط."""
+    is_eosb = topic_id in EOSB_TOPIC_IDS
+    scenario = (
+        "resignation" if topic_id in {"labor-art85", "eosb-resignation", "contract-end-vs-resignation"}
+        else "article81" if topic_id == "labor-art81"
+        else "base"
+    )
+    calculation_example = ({
+        "monthly_wage": "12000", "years": "6", "months": "0", "days": "0",
+        "scenario": scenario, "full_benefit": "42000",
+        "payable_benefit": "28000" if scenario == "resignation" else "42000",
+    } if is_eosb else {
+        "monthly_wage": "", "years": "", "months": "", "days": "",
+        "scenario": "", "full_benefit": "", "payable_benefit": "",
+    })
     if lang == "ar":
+        example = ""
+        if is_eosb and scenario == "resignation":
+            example = (
+                " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
+                "المكافأة الأساسية 42,000 ريال، وبعد تطبيق نسبة الاستقالة يصبح المبلغ المستحق 28,000 ريال."
+            )
+        elif is_eosb and scenario == "article81":
+            example = (
+                " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
+                "المكافأة الأساسية والمبلغ المستحق في هذا المثال 42,000 ريال."
+            )
+        elif is_eosb:
+            example = (
+                " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
+                "المكافأة الأساسية قبل أي تعديل يعتمد على سبب انتهاء العلاقة 42,000 ريال."
+            )
         return {
             "title": "مقال اختباري عن حساب مكافأة نهاية الخدمة",
             "meta_description": "وصف اختباري قصير يوضّح حساب مكافأة نهاية الخدمة للأغراض الداخلية فقط دون نشر.",
@@ -498,7 +530,7 @@ def fixture_data(lang: str) -> dict:
                 {"heading": "أساس الحساب", "body": _AR_BODY + " " + _AR_BODY, "bullets": ["نقطة أولى", "نقطة ثانية"]},
                 {"heading": "أجزاء السنة", "body": _AR_BODY + " " + _AR_BODY, "bullets": []},
                 {"heading": "الاستقالة", "body": _AR_BODY + " " + _AR_BODY, "bullets": ["نقطة ثالثة"]},
-                {"heading": "مثال توضيحي", "body": _AR_BODY + " " + _AR_BODY, "bullets": []},
+                {"heading": "مثال توضيحي", "body": _AR_BODY + " " + _AR_BODY + example, "bullets": []},
             ],
             "faq": [
                 {"q": "هل هذا المقال حقيقي؟", "a": "لا، هذا محتوى اختباري داخلي يُستخدم في فحوص الجودة الآلية فقط ولا يُنشر."},
@@ -508,7 +540,24 @@ def fixture_data(lang: str) -> dict:
                 {"title": "المؤسسة العامة للتأمينات الاجتماعية", "url": "https://www.gosi.gov.sa/"},
                 {"title": "وزارة الموارد البشرية والتنمية الاجتماعية", "url": "https://www.hrsd.gov.sa/"},
             ],
+            "calculation_example": calculation_example,
         }
+    example = ""
+    if is_eosb and scenario == "resignation":
+        example = (
+            " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
+            "the full base benefit is SAR 42,000, and the payable amount after the resignation ratio is SAR 28,000."
+        )
+    elif is_eosb and scenario == "article81":
+        example = (
+            " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
+            "the base benefit and payable amount in this example are SAR 42,000."
+        )
+    elif is_eosb:
+        example = (
+            " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
+            "the base benefit before any reason-specific adjustment is SAR 42,000."
+        )
     return {
         "title": "Sample Article About Entitlement Calculations",
         "meta_description": "A short sample description used only for internal testing of the publishing pipeline.",
@@ -517,7 +566,7 @@ def fixture_data(lang: str) -> dict:
             {"heading": "Calculation Basis", "body": _EN_BODY + " " + _EN_BODY, "bullets": ["First point", "Second point"]},
             {"heading": "Partial Years", "body": _EN_BODY + " " + _EN_BODY, "bullets": []},
             {"heading": "Resignation", "body": _EN_BODY + " " + _EN_BODY, "bullets": ["Third point"]},
-            {"heading": "Worked Example", "body": _EN_BODY + " " + _EN_BODY, "bullets": []},
+            {"heading": "Worked Example", "body": _EN_BODY + " " + _EN_BODY + example, "bullets": []},
         ],
         "faq": [
             {"q": "Is this a real article?", "a": "No. It is internal test content used only by the automated quality checks and is never published."},
@@ -527,6 +576,7 @@ def fixture_data(lang: str) -> dict:
             {"title": "General Organization for Social Insurance", "url": "https://www.gosi.gov.sa/"},
             {"title": "Ministry of Human Resources and Social Development", "url": "https://www.hrsd.gov.sa/"},
         ],
+        "calculation_example": calculation_example,
     }
 
 
@@ -976,6 +1026,252 @@ def eosb_reference_amount(total_years, monthly_wage, *, resigned: bool) -> float
     return full
 
 
+
+# تدقيق حسابي إنتاجي للمثال الرقمي: لا يكفي أن يطلب البرومبت من النموذج الدقة.
+EOSB_CALCULATION_FIELDS = (
+    "monthly_wage", "years", "months", "days", "scenario",
+    "full_benefit", "payable_benefit",
+)
+EOSB_REQUIRED_SCENARIO = {
+    "labor-art85": "resignation",
+    "eosb-resignation": "resignation",
+    "contract-end-vs-resignation": "resignation",
+    "labor-art81": "article81",
+}
+EOSB_MONEY_CLAIM_RE = re.compile(
+    r"\bSAR\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
+    r"|ر\.?\s*س\.?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
+    r"|([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*"
+    r"(?:ريال(?:\s+سعودي)?|SAR|Saudi\s+riyals?|riyals?|ر\.?\s*س\.?)",
+    re.IGNORECASE,
+)
+EOSB_CENT = Decimal("0.01")
+
+
+def _normalize_eosb_digits(value: str) -> str:
+    digit_map = {}
+    for source, western in zip("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789"):
+        digit_map[ord(source)] = western
+    digit_map.update({ord("٬"): ",", ord("٫"): ".", ord("،"): ","})
+    return str(value).translate(digit_map)
+
+
+EOSB_DURATION_NUMBER = (
+    r"(?:[0-9]+(?:\.[0-9]+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+    r"nineteen|twenty|صفر|واحد|واحدة|احد|إحدى|اثنان|اثنين|اثنتان|اثنتين|"
+    r"ثلاث|ثلاثة|أربع|أربعة|اربع|اربعة|خمس|خمسة|ست|ستة|سبع|سبعة|"
+    r"ثمان|ثمانية|ثماني|تسع|تسعة|عشر|عشرة|أحد عشر|احد عشر|إحدى عشرة|"
+    r"احدى عشرة|اثنا عشر|اثني عشر|اثنتا عشرة|اثنتي عشرة|ثلاثة عشر|"
+    r"أربعة عشر|اربعة عشر|خمسة عشر|ستة عشر|سبعة عشر|ثمانية عشر|"
+    r"تسعة عشر|عشرون)"
+)
+EOSB_DURATION_UNIT = (
+    r"(?:years?|yrs?|months?|mos?|days?|سنوات|سنة|سنتان|سنتين|عام|عامان|"
+    r"أعوام|اعوام|شهر|أشهر|اشهر|شهراً|شهرًا|يوم|أيام|ايام|يوماً|يومًا)"
+)
+EOSB_DURATION_PAIR_RE = re.compile(
+    rf"(?P<number>{EOSB_DURATION_NUMBER})\s*(?P<unit>{EOSB_DURATION_UNIT})",
+    re.IGNORECASE,
+)
+EOSB_DURATION_SEQUENCE = (
+    rf"{EOSB_DURATION_NUMBER}\s*{EOSB_DURATION_UNIT}"
+    rf"(?:\s*(?:,|،|and|و)\s*{EOSB_DURATION_NUMBER}\s*{EOSB_DURATION_UNIT}){{0,2}}"
+)
+EOSB_SERVICE_DURATION_PATTERNS = (
+    re.compile(rf"\b(?P<duration>{EOSB_DURATION_SEQUENCE})\s+(?:of\s+)?(?:continuous\s+)?service\b", re.IGNORECASE),
+    re.compile(rf"\b(?:service|employment)\s+(?:period|duration|length)\s*(?::|=|is|of)?\s*(?P<duration>{EOSB_DURATION_SEQUENCE})", re.IGNORECASE),
+    re.compile(rf"(?:مدة\s+(?:الخدمة|خدمته|العمل))\s*(?::|=|هي|تبلغ|قدرها)?\s*(?P<duration>{EOSB_DURATION_SEQUENCE})", re.IGNORECASE),
+    re.compile(rf"(?P<duration>{EOSB_DURATION_SEQUENCE})\s*(?:من\s+)?الخدمة", re.IGNORECASE),
+)
+
+
+def _duration_number(value: str) -> Decimal:
+    token = _normalize_eosb_digits(value).strip().lower()
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", token):
+        return Decimal(token)
+    words = {
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+        "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+        "nineteen": 19, "twenty": 20,
+        "صفر": 0, "واحد": 1, "واحدة": 1, "احد": 1, "أحد": 1,
+        "إحدى": 1, "احدى": 1, "اثنان": 2, "اثنين": 2, "اثنتان": 2,
+        "اثنتين": 2, "ثلاث": 3, "ثلاثة": 3, "أربع": 4, "أربعة": 4,
+        "اربع": 4, "اربعة": 4, "خمس": 5, "خمسة": 5, "ست": 6, "ستة": 6,
+        "سبع": 7, "سبعة": 7, "ثمان": 8, "ثمانية": 8, "ثماني": 8,
+        "تسع": 9, "تسعة": 9, "عشر": 10, "عشرة": 10,
+        "أحد عشر": 11, "احد عشر": 11, "إحدى عشرة": 11, "احدى عشرة": 11,
+        "اثنا عشر": 12, "اثني عشر": 12, "اثنتا عشرة": 12, "اثنتي عشرة": 12,
+        "ثلاثة عشر": 13, "أربعة عشر": 14, "اربعة عشر": 14, "خمسة عشر": 15,
+        "ستة عشر": 16, "سبعة عشر": 17, "ثمانية عشر": 18, "تسعة عشر": 19,
+        "عشرون": 20,
+    }
+    if token not in words:
+        raise Reject("مدة الخدمة في المثال تستخدم رقماً أو صيغة عددية غير مدعومة")
+    return Decimal(words[token])
+
+
+def _extract_eosb_service_durations(example_text: str) -> list:
+    """استخرج مدد الخدمة المذكورة صراحة داخل قسم المثال الحسابي وحوّلها إلى سنوات."""
+    if not isinstance(example_text, str) or not example_text.strip():
+        return []
+    text = _normalize_eosb_digits(example_text).lower()
+    claims = []
+    seen = set()
+    for pattern in EOSB_SERVICE_DURATION_PATTERNS:
+        for match in pattern.finditer(text):
+            pairs = list(EOSB_DURATION_PAIR_RE.finditer(match.group("duration")))
+            if not pairs:
+                continue
+            total_years = Decimal(0)
+            for pair in pairs:
+                number = _duration_number(pair.group("number"))
+                unit = pair.group("unit").lower()
+                if unit.startswith(("year", "yr")) or unit in {"سنة", "سنوات", "سنتان", "سنتين", "عام", "عامان", "أعوام", "اعوام"}:
+                    total_years += number
+                elif unit.startswith(("month", "mo")) or unit in {"شهر", "أشهر", "اشهر", "شهراً", "شهرًا"}:
+                    total_years += number / Decimal(12)
+                else:
+                    total_years += number / Decimal(365)
+            if total_years not in seen:
+                seen.add(total_years)
+                claims.append(total_years)
+    return claims
+
+
+def _parse_eosb_number(value, field: str, *, integer: bool = False) -> Decimal:
+    if not isinstance(value, str):
+        raise Reject(f"calculation_example.{field}: يجب أن تكون القيمة نصاً رقمياً")
+    raw = _normalize_eosb_digits(value.strip())
+    pattern = r"[0-9]+" if integer else r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?"
+    if not re.fullmatch(pattern, raw):
+        raise Reject(f"calculation_example.{field}: صيغة رقمية غير صالحة")
+    try:
+        number = Decimal(raw.replace(",", ""))
+    except InvalidOperation as exc:
+        raise Reject(f"calculation_example.{field}: رقم غير صالح") from exc
+    if not number.is_finite() or number < 0:
+        raise Reject(f"calculation_example.{field}: يجب ألا يكون الرقم سالباً")
+    return number
+
+
+def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_text: str) -> None:
+    """يرفض مثال مكافأة نهاية خدمة إذا خالف معادلة المادتين 84/85 أو نص المقال."""
+    if not isinstance(raw, dict) or set(raw) != set(EOSB_CALCULATION_FIELDS):
+        raise Reject("calculation_example: الكائن أو حقوله غير مكتملة")
+    topic_id = topic.get("id", "")
+    if topic_id not in EOSB_TOPIC_IDS:
+        if any(not isinstance(value, str) or value.strip() for value in raw.values()):
+            raise Reject("calculation_example: يجب ترك الحقول فارغة لغير موضوعات مكافأة نهاية الخدمة")
+        return dict(raw)
+
+    if any(not isinstance(raw[field], str) or not raw[field].strip()
+           for field in EOSB_CALCULATION_FIELDS):
+        raise Reject("calculation_example: بيانات المثال الحسابي مطلوبة لموضوع مكافأة نهاية الخدمة")
+    scenario = raw["scenario"].strip().lower()
+    if scenario not in {"base", "resignation", "article81", "article87"}:
+        raise Reject("calculation_example.scenario: قيمة غير مدعومة")
+    expected_scenario = EOSB_REQUIRED_SCENARIO.get(topic_id)
+    if expected_scenario and scenario != expected_scenario:
+        raise Reject(f"calculation_example.scenario: الموضوع {topic_id} يتطلب {expected_scenario}")
+
+    if not isinstance(example_text, str) or not example_text.strip():
+        raise Reject("المثال الحسابي يجب أن يظهر داخل قسم عنوانه يتضمن مثالاً / Example")
+    wage = _parse_eosb_number(raw["monthly_wage"], "monthly_wage")
+    years = _parse_eosb_number(raw["years"], "years")
+    months = _parse_eosb_number(raw["months"], "months", integer=True)
+    days = _parse_eosb_number(raw["days"], "days", integer=True)
+    if years != years.to_integral_value() and (months != 0 or days != 0):
+        raise Reject(
+            "calculation_example: عند استخدام سنوات كسرية يجب أن تكون الأشهر والأيام صفراً "
+            "لتجنّب احتساب المدة مرتين"
+        )
+    claimed_full = _parse_eosb_number(raw["full_benefit"], "full_benefit")
+    claimed_payable = _parse_eosb_number(raw["payable_benefit"], "payable_benefit")
+    if wage <= 0:
+        raise Reject("calculation_example.monthly_wage: يجب أن يكون الأجر أكبر من الصفر")
+    if years > 80 or months > 11 or days > 30:
+        raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
+
+    total_years = years + months / Decimal(12) + days / Decimal(365)
+    first_five = min(total_years, Decimal(5))
+    after_five = max(Decimal(0), total_years - Decimal(5))
+    full_raw = wage * first_five / Decimal(2) + wage * after_five
+    expected_full = full_raw.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    if scenario == "resignation":
+        if total_years < Decimal(2):
+            ratio = Decimal(0)
+        elif total_years <= Decimal(5):
+            ratio = Decimal(1) / Decimal(3)
+        elif total_years < Decimal(10):
+            ratio = Decimal(2) / Decimal(3)
+        else:
+            ratio = Decimal(1)
+    else:
+        ratio = Decimal(1)
+    expected_payable = (full_raw * ratio).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    claimed_full = claimed_full.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    claimed_payable = claimed_payable.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    if claimed_full != expected_full:
+        raise Reject(
+            f"calculation_example.full_benefit: المتوقع {expected_full} وليس {claimed_full}"
+        )
+    if claimed_payable != expected_payable:
+        raise Reject(
+            f"calculation_example.payable_benefit: المتوقع {expected_payable} وليس {claimed_payable}"
+        )
+
+    duration_claims = _extract_eosb_service_durations(example_text)
+    if not duration_claims:
+        raise Reject(
+            "قسم المثال الحسابي يجب أن يذكر مدة الخدمة صراحةً بصيغة مرتبطة بالخدمة / service"
+        )
+    mismatched_durations = [claim for claim in duration_claims if claim != total_years]
+    if mismatched_durations:
+        rendered = ", ".join(format(value, ".8f").rstrip("0").rstrip(".") for value in mismatched_durations)
+        expected_rendered = format(total_years, ".8f").rstrip("0").rstrip(".")
+        raise Reject(
+            f"مدة الخدمة بالنص ({rendered} سنة) لا تطابق بيانات الحساب "
+            f"({expected_rendered} سنة)"
+        )
+
+    normalized_text = _normalize_eosb_digits(article_text)
+    claims = []
+    for match in EOSB_MONEY_CLAIM_RE.finditer(normalized_text):
+        token = next((group for group in match.groups() if group), "")
+        if token:
+            try:
+                claims.append(Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP))
+            except InvalidOperation:
+                raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
+    allowed_amounts = {wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP),
+                       expected_full, expected_payable}
+    unexpected = sorted(set(claims) - allowed_amounts)
+    if unexpected:
+        raise Reject(
+            "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب "
+            + ", ".join(str(amount) for amount in unexpected)
+        )
+    missing = allowed_amounts - set(claims)
+    if missing:
+        raise Reject(
+            "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق "
+            + ", ".join(str(amount) for amount in sorted(missing))
+            + " بعملة واضحة"
+        )
+    return {
+        "monthly_wage": format(wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP), "f"),
+        "years": format(years.normalize(), "f"),
+        "months": str(int(months)),
+        "days": str(int(days)),
+        "scenario": scenario,
+        "full_benefit": format(expected_full, "f"),
+        "payable_benefit": format(expected_payable, "f"),
+    }
+
 # --- سياسة تعويض المادة 77: منفصلة عن مكافأة نهاية الخدمة --------------------
 # المدخل المستقل الاختياري لأي احتساب مستقبلي للتعويض، وقيمته الافتراضية False.
 ARTICLE_77_FLAG_NAME = "Has_Judicial_Ruling_Or_Settlement"
@@ -1051,13 +1347,40 @@ def build_prompt(topic, lang: str) -> str:
     legal_block = legal_rules_for(topic, lang)
     if legal_block:
         legal_block = f"قواعد قانونية إلزامية لهذا الموضوع:\n{legal_block}\n"
+    if topic.get("id") in EOSB_TOPIC_IDS:
+        required_scenario = EOSB_REQUIRED_SCENARIO.get(topic["id"])
+        if required_scenario:
+            scenario_instruction = f"هذا الموضوع يتطلب scenario={required_scenario}.\n"
+        else:
+            scenario_instruction = (
+                "اختر scenario يطابق المثال بدقة: base (أساس المادة 84 قبل أي نسبة خاصة)، "
+                "resignation (نسبة المادة 85)، article81 (حالة المادة 81)، أو article87 (استثناء المادة 87).\n"
+            )
+        calculation_rule = (
+            "7) calculation_example: املأ الحقول كلها بنصوص رقمية تستخدم أرقاماً غربية بلا فواصل داخل JSON؛ "
+            "monthly_wage هو الأجر الشهري، وyears/months/days مدة الخدمة (الأشهر 0–11 والأيام 0–30). "
+            "يمكن تمثيل السنة الكسرية مثل 6.5 في years بشرط أن يكون months وdays صفراً؛ أو استخدم سنوات صحيحة مع الأشهر والأيام حتى لا تُحتسب المدة مرتين. "
+            "full_benefit هو ناتج المادة 84 (نصف أجر عن كل سنة من أول خمس سنوات ثم أجر شهر لكل سنة بعدها، "
+            "مع احتساب كسر السنة بنسبة مدته)، وpayable_benefit هو المبلغ بعد نسبة المادة 85 إذا كان السيناريو "
+            "resignation، وإلا الأساس الكامل في هذا المثال. استخدم منزلتين عشريتين كحد أقصى للمبالغ.\n"
+            "ضع المثال الرقمي داخل قسم عنوانه يتضمن كلمة «مثال» أو “Example”، واذكر مدة الخدمة فيه صراحةً "
+            "بصيغة مرتبطة بالخدمة؛ يجب أن تتطابق السنوات والأشهر والأيام المكتوبة في هذا القسم مع الحقول المنظمة.\n"
+            + scenario_instruction
+            + "يُعاد حساب هذه القيم آلياً؛ إن لم تستطع ضبط المثال حسابياً فلا تخمّن ولا تكتب مثالاً مخالفاً. "
+            "كل مبلغ نقدي مذكور في نص المقال يجب أن يكون أحد هذه المبالغ فقط، ويجب إظهاره بعملة واضحة مثل ريال أو SAR. وعند إنتاج النسختين، استخدم الأجر ومدة الخدمة والسيناريو والنتائج الحسابية نفسها في العربية والإنجليزية.\n"
+        )
+    else:
+        calculation_rule = (
+            "7) calculation_example: أعد الكائن المطلوب لكن اترك جميع قيمه كسلاسل فارغة، "
+            "لأن هذا الموضوع ليس من موضوعات مكافأة نهاية الخدمة.\n"
+        )
     return (
         "أنت محرّر محتوى إرشادي-عملي لمنصة أدوات سعودية. ما تكتبه إرشاد عام وليس استشارة قانونية.\n"
         f"الموضوع: {title}\n"
         f"لغة المخرجات: {lang_name}\n"
         f"{guidance}\n\n"
         "قواعد إلزامية:\n"
-        "1) أعد كائن JSON واحداً فقط، بلا نص خارجه وبلا أسوار markdown.\n"
+        "1) أعد كائن JSON واحداً صالحاً فقط، بلا نص خارجه وبلا أسوار markdown.\n"
         "2) لا تُدرج أي HTML أو وسوم أو سكربتات داخل النصوص؛ نصّ عادي فقط.\n"
         "3) لا تخترع أرقام مواد أو نِسَباً أو مُدداً أو جهات. إن لم تكن واثقاً فاذكر القاعدة العامة بتحفّظ.\n"
         f"{source_rule}"
@@ -1071,13 +1394,16 @@ def build_prompt(topic, lang: str) -> str:
         '  "excerpt": "ملخص من 40 إلى 240 حرفاً",\n'
         '  "sections": [{"heading": "عنوان فرعي", "body": "فقرة أو فقرات مفصولة بسطر فارغ", "bullets": ["نقطة"]}],\n'
         '  "faq": [{"q": "سؤال", "a": "جواب"}],\n'
-        '  "official_sources": [{"title": "اسم الجهة", "url": "https://....gov.sa/..."}]\n'
+        '  "official_sources": [{"title": "اسم الجهة", "url": "https://....gov.sa/..."}],\n'
+        '  "calculation_example": {"monthly_wage": "", "years": "", "months": "", "days": "", "scenario": "", "full_benefit": "", "payable_benefit": ""}\n'
         "}\n\n"
         f"- sections: من {MIN_SECTIONS} إلى {MAX_SECTIONS} عناصر، و bullets اختيارية (اتركها [] عند عدم الحاجة).\n"
         "- faq: من سؤالين إلى أربعة أسئلة.\n"
         "- إجمالي المحتوى لا يقل عن 350 كلمة.\n"
         "- لا تُضِف حقولاً خارج البنية أعلاه.\n"
+        f"{calculation_rule}"
     )
+
 
 
 def _extract_json_text(text):
@@ -1168,10 +1494,8 @@ GROQ_ARTICLE_SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string", "description": "عنوان المقال"},
-        "meta_description": {"type": "string",
-                             "description": "وصف من 50 إلى 160 حرفاً"},
-        "excerpt": {"type": "string",
-                    "description": "ملخص من 40 إلى 240 حرفاً"},
+        "meta_description": {"type": "string", "description": "وصف من 50 إلى 160 حرفاً"},
+        "excerpt": {"type": "string", "description": "ملخص من 40 إلى 240 حرفاً"},
         "sections": {
             "type": "array",
             "description": "من 3 إلى 12 قسماً",
@@ -1179,11 +1503,8 @@ GROQ_ARTICLE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "heading": {"type": "string", "description": "عنوان فرعي"},
-                    "body": {"type": "string",
-                             "description": "فقرة لا تقل عن 120 حرفاً، أو فقرات "
-                                            "مفصولة بسطر فارغ"},
-                    "bullets": {"type": "array",
-                                "description": "اتركها [] عند عدم الحاجة (بحد أقصى 8)",
+                    "body": {"type": "string", "description": "فقرة أو فقرات مفصولة بسطر فارغ"},
+                    "bullets": {"type": "array", "description": "نقاط اختيارية",
                                 "items": {"type": "string"}},
                 },
                 "required": ["heading", "body", "bullets"],
@@ -1191,36 +1512,43 @@ GROQ_ARTICLE_SCHEMA = {
             },
         },
         "faq": {
-            "type": "array",
-            "description": "من سؤالين إلى أربعة أسئلة",
+            "type": "array", "description": "من سؤالين إلى أربعة أسئلة",
             "items": {
                 "type": "object",
-                "properties": {
-                    "q": {"type": "string"},
-                    "a": {"type": "string"},
-                },
-                "required": ["q", "a"],
-                "additionalProperties": False,
+                "properties": {"q": {"type": "string"}, "a": {"type": "string"}},
+                "required": ["q", "a"], "additionalProperties": False,
             },
         },
         "official_sources": {
-            "type": "array",
-            "description": "من 2 إلى 4 مصادر رسمية منقولة حرفاً من قائمة البرومبت",
+            "type": "array", "description": "من 2 إلى 4 مصادر رسمية من قائمة البرومبت",
             "items": {
                 "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "url": {"type": "string"},
-                },
-                "required": ["title", "url"],
-                "additionalProperties": False,
+                "properties": {"title": {"type": "string"}, "url": {"type": "string"}},
+                "required": ["title", "url"], "additionalProperties": False,
             },
+        },
+        "calculation_example": {
+            "type": "object",
+            "description": "بيانات مستقلة لتدقيق المثال الحسابي؛ تُترك فارغة لغير موضوعات مكافأة نهاية الخدمة",
+            "properties": {
+                "monthly_wage": {"type": "string"},
+                "years": {"type": "string"},
+                "months": {"type": "string"},
+                "days": {"type": "string"},
+                "scenario": {"type": "string"},
+                "full_benefit": {"type": "string"},
+                "payable_benefit": {"type": "string"},
+            },
+            "required": ["monthly_wage", "years", "months", "days", "scenario",
+                         "full_benefit", "payable_benefit"],
+            "additionalProperties": False,
         },
     },
     "required": ["title", "meta_description", "excerpt", "sections", "faq",
-                 "official_sources"],
+                 "official_sources", "calculation_example"],
     "additionalProperties": False,
 }
+
 
 
 def groq_response_format() -> dict:
@@ -1436,11 +1764,12 @@ def normalize_faq(raw) -> list:
 
 
 def validate_article(data, *, topic, lang, published_at) -> dict:
-    """يرفع Reject عند فشل أي بوابة، ويرجع قاموس المقال النهائي عند النجاح."""
+    """يرفع Reject عند فشل أي بوابة، بما فيها تدقيق حتمي لأي مثال EOSB رقمي."""
     if not isinstance(data, dict):
         raise Reject("المخرجات ليست كائن JSON")
 
-    allowed = {"title", "meta_description", "excerpt", "sections", "faq", "official_sources"}
+    allowed = {"title", "meta_description", "excerpt", "sections", "faq",
+               "official_sources", "calculation_example"}
     extra = set(data) - allowed
     if extra:
         raise Reject("حقول غير متوقّعة: " + ", ".join(sorted(extra)))
@@ -1462,6 +1791,19 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
 
     body_text = " ".join(s["body"] + " " + " ".join(s["bullets"]) for s in sections)
     faq_text = " ".join(f"{f['q']} {f['a']}" for f in faq)
+    audit_text = " ".join((title, meta_description, excerpt, body_text, faq_text))
+    example_sections = [
+        section for section in sections
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    ]
+    example_text = " ".join(
+        section["body"] + " " + " ".join(section["bullets"])
+        for section in example_sections
+    )
+    calculation_example = validate_eosb_calculation_example(
+        data.get("calculation_example"), topic=topic, article_text=audit_text,
+        example_text=example_text,
+    )
     total_chars = len(body_text) + len(faq_text) + len(title) + len(excerpt)
     if total_chars < MIN_TOTAL_CHARS:
         raise Reject(f"المحتوى قصير: {total_chars} حرفاً (الحد {MIN_TOTAL_CHARS})")
@@ -1482,12 +1824,34 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
         "sections": sections,
         "faq": faq,
         "official_sources": sources,
+        "calculation_example": calculation_example,
         "tool": topic["tool"],
         "published_at": published_at,
         "updated_at": published_at,
         "url": f"/articles/{lang}/{slug}.html",
         "word_count": words,
     }
+
+
+
+def validate_eosb_translation_pair(ar_article, en_article) -> list:
+    """Return problems when Arabic and English versions disagree on their EOSB example."""
+    if not isinstance(ar_article, dict) or not isinstance(en_article, dict):
+        return ["النسختان العربية والإنجليزية غير متاحتين"]
+    if ar_article.get("translation_id") != en_article.get("translation_id"):
+        return ["النسختان لا تنتميان إلى الموضوع نفسه"]
+    if ar_article.get("lang") != "ar" or en_article.get("lang") != "en":
+        return ["ترتيب أو لغة النسختين غير صحيح"]
+    if ar_article.get("translation_id") not in EOSB_TOPIC_IDS:
+        return []
+    fields = EOSB_CALCULATION_FIELDS
+    ar_calc = ar_article.get("calculation_example")
+    en_calc = en_article.get("calculation_example")
+    if not isinstance(ar_calc, dict) or not isinstance(en_calc, dict):
+        return ["بيانات تدقيق المثال الحسابي غير موجودة في إحدى اللغتين"]
+    mismatches = [field for field in fields if ar_calc.get(field) != en_calc.get(field)]
+    return (["المثال الحسابي غير متطابق بين العربية والإنجليزية: " + ", ".join(mismatches)]
+            if mismatches else [])
 
 
 def duplicate_check(article, existing_records) -> list:
@@ -2100,7 +2464,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
         attempted = True
         log(f"توليد النسخة {lang}…")
         if dry_run:
-            ok, data, msg = True, fixture_data(lang), "fixture"
+            ok, data, msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
         else:
             ok, data, msg = generate_json(
                 provider, build_prompt(topic, lang), api_key=api_key, model=model)
@@ -2122,6 +2486,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
         article["content_hash"] = sha256_text(json.dumps(article["sections"], ensure_ascii=False))
         results[lang] = article
         log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
+
+    if topic["id"] in EOSB_TOPIC_IDS and results.get("ar") and results.get("en"):
+        pair_problems = validate_eosb_translation_pair(results["ar"], results["en"])
+        if pair_problems:
+            reason = "; ".join(pair_problems)
+            log("[REJECT] مثال المكافأة مختلف بين النسختين؛ لن تُحفظ أي منهما: " + reason)
+            for lang in ("ar", "en"):
+                state["topics"][topic["id"]][lang] = "rejected"
+                results.pop(lang, None)
 
     ready = [results[l] for l in lang_order if results.get(l)]
     if not ready:
@@ -2305,6 +2678,156 @@ def selftest() -> int:
     except Reject as exc:
         check(f"validate_article: نموذج إنجليزي سليم (رُفض: {redact(exc)})", False)
 
+        # 2-أ) تدقيق الحساب الرقمي وفق المادتين 84 و85.
+    eosb_topic = topic_by_id("labor-art85")
+    eosb_good = fixture_data("ar", topic_id="labor-art85")
+    eosb_good_article = validate_article(
+        eosb_good, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("تدقيق EOSB: يقبل أساس 42,000 ومستحق 28,000 لأجر 12,000 وخدمة 6 سنوات",
+          eosb_good_article["calculation_example"]["payable_benefit"] == "28000.00")
+    eosb_good_en = fixture_data("en", topic_id="labor-art85")
+    eosb_good_en_article = validate_article(
+        eosb_good_en, topic=eosb_topic, lang="en", published_at="2026-01-01")
+    check("تدقيق EOSB: المثالان العربي والإنجليزي متطابقان عند تطابق البيانات",
+          validate_eosb_translation_pair(eosb_good_article, eosb_good_en_article) == [])
+
+    eosb_pair_bad = fixture_data("en", topic_id="labor-art85")
+    eosb_pair_bad["calculation_example"].update({
+        "monthly_wage": "10000", "full_benefit": "35000", "payable_benefit": "23333.33",
+    })
+    eosb_pair_bad["sections"][3]["body"] = (
+        eosb_pair_bad["sections"][3]["body"]
+        .replace("SAR 12,000", "SAR 10,000")
+        .replace("SAR 42,000", "SAR 35,000")
+        .replace("SAR 28,000", "SAR 23,333.33")
+    )
+    eosb_pair_bad_article = validate_article(
+        eosb_pair_bad, topic=eosb_topic, lang="en", published_at="2026-01-01")
+    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين رغم صحة كل نسخة منفردة",
+          validate_eosb_translation_pair(eosb_good_article, eosb_pair_bad_article) != [])
+
+    eosb_bad = fixture_data("ar", topic_id="labor-art85")
+    eosb_bad["calculation_example"]["payable_benefit"] = "48000"
+    check("تدقيق EOSB: يرفض نتيجة استقالة خاطئة داخل بيانات الحساب",
+          _rejects(lambda: validate_article(
+              eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_bad = fixture_data("ar", topic_id="labor-art85")
+    eosb_bad["sections"][3]["body"] = eosb_bad["sections"][3]["body"].replace(
+        "28,000 ريال", "48,000 ريال")
+    check("تدقيق EOSB: يرفض مبلغاً خاطئاً بالنص ولو كانت بيانات الحساب سليمة",
+          _rejects(lambda: validate_article(
+              eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_bad = fixture_data("ar", topic_id="labor-art85")
+    eosb_bad["calculation_example"]["full_benefit"] = "72000"
+    check("تدقيق EOSB: يرفض ضرب الأجر الشهري في كل سنوات الخدمة",
+          _rejects(lambda: validate_article(
+              eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_bad = fixture_data("ar", topic_id="labor-art85")
+    eosb_bad["calculation_example"]["scenario"] = "base"
+    check("تدقيق EOSB: موضوع المادة 85 يتطلب نسبة الاستقالة",
+          _rejects(lambda: validate_article(
+              eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    art81_topic = topic_by_id("labor-art81")
+    art81_good = fixture_data("ar", topic_id="labor-art81")
+    check("تدقيق EOSB: يقبل سيناريو المادة 81 بالمكافأة الكاملة",
+          not _rejects(lambda: validate_article(
+              art81_good, topic=art81_topic, lang="ar", published_at="2026-01-01")))
+    art81_bad = fixture_data("ar", topic_id="labor-art81")
+    art81_bad["calculation_example"]["scenario"] = "resignation"
+    art81_bad["calculation_example"]["payable_benefit"] = "28000"
+    art81_bad["sections"][3]["body"] = art81_bad["sections"][3]["body"].replace(
+        "والمبلغ المستحق في هذا المثال 42,000 ريال.",
+        "والمكافأة الأساسية 42,000 ريال، وبعد نسبة الاستقالة المبلغ المستحق 28,000 ريال.")
+    check("تدقيق EOSB: يرفض نسبة الاستقالة في موضوع المادة 81",
+          _rejects(lambda: validate_article(
+              art81_bad, topic=art81_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_duration_bad = fixture_data("ar", topic_id="labor-art85")
+    eosb_duration_bad["sections"][3]["body"] = eosb_duration_bad["sections"][3]["body"].replace(
+        "مدة الخدمة 6 سنوات", "مدة الخدمة 10 سنوات")
+    check("تدقيق EOSB: يرفض تناقض مدة الخدمة بين النص وبيانات الحساب",
+          _rejects(lambda: validate_article(
+              eosb_duration_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_duration_bad_en = fixture_data("en", topic_id="labor-art85")
+    eosb_duration_bad_en["sections"][3]["body"] = eosb_duration_bad_en["sections"][3]["body"].replace(
+        "six years of service", "ten years of service")
+    check("تدقيق EOSB: يرفض تناقض مدة الخدمة في المثال الإنجليزي",
+          _rejects(lambda: validate_article(
+              eosb_duration_bad_en, topic=eosb_topic, lang="en", published_at="2026-01-01")))
+
+    eosb_fractional_year = fixture_data("ar", topic_id="labor-art85")
+    eosb_fractional_year["calculation_example"].update({
+        "years": "6.5", "months": "0", "days": "0",
+        "full_benefit": "48000", "payable_benefit": "32000",
+    })
+    eosb_fractional_year["sections"][3]["body"] = (
+        eosb_fractional_year["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 6.5 سنوات")
+        .replace("42,000 ريال", "48,000 ريال")
+        .replace("28,000 ريال", "32,000 ريال")
+    )
+    fractional_article = validate_article(
+        eosb_fractional_year, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("تدقيق EOSB: يقبل 6.5 سنوات ويحسب الأساس 48,000 والمستحق 32,000",
+          fractional_article["calculation_example"]["years"] == "6.5"
+          and fractional_article["calculation_example"]["full_benefit"] == "48000.00"
+          and fractional_article["calculation_example"]["payable_benefit"] == "32000.00")
+
+    eosb_components = fixture_data("ar", topic_id="labor-art85")
+    eosb_components["calculation_example"].update({
+        "years": "6", "months": "6", "days": "15",
+        "full_benefit": "48493.15", "payable_benefit": "32328.77",
+    })
+    eosb_components["sections"][3]["body"] = (
+        eosb_components["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 6 سنوات و6 أشهر و15 يوماً")
+        .replace("42,000 ريال", "48,493.15 ريال")
+        .replace("28,000 ريال", "32,328.77 ريال")
+    )
+    components_article = validate_article(
+        eosb_components, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("تدقيق EOSB: يحتسب 6 سنوات و6 أشهر و15 يوماً وفق التناسب بالأيام",
+          components_article["calculation_example"]["full_benefit"] == "48493.15"
+          and components_article["calculation_example"]["payable_benefit"] == "32328.77")
+
+    eosb_fraction_double_count = fixture_data("ar", topic_id="labor-art85")
+    eosb_fraction_double_count["calculation_example"].update({
+        "years": "6.5", "months": "6", "days": "15",
+    })
+    check("تدقيق EOSB: يمنع جمع سنوات كسرية مع أشهر/أيام تسبب احتساب المدة مرتين",
+          _rejects(lambda: validate_article(
+              eosb_fraction_double_count, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_partial = fixture_data("ar", topic_id="labor-art85")
+    eosb_partial["calculation_example"].update({
+        "years": "4", "months": "6", "full_benefit": "27000",
+        "payable_benefit": "9000",
+    })
+    eosb_partial["sections"][3]["body"] = (
+        eosb_partial["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 4 سنوات و6 أشهر")
+        .replace("42,000 ريال", "27,000 ريال")
+        .replace("28,000 ريال", "9,000 ريال")
+    )
+    check("تدقيق EOSB: يحتسب كسر السنة تناسبياً قبل تطبيق ثلث المكافأة",
+          not _rejects(lambda: validate_article(
+              eosb_partial, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    non_eosb_topic = topic_by_id("net-salary-calculation")
+    non_eosb_data = fixture_data("ar", topic_id="net-salary-calculation")
+    check("تدقيق EOSB: الحقول الفارغة مقبولة للموضوعات غير المرتبطة بالمكافأة",
+          not _rejects(lambda: validate_article(
+              non_eosb_data, topic=non_eosb_topic, lang="ar", published_at="2026-01-01")))
+    non_eosb_data["calculation_example"]["monthly_wage"] = "12000"
+    check("تدقيق EOSB: يمنع تمرير بيانات مكافأة على موضوع آخر",
+          _rejects(lambda: validate_article(
+              non_eosb_data, topic=non_eosb_topic, lang="ar", published_at="2026-01-01")))
+
     # 3) رفض HTML
     bad = fixture_data("ar")
     bad["sections"][0]["body"] = "<script>alert(1)</script>" + bad["sections"][0]["body"]
@@ -2475,15 +2998,15 @@ def selftest() -> int:
 
     _FAKE_GROQ_KEY = "gsk_FAKE_1234567890_SELFTEST"
 
-    def _envelope(lang):
-        text = json.dumps(fixture_data(lang), ensure_ascii=False)
+    def _envelope(lang, topic_id="eosb-basics"):
+        text = json.dumps(fixture_data(lang, topic_id=topic_id), ensure_ascii=False)
         blob = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
         return 200, {}, json.dumps(blob, ensure_ascii=False).encode("utf-8")
 
-    def _groq_envelope(content=None, lang=None, finish="stop"):
+    def _groq_envelope(content=None, lang=None, finish="stop", topic_id="eosb-basics"):
         """ظرف Groq (OpenAI-compatible) بنصّ JSON داخل message.content."""
         if content is None:
-            content = json.dumps(fixture_data(lang), ensure_ascii=False)
+            content = json.dumps(fixture_data(lang, topic_id=topic_id), ensure_ascii=False)
         blob = {
             "id": "chatcmpl-selftest",
             "object": "chat.completion",
@@ -2500,6 +3023,15 @@ def selftest() -> int:
         if "messages" in body:
             return body["messages"][-1]["content"]
         return body["contents"][0]["parts"][0]["text"]
+
+    def _topic_id_from_prompt(prompt):
+        line = next((value.strip() for value in prompt.splitlines()
+                     if value.startswith("الموضوع: ")), "")
+        title = line.removeprefix("الموضوع: ").strip()
+        for candidate in TOPICS:
+            if title in (candidate.get("title_ar"), candidate.get("title_en")):
+                return candidate["id"]
+        return "eosb-basics"
 
     def _provider_of(url):
         return "groq" if "api.groq.com" in url else "gemini"
@@ -2519,9 +3051,11 @@ def selftest() -> int:
                 return 200, {}, b"<html>" + b"s" * 2000 + b"</html>", url
             prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+            topic_id = _topic_id_from_prompt(prompt)
             calls[lang] += 1
             if lang == "en" and en_ok:
-                ok_env = _groq_envelope(lang=lang) if _provider_of(url) == "groq" else _envelope(lang)
+                ok_env = (_groq_envelope(lang=lang, topic_id=topic_id)
+                          if _provider_of(url) == "groq" else _envelope(lang, topic_id=topic_id))
                 return ok_env + (url,)
             return (503, {}, b'{"error":{"status":"UNAVAILABLE","message":"high demand"}}', url)
 
@@ -2718,7 +3252,8 @@ def selftest() -> int:
                                "body": json.loads(kwargs["data"].decode("utf-8"))})
             prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
-            return _groq_envelope(lang=lang) + (url,)
+            topic_id = _topic_id_from_prompt(prompt)
+            return _groq_envelope(lang=lang, topic_id=topic_id) + (url,)
 
         globals()["http_request_full"] = _fake_groq_ok
         rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
@@ -3080,10 +3615,12 @@ def selftest() -> int:
 
             def _fn(url, **kwargs):
                 if "generativelanguage.googleapis.com" in url:
-                    lang = "en" if "لغة المخرجات: English" in _request_prompt(kwargs) else "ar"
+                    prompt = _request_prompt(kwargs)
+                    lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+                    topic_id = _topic_id_from_prompt(prompt)
                     if lang in fail_langs:
                         return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
-                    return _envelope(lang) + (url,)
+                    return _envelope(lang, topic_id=topic_id) + (url,)
                 probes.append(url)
                 return source(url)
 
@@ -3186,7 +3723,8 @@ def selftest() -> int:
                     return fail + (url,)
                 prompt = _request_prompt(kwargs)
                 lang = "en" if "لغة المخرجات: English" in prompt else "ar"
-                return _groq_envelope(lang=lang) + (url,)
+                topic_id = _topic_id_from_prompt(prompt)
+                return _groq_envelope(lang=lang, topic_id=topic_id) + (url,)
             return _fn
 
         def _schema_problems(node, path="$"):
@@ -3237,11 +3775,11 @@ def selftest() -> int:
               and _rf == groq_response_format()
               and "json_object" not in json.dumps(_rf, ensure_ascii=False))
 
-        # 2) المخطّط: حقول المقال الستة بالضبط، وكل كائن مغلق ومتطلبه كامل، وبلا أي
+        # 2) المخطّط: حقول المقال المطلوبة بالضبط، وكل كائن مغلق ومتطلبه كامل، وبلا أي
         #    كلمة JSON Schema غير مدعومة (فلا يُرفض الطلب عند Groq بسببها).
         check("Structured Outputs: المخطّط يحقق متطلبات Groq الصارمة وبلا كلمات غير مدعومة",
               _schema.get("type") == "object" and _schema_problems(_schema) == [])
-        check("Structured Outputs: المخطّط يضمّ حقول المقال الستة بالضبط وبلا حقل زائد",
+        check("Structured Outputs: المخطّط يضمّ الحقول المطلوبة بما فيها تدقيق الحساب",
               set(_props) == set(fixture_data("ar")) == set(fixture_data("en"))
               and set(_schema.get("required") or []) == set(fixture_data("ar")))
 
@@ -3689,7 +4227,8 @@ def selftest() -> int:
                 prompt = _request_prompt(kwargs)
                 _lang = "en" if "لغة المخرجات: English" in prompt else "ar"
                 _rec[_lang] += 1
-                return _groq_envelope(lang=_lang) + (url,)
+                topic_id = _topic_id_from_prompt(prompt)
+                return _groq_envelope(lang=_lang, topic_id=topic_id) + (url,)
 
             return _fn, _rec
 
