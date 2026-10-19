@@ -4479,7 +4479,7 @@ def selftest() -> int:
               and backoff_delay(50) == GEMINI_BACKOFF_MAX
               and backoff_delay(0) == GEMINI_BACKOFF_BASE
               and backoff_delay(0, retry_after="12") == 12.0
-              and backoff_delay(0, retry_after="600") == GEMINI_BACKOFF_MAX
+              and backoff_delay(0, retry_after="600") == 600.0
               and backoff_delay(0, retry_after="غير رقمي") == GEMINI_BACKOFF_BASE
               and {503, 429, 500, 502, 504} <= RETRYABLE_STATUS
               and not ({400, 401, 403, 404, 422} & RETRYABLE_STATUS))
@@ -4804,7 +4804,7 @@ def selftest() -> int:
               and all(f"Supplemental retained content marker {_n}." in _overflow_text
                       and f"Supplemental bullet marker {_n}" in _overflow_text
                       and f"Supplemental section {_n}" in _overflow_text
-                      for _n in range(10))
+                      for _n in range(10)))
         _fixture_excerpt = fixture_data("en", topic_id="labor-art85")
         _fixture_excerpt["excerpt"] = ("This is a helpful introductory summary with practical information. " * 5)[:318]
         _trimmed_excerpt = trim_article85_excerpt(_fixture_excerpt)
@@ -5584,8 +5584,8 @@ def selftest() -> int:
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _fail_before)
         check("فشل Groq المتكرر: المحاولات محدودة وتبقى على المخطط الصارم",
-              _fail_calls == {"ar": GEMINI_MAX_TRIES, "en": GEMINI_MAX_TRIES}
-              and len(_fail_reqs) == 2 * GEMINI_MAX_TRIES
+              _fail_calls == {"ar": GROQ_INITIAL_HTTP_TRIES, "en": GROQ_INITIAL_HTTP_TRIES}
+              and len(_fail_reqs) == 2 * GROQ_INITIAL_HTTP_TRIES
               and all(r.get("reasoning_effort") == "low"
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}
