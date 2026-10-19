@@ -438,7 +438,9 @@ def _split_article_sentences(value: str) -> list:
 def _expand_inline_article_lists(value: str) -> str:
     """Turn inline bullets/numbered steps into line markers before HTML rendering."""
     text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", str(value or ""))
-    text = re.sub(r"(?<!\d)\s+(\d{1,2}[.)])\s+", r"\n\1 ", text)
+    # Only split single-digit inline markers here: Article references such as "Article 86. The"
+    # must remain normal prose, not be mistaken for numbered list items.
+    text = re.sub(r"(?<!\d)\s+([1-9][.)])\s+", r"\n\1 ", text)
     # Arabic drafts sometimes encode every sub-step as '- item' inside a single sentence.
     # Require repeated spaced hyphens so a normal dash in prose is not mistaken for a list.
     if len(re.findall(r"\s+-\s+", text)) >= 2:
@@ -4776,6 +4778,12 @@ def selftest() -> int:
     check("عرض المقال: تحويل الخطوات المرقمة إلى قائمة مرتبة",
           '<ol class="article-list">' in _formatted_steps
           and _formatted_steps.count("<li>") == 2)
+    _article_numbers_prose = render_article_body(
+        "Articles 84 and 86. The key points are: • first rule applies. • second rule applies."
+    )
+    check("عرض المقال: أرقام مواد النظام لا تتحول إلى عناصر قائمة",
+          '<ul class="article-list">' in _article_numbers_prose
+          and '<ol class="article-list">' not in _article_numbers_prose)
     _clean_faq_artifact = render_article_body("Common Questions FAQ FAQ FAQ FAQ For resignation, check the rules.")
     check("عرض المقال: حذف تكرار FAQ الذي يسرّب من التوليد",
           "FAQ" not in _clean_faq_artifact and "Common Questions" not in _clean_faq_artifact)
