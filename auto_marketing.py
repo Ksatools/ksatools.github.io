@@ -2062,7 +2062,6 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     )
     is_minimum_conflict = bool(
         re.search(r"(?:minimum|حد أدنى|الحد الأدنى)", reason_text, re.IGNORECASE)
-        and re.search(r"(?:two years|2 years|سنتين|عامين)", reason_text, re.IGNORECASE)
     )
     is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
     is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
@@ -2376,13 +2375,13 @@ def validate_article85_faq_consistency(faq: list, *, lang: str) -> None:
                 r"\b(?:before|less than|under)\s+(?:two|2)\s+consecutive?\s+years?\b",
                 answer,
             ))
-            if asks_minimum and denies_minimum:
-                raise Reject(
-                    "Article 85: FAQ about minimum service cannot say there is no minimum for resignation entitlement"
-                )
             if denies_minimum and states_two_year_bar:
                 raise Reject(
                     "Article 85: contradictory minimum-service FAQ; Article 85 has a two-consecutive-year threshold for resignation"
+                )
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "Article 85: FAQ about minimum service cannot say there is no minimum for resignation entitlement"
                 )
         else:
             asks_minimum = bool(re.search(
@@ -2398,13 +2397,13 @@ def validate_article85_faq_consistency(faq: list, *, lang: str) -> None:
                 r"(?:قبل|أقل\s+من|دون).{0,25}(?:سنتين|عامين|سنتين\s+متتاليتين)",
                 answer,
             ))
-            if asks_minimum and denies_minimum:
-                raise Reject(
-                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى"
-                )
             if denies_minimum and states_two_year_bar:
                 raise Reject(
                     "المادة 85: إجابة الحد الأدنى متناقضة؛ تشترط المادة 85 سنتين متتاليتين لاستحقاق مكافأة الاستقالة"
+                )
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى"
                 )
 
 
