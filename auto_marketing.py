@@ -1057,7 +1057,7 @@ def _normalize_eosb_digits(value: str) -> str:
 
 
 EOSB_DURATION_NUMBER = (
-    r"(?:[0-9]+|zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"(?:[0-9]+(?:\\.[0-9]+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|"
     r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
     r"nineteen|twenty|صفر|واحد|واحدة|احد|إحدى|اثنان|اثنين|اثنتان|اثنتين|"
     r"ثلاث|ثلاثة|أربع|أربعة|اربع|اربعة|خمس|خمسة|ست|ستة|سبع|سبعة|"
@@ -1086,10 +1086,10 @@ EOSB_SERVICE_DURATION_PATTERNS = (
 )
 
 
-def _duration_number(value: str) -> int:
+def _duration_number(value: str) -> Decimal:
     token = _normalize_eosb_digits(value).strip().lower()
-    if token.isdigit():
-        return int(token)
+    if re.fullmatch(r"[0-9]+(?:\\.[0-9]+)?", token):
+        return Decimal(token)
     words = {
         "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -1110,11 +1110,11 @@ def _duration_number(value: str) -> int:
     }
     if token not in words:
         raise Reject("مدة الخدمة في المثال تستخدم رقماً أو صيغة عددية غير مدعومة")
-    return words[token]
+    return Decimal(words[token])
 
 
 def _extract_eosb_service_durations(example_text: str) -> list:
-    """استخرج مدد الخدمة المذكورة صراحة داخل قسم المثال الحسابي."""
+    """استخرج مدد الخدمة المذكورة صراحة داخل قسم المثال الحسابي وحوّلها إلى سنوات."""
     if not isinstance(example_text, str) or not example_text.strip():
         return []
     text = _normalize_eosb_digits(example_text).lower()
@@ -1125,21 +1125,19 @@ def _extract_eosb_service_durations(example_text: str) -> list:
             pairs = list(EOSB_DURATION_PAIR_RE.finditer(match.group("duration")))
             if not pairs:
                 continue
-            duration = {"years": 0, "months": 0, "days": 0}
+            total_years = Decimal(0)
             for pair in pairs:
                 number = _duration_number(pair.group("number"))
                 unit = pair.group("unit").lower()
                 if unit.startswith(("year", "yr")) or unit in {"سنة", "سنوات", "سنتان", "سنتين", "عام", "عامان", "أعوام", "اعوام"}:
-                    key = "years"
+                    total_years += number
                 elif unit.startswith(("month", "mo")) or unit in {"شهر", "أشهر", "اشهر", "شهراً", "شهرًا"}:
-                    key = "months"
+                    total_years += number / Decimal(12)
                 else:
-                    key = "days"
-                duration[key] += number
-            claim = (duration["years"], duration["months"], duration["days"])
-            if claim not in seen:
-                seen.add(claim)
-                claims.append(claim)
+                    total_years += number / Decimal(365)
+            if total_years not in seen:
+                seen.add(total_years)
+                claims.append(total_years)
     return claims
 
 
@@ -1182,9 +1180,14 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
     if not isinstance(example_text, str) or not example_text.strip():
         raise Reject("المثال الحسابي يجب أن يظهر داخل قسم عنوانه يتضمن مثالاً / Example")
     wage = _parse_eosb_number(raw["monthly_wage"], "monthly_wage")
-    years = _parse_eosb_number(raw["years"], "years", integer=True)
+    years = _parse_eosb_number(raw["years"], "years")
     months = _parse_eosb_number(raw["months"], "months", integer=True)
     days = _parse_eosb_number(raw["days"], "days", integer=True)
+    if years != years.to_integral_value() and (months != 0 or days != 0):
+        raise Reject(
+            "calculation_example: عند استخدام سنوات كسرية يجب أن تكون الأشهر والأيام صفراً "
+            "لتجنّب احتساب المدة مرتين"
+        )
     claimed_full = _parse_eosb_number(raw["full_benefit"], "full_benefit")
     claimed_payable = _parse_eosb_number(raw["payable_benefit"], "payable_benefit")
     if wage <= 0:
@@ -1225,13 +1228,13 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
         raise Reject(
             "قسم المثال الحسابي يجب أن يذكر مدة الخدمة صراحةً بصيغة مرتبطة بالخدمة / service"
         )
-    expected_duration = (int(years), int(months), int(days))
-    mismatched_durations = [claim for claim in duration_claims if claim != expected_duration]
+    mismatched_durations = [claim for claim in duration_claims if claim != total_years]
     if mismatched_durations:
-        rendered = ", ".join(f"{y}y {m}m {d}d" for y, m, d in mismatched_durations)
+        rendered = ", ".join(format(value, ".8f").rstrip("0").rstrip(".") for value in mismatched_durations)
+        expected_rendered = format(total_years, ".8f").rstrip("0").rstrip(".")
         raise Reject(
-            f"مدة الخدمة بالنص ({rendered}) لا تطابق بيانات الحساب "
-            f"({expected_duration[0]}y {expected_duration[1]}m {expected_duration[2]}d)"
+            f"مدة الخدمة بالنص ({rendered} سنة) لا تطابق بيانات الحساب "
+            f"({expected_rendered} سنة)"
         )
 
     normalized_text = _normalize_eosb_digits(article_text)
@@ -1261,7 +1264,7 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
         )
     return {
         "monthly_wage": format(wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP), "f"),
-        "years": str(int(years)),
+        "years": format(years.normalize(), "f"),
         "months": str(int(months)),
         "days": str(int(days)),
         "scenario": scenario,
@@ -1355,7 +1358,8 @@ def build_prompt(topic, lang: str) -> str:
             )
         calculation_rule = (
             "7) calculation_example: املأ الحقول كلها بنصوص رقمية تستخدم أرقاماً غربية بلا فواصل داخل JSON؛ "
-            "monthly_wage هو الأجر الشهري، years/months/days مدة الخدمة (الأشهر 0–11 والأيام 0–30)، "
+            "monthly_wage هو الأجر الشهري، وyears/months/days مدة الخدمة (الأشهر 0–11 والأيام 0–30). " 
+            "يمكن تمثيل السنة الكسرية مثل 6.5 في years بشرط أن يكون months وdays صفراً؛ أو استخدم سنوات صحيحة مع الأشهر والأيام حتى لا تُحتسب المدة مرتين. "
             "full_benefit هو ناتج المادة 84 (نصف أجر عن كل سنة من أول خمس سنوات ثم أجر شهر لكل سنة بعدها، "
             "مع احتساب كسر السنة بنسبة مدته)، وpayable_benefit هو المبلغ بعد نسبة المادة 85 إذا كان السيناريو "
             "resignation، وإلا الأساس الكامل في هذا المثال. استخدم منزلتين عشريتين كحد أقصى للمبالغ.\n"
@@ -2755,6 +2759,49 @@ def selftest() -> int:
     check("تدقيق EOSB: يرفض تناقض مدة الخدمة في المثال الإنجليزي",
           _rejects(lambda: validate_article(
               eosb_duration_bad_en, topic=eosb_topic, lang="en", published_at="2026-01-01")))
+
+    eosb_fractional_year = fixture_data("ar", topic_id="labor-art85")
+    eosb_fractional_year["calculation_example"].update({
+        "years": "6.5", "months": "0", "days": "0",
+        "full_benefit": "48000", "payable_benefit": "32000",
+    })
+    eosb_fractional_year["sections"][3]["body"] = (
+        eosb_fractional_year["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 6.5 سنوات")
+        .replace("42,000 ريال", "48,000 ريال")
+        .replace("28,000 ريال", "32,000 ريال")
+    )
+    fractional_article = validate_article(
+        eosb_fractional_year, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("تدقيق EOSB: يقبل 6.5 سنوات ويحسب الأساس 48,000 والمستحق 32,000",
+          fractional_article["calculation_example"]["years"] == "6.5"
+          and fractional_article["calculation_example"]["full_benefit"] == "48000.00"
+          and fractional_article["calculation_example"]["payable_benefit"] == "32000.00")
+
+    eosb_components = fixture_data("ar", topic_id="labor-art85")
+    eosb_components["calculation_example"].update({
+        "years": "6", "months": "6", "days": "15",
+        "full_benefit": "48493.15", "payable_benefit": "32328.77",
+    })
+    eosb_components["sections"][3]["body"] = (
+        eosb_components["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 6 سنوات و6 أشهر و15 يوماً")
+        .replace("42,000 ريال", "48,493.15 ريال")
+        .replace("28,000 ريال", "32,328.77 ريال")
+    )
+    components_article = validate_article(
+        eosb_components, topic=eosb_topic, lang="ar", published_at="2026-01-01")
+    check("تدقيق EOSB: يحتسب 6 سنوات و6 أشهر و15 يوماً وفق التناسب بالأيام",
+          components_article["calculation_example"]["full_benefit"] == "48493.15"
+          and components_article["calculation_example"]["payable_benefit"] == "32328.77")
+
+    eosb_fraction_double_count = fixture_data("ar", topic_id="labor-art85")
+    eosb_fraction_double_count["calculation_example"].update({
+        "years": "6.5", "months": "6", "days": "15",
+    })
+    check("تدقيق EOSB: يمنع جمع سنوات كسرية مع أشهر/أيام تسبب احتساب المدة مرتين",
+          _rejects(lambda: validate_article(
+              eosb_fraction_double_count, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
 
     eosb_partial = fixture_data("ar", topic_id="labor-art85")
     eosb_partial["calculation_example"].update({
