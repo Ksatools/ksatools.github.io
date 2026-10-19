@@ -1772,9 +1772,12 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
     if not isinstance(data, dict):
         raise Reject("المخرجات ليست كائن JSON")
 
-    allowed = {"title", "meta_description", "excerpt", "sections", "faq",
-               "official_sources", "calculation_example"}
-    extra = set(data) - allowed
+    required = {"title", "meta_description", "excerpt", "sections", "faq",
+                "official_sources", "calculation_example"}
+    missing = required - set(data)
+    if missing:
+        raise Reject("حقول مطلوبة مفقودة: " + ", ".join(sorted(missing)))
+    extra = set(data) - required
     if extra:
         raise Reject("حقول غير متوقّعة: " + ", ".join(sorted(extra)))
 
