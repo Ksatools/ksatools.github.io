@@ -1874,6 +1874,9 @@ def is_article85_repairable_rejection(reason: str) -> bool:
         r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
     ))
     overlong_excerpt = bool(re.search(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    unexpected_money = value.startswith("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")
+    missing_money = value.startswith("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
+    canonical_example = value.startswith("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
     section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
     # Permit one full-JSON repair only for a small overflow (e.g. 13-16 sections),
     # rather than silently dropping any generated content or retrying unboundedly.
@@ -1881,7 +1884,8 @@ def is_article85_repairable_rejection(reason: str) -> bool:
         section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
     )
     return (is_article85_legal_rejection(value) or short_section
-            or overlong_excerpt or too_many_sections)
+            or overlong_excerpt or too_many_sections or unexpected_money
+            or missing_money or canonical_example)
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -2067,11 +2071,23 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     is_minimum_conflict = bool(
         re.search(r"(?:minimum|حد أدنى|الحد الأدنى)", reason_text, re.IGNORECASE)
     )
+    is_money_mismatch = bool(re.search(
+        r"(?:المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب|"
+        r"المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية|"
+        r"موضوع المادة 85 يتطلب المثال الثابت)", reason_text
+    ))
     is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
     is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
 
     if lang == "ar":
-        if is_sections_count:
+        if is_money_mismatch:
+            clause = (
+                "صحّح المثال الرقمي فقط مع إبقاء الحقول المنظمة ثابتة تمامًا: الأجر الشهري 12,000 ريال، "
+                "مدة الخدمة 6 سنوات، المكافأة الأساسية 42,000 ريال، والمبلغ المستحق بعد نسبة الاستقالة 28,000 ريال. "
+                "لا تذكر مبلغًا نقديًا آخر ولا تضع رقمًا بديلًا أو تقريبًا، ولا تغيّر الأجر أو مدة الخدمة أو السيناريو. "
+                "يجب أن يتطابق نص المثال حرفيًا في المعنى مع calculation_example وأن تجتاز جميع بوابات الحساب مجددًا."
+            )
+        elif is_sections_count:
             clause = (
                 "يجب أن يحتوي sections على 3 إلى 12 قسمًا فقط. أعد تنظيم المحتوى بدمج الأقسام المتقاربة موضوعيًا عند الحاجة، "
                 "ولا تحذف أي قاعدة قانونية أساسية أو المثال الحسابي أو التحذيرات. اجعل كل body بطول صالح وأعد كائن JSON كاملًا مطابقًا للمخطط."
@@ -2118,7 +2134,14 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
             "مع إبقاء جميع بوابات التحقق كما هي:\n"
         )
     else:
-        if is_sections_count:
+        if is_money_mismatch:
+            clause = (
+                "Correct only the worked example and keep the structured values fixed: monthly wage SAR 12,000, "
+                "six years of service, full base benefit SAR 42,000, and payable benefit after the resignation ratio SAR 28,000. "
+                "Do not include any other currency amount, alternative figure, or approximation; do not change the wage, service duration, or scenario. "
+                "Make the prose agree with calculation_example and retain all calculation validation gates."
+            )
+        elif is_sections_count:
             clause = (
                 "The schema permits only 3 to 12 sections. Reorganize by merging closely related sections where needed; "
                 "preserve every material legal rule, the worked calculation, and the caveats. Do not silently omit substantive content. "
@@ -4098,6 +4121,12 @@ def selftest() -> int:
         _repair_prompt_en_notice_loss = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="Article 85: do not claim notice non-compliance automatically reduces the award")
+        _repair_prompt_ar_money = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"),
+            lang="ar", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+        _repair_prompt_en_money = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
               "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
               and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
@@ -4107,6 +4136,9 @@ def selftest() -> int:
               and "schema permits only 3 to 12 sections" in _repair_prompt_en_sections
               and "لا تقل إنه لا يوجد حد أدنى" in _repair_prompt_ar_minimum
               and "Do not claim that failure to comply with notice requirements" in _repair_prompt_en_notice_loss
+              and "صحّح المثال الرقمي فقط" in _repair_prompt_ar_money
+              and "SAR 42,000" in _repair_prompt_en_money
+              and "SAR 28,000" in _repair_prompt_en_money
               and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
         _stacked_ar = fixture_data("ar", topic_id="labor-art85")
         _stacked_ar["sections"][0]["body"] += (
@@ -4182,6 +4214,9 @@ def selftest() -> int:
               and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
               and is_article85_repairable_rejection("excerpt: الطول 318 خارج المدى 40-300")
               and is_article85_repairable_rejection("sections: العدد 14 خارج المدى 3-12")
+              and is_article85_repairable_rejection("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+              and is_article85_repairable_rejection("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
+              and is_article85_repairable_rejection("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
               and not is_article85_repairable_rejection("sections: العدد 18 خارج المدى 3-12")
               and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections")
               and not is_article85_repairable_rejection("حقول مطلوبة مفقودة: sections"))
