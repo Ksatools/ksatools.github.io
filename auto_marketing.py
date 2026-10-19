@@ -935,7 +935,7 @@ EOSB_LEGAL_RULES = {
         "counted in proportion to the time actually served — not by a flat "
         "\"21 days per year\" rule, and not by half a day per incomplete month.\n"
         "2) Entitlement on resignation (Article 85): Article 85 sets the end-of-service benefit ratios for resignation only; "
-        "it does not set or waive notice requirements. One third of the benefit is payable after two consecutive years of service and up to five years; "
+        "it does not set or waive notice requirements. The entitlement is one third of the benefit after two consecutive years of service and up to five years; "
         "two thirds applies above five but below ten years; the full benefit applies at ten years or more. "
         "Notice and resignation procedures are separate questions governed by the applicable contract and law. "
         "Do not say Article 85 specifies that notice is not required or that resignation needs no three-month notice, "
