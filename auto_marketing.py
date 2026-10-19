@@ -2407,6 +2407,144 @@ def repair_article85_notice_loss_claim(data, *, lang: str):
     return fixed
 
 
+def repair_short_article85_section(data, *, reason: str, lang: str):
+    """Expand only a reported short Article 85 section with neutral, topic-relevant context."""
+    match = re.fullmatch(
+        r"sections\[(\d+)\]\.body: الطول (\d+) خارج المدى 120-8000",
+        str(reason or "").strip(),
+    )
+    if not match or not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject(str(reason or "Article 85 short section: unsupported rejection"))
+
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    index, reported_length = int(match.group(1)), int(match.group(2))
+    if not (0 <= index < len(fixed["sections"])):
+        raise Reject(str(reason))
+    section = fixed["sections"][index]
+    if not isinstance(section, dict):
+        raise Reject(str(reason))
+    body = str(section.get("body") or "").strip()
+    if len(body) != reported_length or len(body) >= 120:
+        # Do not repair stale or mismatched validation errors by guessing.
+        raise Reject(str(reason))
+    if lang == "ar":
+        context = (
+            "يرتبط تطبيق هذه النقطة بمدة الخدمة ونوع العقد وسبب انتهاء العلاقة والوقائع ذات الصلة؛ "
+            "لذا ينبغي مراجعة النص الرسمي لنظام العمل السعودي قبل تطبيقها على حالة بعينها."
+        )
+    else:
+        context = (
+            "Apply this point only after checking the service period, contract type, reason employment ended, "
+            "and relevant facts against the official Saudi Labour Law text."
+        )
+    if context not in body:
+        body = body + ("\n\n" if body else "") + context
+    if not (120 <= len(body) <= 8000):
+        raise Reject(str(reason))
+    section["body"] = body
+    return fixed, "short section expanded with neutral legal context"
+
+
+def ensure_article85_article86_clause(data, *, lang: str):
+    """Add the bounded, approved Article 86 rule and replace direct basic-wage exclusion claims."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 86 repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "من الأجر المحتسب للمكافأة فقط إذا كانت بطبيعتها قابلة للزيادة والنقص؛ "
+            "ولا يعني ذلك استبعاد الأجر الأساسي."
+        )
+        bad_basic_wage = re.compile(
+            r"(?:لا\s*يُ?ستبعد\s+الأجر الأساسي\s+إلا.{0,80}|"
+            r"(?:يجوز|يمكن)\s+استبعاد\s+(?:الأجر الأساسي|الراتب الأساسي).{0,80})",
+            re.IGNORECASE,
+        )
+        heading_pattern = r"(المادة\s*86|الأجر|العمولات|المبيعات)"
+    else:
+        clause = (
+            "Under Article 86, commissions, sales percentages, and similar wage elements naturally subject to "
+            "increase and decrease may be excluded from the benefit calculation only by explicit agreement; "
+            "this does not exclude basic wage."
+        )
+        bad_basic_wage = re.compile(
+            r"\b(?:the\s+)?basic\s+(?:wage|salary)\s+(?:may|can|could|is)\s+be\s+excluded\b",
+            re.IGNORECASE,
+        )
+        heading_pattern = r"(article\s*86|wage|commission|sales)"
+
+    def repair_value(value):
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+|\n+", value)
+        repaired = [clause if bad_basic_wage.search(part) else part for part in parts]
+        return " ".join(repaired)
+
+    # Work through all reader-facing text fields so a false statement cannot survive in an FAQ or excerpt.
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_value(fixed[key])
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        for key in ("heading", "body"):
+            if key in section:
+                section[key] = repair_value(section[key])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_value(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                for key in ("q", "a"):
+                    if key in item:
+                        item[key] = repair_value(item[key])
+
+    combined = " ".join(
+        str(value)
+        for value in (
+            [fixed.get("title", ""), fixed.get("meta_description", ""), fixed.get("excerpt", "")]
+            + [
+                str(section.get(key, "")) if isinstance(section, dict) else ""
+                for section in fixed["sections"] for key in ("heading", "body")
+            ]
+            + [
+                str(bullet)
+                for section in fixed["sections"] if isinstance(section, dict)
+                for bullet in (section.get("bullets") or [])
+            ]
+            + [
+                str(item.get(key, "")) for item in (fixed.get("faq") or [])
+                if isinstance(item, dict) for key in ("q", "a")
+            ]
+        )
+    )
+    if clause not in combined:
+        candidates = [
+            index for index, section in enumerate(fixed["sections"])
+            if isinstance(section, dict)
+        ]
+        candidates.sort(key=lambda index: (
+            not bool(re.search(
+                heading_pattern,
+                str(fixed["sections"][index].get("heading", "")) + " "
+                + str(fixed["sections"][index].get("body", ""),
+                re.IGNORECASE,
+            )),
+            len(str(fixed["sections"][index].get("body") or "")),
+        ))
+        target = next((
+            fixed["sections"][index] for index in candidates
+            if len(str(fixed["sections"][index].get("body") or "").strip())
+            + 2 + len(clause) <= 8000
+        ), None)
+        if target is None:
+            raise Reject("Article 86 repair: no section has room for the required legal caveat")
+        body = str(target.get("body") or "").strip()
+        target["body"] = body + ("\n\n" if body else "") + clause
+    return fixed
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -2430,6 +2568,8 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                     action = "excess sections merged with full text preserved"
                 elif re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
                     updated, action = repair_empty_article85_section(working, reason=reason, lang=lang)
+                elif re.fullmatch(r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason):
+                    updated, action = repair_short_article85_section(working, reason=reason, lang=lang)
                 elif reason.startswith((
                     "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا",
                     "Article 85: do not claim notice non-compliance automatically reduces or forfeits",
@@ -2442,6 +2582,11 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                 )):
                     updated = ensure_article85_notice_caveat(working, lang=lang)
                     action = "notice caveat"
+                elif reason.startswith((
+                    "المادة 86:", "Article 86:",
+                )):
+                    updated = ensure_article85_article86_clause(working, lang=lang)
+                    action = "Article 86 legal clause"
                 elif reason.startswith((
                     "المادة 85: يجب توضيح أن الثلثين يبدأان",
                     "Article 85: clarify that two-thirds applies only after five years and before ten years",
@@ -3752,7 +3897,9 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         build_article85_repair_prompt(prompt, lang=lang, reason=reason),
                         api_key=api_key,
                         model=model,
-                        tries=1 if provider == "groq" else GEMINI_MAX_TRIES,
+                        # One content-repair attempt, with at most one bounded HTTP retry for 429/5xx.
+                        # The shared request budget remains the hard ceiling, including this retry.
+                        tries=2 if provider == "groq" else GEMINI_MAX_TRIES,
                         request_budget=request_budget,
                         reasoning_effort=reasoning_effort,
                     )
@@ -4796,6 +4943,47 @@ def selftest() -> int:
               and json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True) == _stacked_ar_before
               and json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True) == _stacked_en_before
               and not _stacked_ar_error and not _stacked_en_error)
+        # Known Article 85/86 omissions and short bodies should be repaired without a second model call.
+        for _article86_lang, _article86_bad_claim in (
+            ("ar", "لا يستبعد الأجر الأساسي إلا باتفاق."),
+            ("en", "The basic wage may be excluded by agreement."),
+        ):
+            _article86_bad = fixture_data(_article86_lang, topic_id="labor-art85")
+            _article86_bad["sections"][0]["body"] += " " + _article86_bad_claim
+            _article86_original = json.dumps(_article86_bad, ensure_ascii=False, sort_keys=True)
+            _article86_fixed = ensure_article85_article86_clause(_article86_bad, lang=_article86_lang)
+            _article86_text = " ".join(
+                str(section.get("heading", "")) + " " + str(section.get("body", "")) + " "
+                + " ".join(str(bullet) for bullet in section.get("bullets", []))
+                for section in _article86_fixed["sections"] if isinstance(section, dict)
+            )
+            _article86_clause = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" if _article86_lang == "ar"
+                else "Under Article 86, commissions, sales percentages"
+            )
+            check(f"Article 86: الإصلاح الحتمي يضيف القاعدة الدقيقة ويزيل الادعاء عن الأجر الأساسي ({_article86_lang})",
+                  _article86_clause in _article86_text
+                  and _article86_bad_claim not in _article86_text
+                  and json.dumps(_article86_bad, ensure_ascii=False, sort_keys=True) == _article86_original)
+
+        for _short_lang in ("ar", "en"):
+            _short_data = fixture_data(_short_lang, topic_id="labor-art85")
+            _short_original = json.dumps(_short_data, ensure_ascii=False, sort_keys=True)
+            _short_index = 2
+            _short_body = ("شرح موجز لهذه النقطة القانونية مع مراعاة العقد والوقائع." if _short_lang == "ar"
+                           else "A short explanation of this point under the applicable contract and facts.")
+            _short_data["sections"][_short_index]["body"] = _short_body
+            _short_length = len(_short_body)
+            _short_repaired, _short_action = repair_short_article85_section(
+                _short_data,
+                reason=f"sections[{_short_index}].body: الطول {_short_length} خارج المدى 120-8000",
+                lang=_short_lang,
+            )
+            check(f"Article 85: القسم القصير يُوسّع حتمياً دون فقد النص ({_short_lang})",
+                  len(_short_repaired["sections"][_short_index]["body"]) >= 120
+                  and _short_body in _short_repaired["sections"][_short_index]["body"]
+                  and json.dumps(_short_data, ensure_ascii=False, sort_keys=True) == _short_original)
+
         # A narrowly scoped deterministic repair avoids a second model call for known notice-loss claims.
         for _notice_lang, _notice_bad_claim in (
             ("ar", "عدم الالتزام بالإشعار قد يؤدي إلى خفض مكافأة نهاية الخدمة."),
@@ -5133,6 +5321,25 @@ def selftest() -> int:
         check("Groq: TPM 429 مع مهلة نصية يتجاوز عبارات plan/billing ويُعاد في الوقت المطلوب",
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _sleeps == [9.7425])
+
+        # Content repair uses a single model-repair pass but allows one HTTP retry after transient TPM 429.
+        _sleeps.clear()
+        _repair_tpm_body = (
+            b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
+            b'Limit 8000, Used 6327, Requested 2477. Please try again in 6.03s."}}'
+        )
+        fake, calls = _fake_http([
+            (429, {}, _repair_tpm_body),
+            _groq_envelope(lang="en"),
+        ])
+        globals()["http_request_full"] = fake
+        _repair_budget = RequestBudget(2)
+        ok, data, msg = groq_generate_json(
+            "repair prompt", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            tries=2, request_budget=_repair_budget, sleep=_sleeps.append)
+        check("Groq repair: يعيد 429 المؤقت مرة واحدة بعد مهلة الخادم ضمن سقف الطلبات",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _repair_budget.used == 2 and _sleeps == [6.03])
 
         # (ي-2) Retry-After الرقمي يتقدّم على تلميحات فوترة عامة، لكن الحصة اليومية أدناه تبقى استثناءً.
         _sleeps.clear()
