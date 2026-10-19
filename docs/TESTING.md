@@ -1,5 +1,7 @@
 # TESTING.md — كيف تختبر المنصّة
 
+> لقطة المصدر التي راجعت هذه الوثيقة: `main` عند الالتزام `022c8590e967e1124dac49dbedd3a7f2e6ddaeda` (2026-10-19). نتائج CI المذكورة في السجل أدناه تاريخية؛ نتيجة CI لطلب الدمج الحالي هي الدليل على الكود المرشح.
+
 > الغرض: أي شخص (أو أي جلسة) يقدر يتأكّد أن `index.html` سليم بعد أي تعديل، بدليل مكتوب.
 > القاعدة: **لا تُعلن نجاحاً بلا مخرجات مكتوبة**.
 
@@ -24,6 +26,9 @@
 ```powershell
 # من جذر المشروع
 python tests/smoke_test.py
+
+# اتساق سجل المقالات وصفحاتها وsitemap
+python tests/repository_consistency_test.py
 
 # لاعتبار بنود BACKLOG غير المنفّذة فشلاً أيضاً (صارم)
 python tests/smoke_test.py --strict
@@ -92,7 +97,7 @@ python auto_marketing.py --verify
 
 ## 5) حالة آخر تشغيل (متحقّق)
 
-**CI لفرع PR #32 (2026-10-19؛ التغييرات لا تزال في مسودة مراجعة ولم تدمج):** [سجل التشغيل](https://github.com/Ksatools/ksatools.github.io/actions/runs/39233240227) — `PASS=118 · FAIL=0 · FAIL(known)=0`. نجحت `py_compile` و`auto_marketing.py --selftest` و`--verify` وفحص جافاسكربت و`git diff --check` واختبارات Chrome. شمل الاختبار الجديد JSON-LD وتهيئة التفضيلات قبل DOMContentLoaded وتنسيق التاريخ باللغتين وتأجيل Social Bar. لا يعني هذا تحقق الإعلان الحقيقي أو أن PR #32 أصبح منشورًا.
+**سجل تاريخي لفرع PR #32 (2026-10-19؛ وقت تلك الجولة كان الفرع مسودة):** [سجل التشغيل](https://github.com/Ksatools/ksatools.github.io/actions/runs/39233240227) — `PASS=118 · FAIL=0 · FAIL(known)=0`. نجحت `py_compile` و`auto_marketing.py --selftest` و`--verify` وفحص جافاسكربت و`git diff --check` واختبارات Chrome. شمل الاختبار الجديد JSON-LD وتهيئة التفضيلات قبل DOMContentLoaded وتنسيق التاريخ باللغتين وتأجيل Social Bar. لا يعني هذا تحقق الإعلان الحقيقي أو أن PR #32 أصبح منشورًا.
 
 **تحقّق إضافي على فرع PR #24 (2026-10-18؛ قبل الدمج):** نجح CI على الالتزام `b6bc21a359ec8364fdbab6a404af777306c400cb` ([سجل CI](https://github.com/Ksatools/ksatools.github.io/actions/runs/39131034471)). أُزيل إعفاء `known=3` من اختبار رابط التذييل؛ بعد النقر على `#eos-tool` من تبويب السيرة، تحقّق الاختبار من القسم النشط وحالة `aria-selected`، وكانت النتيجة `active=eos-tool selected=eos-tool hash=#eos-tool`. ملخص الاختبار: `PASS=102 · FAIL=0 · FAIL(known)=0`. لا يتضمّن هذا الفرع تغييراً على `index.html`؛ مستمع `hashchange` كان موجوداً، والتصحيح كان في الاختبار وتوثيق الحالة.
 
@@ -283,7 +288,7 @@ python auto_marketing.py --verify     → rc=0   لا مشاكل
 
 **تحقّق إضافي مؤقّت (خارج المستودع، غير مُودَع):** أدوات محلية شُغّلت مرّة واحدة ثم حُذفت — `verify_topic_and_modes.py` (27/27)، `check_workflows.py` (30/30 فحوص ساكنة على YAML)، وتنفيذ خطوات `ai_marketing.yml` **منقولة حرفياً** (18/18: خطوة `mode` ترفض قيمة غير مدعومة قبل `GITHUB_OUTPUT`، و`topic` يُمرَّر وسيطاً مقتبساً واحداً، وخطوة `Commit وPush` في مستودع اختباري لا تدفع `marketing_state.json` ولا `latest_social_post.txt` ولا تُنشئ commit فارغاً).
 
-**سير فحوص طلبات الدمج:** `.github/workflows/ci.yml` (قراءة فقط، `contents: read`) يشغّل: `py_compile` + `--selftest` + `--verify`، و`node --check`، و`git diff --check`، و`tests/smoke_test.py`.
+**سير فحوص طلبات الدمج:** `.github/workflows/ci.yml` (قراءة فقط، `contents: read`) يشغّل: `py_compile` + `--selftest` + `--verify`، و`node --check`، و`git diff --check`، و`tests/repository_consistency_test.py`، و`tests/smoke_test.py`، ومقارنة PDF عند تغير CSS الطباعة.
 
 #### 5.3) سياسة إعادة المحاولة ومنع النشر عند الفشل (القسم 13 في `--selftest` — استجابات وهمية بلا شبكة وبلا انتظار حقيقي)
 
