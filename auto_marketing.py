@@ -5399,7 +5399,7 @@ def selftest() -> int:
         check("Article 85: إصلاح المادة 86 حتمياً يجتاز البوابات ويحفظ مسودة فقط",
               _repair_rc == 0 and _repair_calls == {"ar": 1, "en": 0}
               and len(_repair_requests) == 1
-              and "Article 86 legal clause" in _repair_out
+              and "Article 86 rule enforced" in _repair_out
               and len(_repair_drafts) == 1
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _repair_before)
@@ -5412,7 +5412,7 @@ def selftest() -> int:
         check("Article 85: إصلاح المادة 86 الحتمي لا يستدعي النموذج ثانية",
               len(_repair_requests) == 1
               and _repair_calls == {"ar": 1, "en": 0}
-              and "Article 86 legal clause" in _repair_out)
+              and "Article 86 rule enforced" in _repair_out)
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
         _sandbox()
