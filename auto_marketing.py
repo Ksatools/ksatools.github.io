@@ -878,12 +878,12 @@ EOSB_LEGAL_RULES = {
         "الأولى، وأجر شهر كامل عن كل سنة من السنوات التالية، ويُتخذ الأجر الأخير "
         "أساساً للحساب. أجزاء السنة تُحتسب بنسبة ماقضى العامل منها فعلاً — لا "
         "بقاعدة «21 يوماً عن كل سنة»، ولا بنصف يوم عن كل شهر غير مكتمل.\n"
-        "2) الاستحقاق عند الاستقالة (المادة 85): الاستقالة لا تستلزم مدة ثلاثة أشهر؛ "
-        "فحدّ الأدنى للاستحقاق هو خدمة متتالية لا تقل عن سنتين. فمن خدم سنتين إلى "
-        "خمس سنوات فله ثلث المكافأة، وما زاد على خمس سنوات ولم يبلغ عشر سنوات "
-        "ثلثاها، وما بلغ عشر سنوات فأكثر فالمكافأة كاملة. ومدة الإشعار بثلاثين "
-        "يوماً أو حسم طلب الاستقالة بعد ثلاثين يوماً (المادتان 75 و79 مكرر) ليسا "
-        "شرطاً للاستحقاق.\n"
+        "2) الاستحقاق عند الاستقالة (المادة 85): المادة 85 تنظّم نسب مكافأة نهاية الخدمة عند الاستقالة فقط؛ "
+        "ولا تحدد مدة الإشعار ولا تعفي من متطلباته. يستحق العامل الثلث بعد خدمة متتالية لا تقل عن سنتين "
+        "ولا تزيد على خمس سنوات، والثلثين إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا، والمكافأة كاملة "
+        "إذا بلغت الخدمة عشر سنوات فأكثر. متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة قد تنطبق "
+        "بحسب نوع العقد والأحكام النظامية. لا تقل إن المادة 85 تنص على عدم الحاجة إلى إشعار، ولا تخلط "
+        "بين مهلة الإشعار وشروط استحقاق مكافأة نهاية الخدمة.\n"
         "3) عناصر الأجر (المادة 86): لا تُستبعد من أساس الحساب إلا العمولات والنسب "
         "المئوية عن ثمن المبيعات وما أشبهها من عناصر الأجر القابلة بطبيعتها للزيادة "
         "والنقص، وذلك باتفاق صريح بين الطرفين. فلا تدّعِ أن الأجر الأساسي وحده يدخل "
@@ -934,13 +934,12 @@ EOSB_LEGAL_RULES = {
         "with the last wage as the basis of the calculation. Parts of a year are "
         "counted in proportion to the time actually served — not by a flat "
         "\"21 days per year\" rule, and not by half a day per incomplete month.\n"
-        "2) Entitlement on resignation (Article 85): resignation does not require "
-        "three months; the minimum threshold for entitlement is two consecutive "
-        "years of service. From two to five years the entitlement is one third of "
-        "the benefit; above five but below ten years it is two thirds; at ten "
-        "years or more it is the full benefit. The thirty-day notice period, or a "
-        "resignation request deemed accepted after thirty days (Articles 75 and "
-        "79-bis), is not an entitlement threshold.\n"
+        "2) Entitlement on resignation (Article 85): Article 85 sets the end-of-service benefit ratios for resignation only; "
+        "it does not set or waive notice requirements. One third is payable after two consecutive years and up to five years; "
+        "two thirds applies above five but below ten years; the full benefit applies at ten years or more. "
+        "Notice and resignation procedures are separate questions governed by the applicable contract and law. "
+        "Do not say Article 85 specifies that notice is not required or that resignation needs no three-month notice, "
+        "and do not confuse notice requirements with EOSB eligibility.\n"
         "3) Wage elements (Article 86): only commissions, sales percentages and "
         "similar wage elements that are naturally subject to increase and "
         "decrease may be excluded from the basis of the calculation, and only by "
@@ -1385,7 +1384,8 @@ def build_prompt(topic, lang: str) -> str:
                 article85_claims_rule = (
                     "قواعد صياغة إلزامية لهذا المقال: اكتب أن الثلث ينطبق بعد سنتين وحتى خمس سنوات شاملةً خمس سنوات، "
                     "وأن الثلثين ينطبقان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات؛ لا تقل «من 5 إلى 10 سنوات» للثلثين. "
-                    "إذا ذكرت الإشعار، أضف بوضوح: «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+                    "وضّح أن المادة 85 تحدد نسب المكافأة فقط ولا تحدد مدة الإشعار ولا تعفي من متطلباته؛ لا تنسب إليها عبارة أن الإشعار غير مطلوب "
+                    "أو أن الاستقالة لا تحتاج إلى إشعار لمدة ثلاثة أشهر. إذا ذكرت الإشعار، أضف بوضوح: «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
                     "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة». "
                     "وعند شرح المادة 86، اذكر أن الاتفاق قد يستبعد بعض العمولات والنسب المئوية عن المبيعات وما يماثلها من عناصر الأجر "
                     "القابلة بطبيعتها للزيادة والنقص؛ لا تصف ذلك باستبعاد الأجر الأساسي. ولا تصف المادة 81 بأنها فصل من صاحب العمل؛ "
@@ -1395,7 +1395,8 @@ def build_prompt(topic, lang: str) -> str:
                 article85_claims_rule = (
                     "Mandatory wording rules for this Article 85 article: state that one-third applies from two through five years inclusive, "
                     "and two-thirds applies only when service exceeds five years but has not reached ten; never write '5 to 10 years' for two-thirds. "
-                    "If you mention notice, include this clarification: 'The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary to end a contract; "
+                    "Article 85 sets the benefit ratios only; it does not set or waive notice requirements. Do not attribute to Article 85 any claim that notice is not required "
+                    "or that resignation needs no three-month notice. If you mention notice, include this clarification: 'The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary to end a contract; "
                     "applicable notice requirements and resignation procedures may still apply depending on the contract and law.' "
                     "When explaining Article 86, say explicit agreement may exclude qualifying commissions, sales percentages and similar wage elements naturally subject to increase or decrease; "
                     "do not describe this as excluding the basic wage. Do not call Article 81 a dismissal by the employer; describe the worker leaving without notice in statutory cases while retaining rights.\\n"
@@ -1847,7 +1848,8 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
         clauses = (
             "1) «تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
             "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات».\n"
-            "2) «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "2) «المادة 85 تحدد نسب المكافأة فقط ولا تحدد مدة الإشعار ولا تعفي من متطلباته. "
+            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
             "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة».\n"
             "3) «وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
             "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه مكافأة "
@@ -1866,7 +1868,9 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
         clauses = (
             "1) “The one-third benefit applies to service from two years through five years inclusive. "
             "The two-thirds benefit applies only when service is more than five years and less than ten years.”\n"
-            "2) “The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary "
+            "2) “Article 85 sets the benefit ratios only; it does not set or waive notice requirements. "
+            "Do not attribute to Article 85 any claim that notice is not required or that resignation needs no three-month notice. "
+            "The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary "
             "to end a contract; applicable notice requirements and resignation procedures may still apply "
             "depending on the contract and law.”\n"
             "3) “Under Article 86, by agreement, commissions, sales percentages and similar wage elements "
@@ -1911,6 +1915,25 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
             raise Reject(
                 "Article 85: clarify that two-thirds applies only after five years and before ten years"
             )
+        for sentence in re.split(r"(?<=[.!?])\\s+", text_norm):
+            if not re.search(r"\\barticle\\s*85\\b", sentence) or "notice" not in sentence:
+                continue
+            denies_notice_authority = bool(re.search(
+                r"\\b(?:does not|doesn't|never|not)\\s+(?:set|specify|determine|govern|address|waive)\\b",
+                sentence,
+            ))
+            attributes_notice_rule = bool(re.search(
+                r"\\b(?:specifies|states|says|provides|requires|sets|waives)\\b", sentence
+            ))
+            asserts_no_notice = bool(re.search(
+                r"\\b(?:not required|isn't required|not necessary|unnecessary|no need|"
+                r"does not require|doesn't require|does not need|doesn't need)\\b",
+                sentence,
+            ))
+            if (attributes_notice_rule or asserts_no_notice) and not denies_notice_authority:
+                raise Reject(
+                    "Article 85: do not attribute notice-period rules or a notice waiver to Article 85"
+                )
         if "notice" in text_norm:
             notice_caveat = (
                 "notice requirements" in text_norm
@@ -1949,6 +1972,33 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                     "Article 86: explain that qualifying variable commissions/sales elements are excluded only by agreement"
                 )
     else:
+        # Catch a recurring malformed Arabic rendering of Article 88's settlement rule.
+        # Strip diacritics and normalize hamza variants, but keep this narrowly scoped
+        # so ordinary Arabic phrasing about wages and settlement remains allowed.
+        plain_ar = re.sub(r"[\\u064b-\\u065f\\u0670]", "", text_norm)
+        plain_ar = plain_ar.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"}))
+        if re.search(r"يجب\\s+في\\s+الاجر.{0,50}وصفت\\s+الحقوق", plain_ar):
+            raise Reject(
+                "جودة العربية: صياغة مشوّهة في جملة دفع الأجر وتصفية الحقوق؛ أعد صياغتها بوضوح"
+            )
+        for sentence in re.split(r"(?<=[.!؟])\\s+", text_norm):
+            if not re.search(r"المادة\\s*(?:85|الخامسة\\s+والثمانون)", sentence):
+                continue
+            if not re.search(r"(?:الإشعار|اشعار|فترة الإشعار|مهلة الإشعار|ثلاثة أشهر|ثلاثين يوماً|ثلاثين يوما)", sentence):
+                continue
+            denies_notice_authority = bool(re.search(
+                r"(?:لا\\s+(?:تحدد|تنظم|تتناول|تعفي|تقرر)|ليست من اختصاص المادة\\s*85)", sentence
+            ))
+            attributes_notice_rule = bool(re.search(
+                r"(?:تنص|تذكر|تقول|تقرر|تحدد|توجب|تشترط|تعفي|لا تستلزم|لا تشترط)", sentence
+            ))
+            asserts_no_notice = bool(re.search(
+                r"(?:غير مطلوب|لا يلزم|لا يتطلب|لا تحتاج|لا يستلزم|لا تشترط)", sentence
+            ))
+            if (attributes_notice_rule or asserts_no_notice) and not denies_notice_authority:
+                raise Reject(
+                    "المادة 85: لا تنسب مدة الإشعار أو الإعفاء منه إلى المادة 85"
+                )
         has_resignation_ratio = any(x in text_norm for x in ("ثلث", "ثلثي", "الثلث"))
         if has_resignation_ratio:
             correct_boundary = (
@@ -3044,6 +3094,28 @@ def selftest() -> int:
         "exceeds five years but has not reached ten", "5 to 10 years")
     check("بوابة قانونية: ترفض إدراج الخمس سنوات ضمن نسبة الثلثين",
           _rejects(lambda: validate_article85_legal_claims(_en85_bad_range, lang="en")))
+    check("بوابة قانونية: تقبل التصريح بأن المادة 85 لا تحدد مدة الإشعار",
+          not _rejects(lambda: validate_article85_legal_claims(
+              "Article 85 sets the benefit ratios only; it does not set or waive notice requirements.",
+              lang="en")))
+    _en85_bad_notice_attribution = _en85_legal_good.replace(
+        "Under Article 85, one-third applies from two through five years inclusive; ",
+        "Article 85 specifies that resignation does not require a three-month notice. "
+        "Under Article 85, one-third applies from two through five years inclusive; ")
+    check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (إنجليزي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              _en85_bad_notice_attribution, lang="en")))
+    _ar85_bad_notice_attribution = _ar85_legal_good.replace(
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، ",
+        "تنص المادة 85 على أن الاستقالة لا تتطلب إشعارًا لمدة ثلاثة أشهر. "
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، ")
+    check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              _ar85_bad_notice_attribution, lang="ar")))
+    check("بوابة جودة العربية: ترفض الجملة المشوّهة في تصفية الحقوق",
+          _rejects(lambda: validate_article85_legal_claims(
+              "إذا انتهت الخدمة من جهة صاحب العمل، يجب فُي الأجر وصُفِّت الحقوق خلال أسبوع على الأكثر.",
+              lang="ar")))
     _en85_bad_notice = _en85_legal_good.replace(
         "applicable notice requirements and resignation procedures may still apply depending on the contract and law.", "")
     check("بوابة قانونية: ترفض ذكر الإشعار دون توضيح المتطلبات المستقلة",
@@ -4358,10 +4430,11 @@ def selftest() -> int:
             "بنسبة ماقضى العامل منها فعلاً",
             "لا بقاعدة «21 يوماً عن كل سنة»",
             "ولا بنصف يوم عن كل شهر غير مكتمل",
-            "الاستقالة لا تستلزم مدة ثلاثة أشهر",
+            "المادة 85 تنظّم نسب مكافأة نهاية الخدمة عند الاستقالة فقط",
+            "متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة",
             "خدمة متتالية لا تقل عن سنتين",
             "فالمكافأة كاملة",
-            "المادتان 75 و79 مكرر",
+            "متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة",
             "فلا تدّعِ أن الأجر الأساسي وحده",
             "ولا أن جميع البدلات مستبعدة بلا استثناء",
             "خلال أسبوع على الأكثر",
@@ -4401,12 +4474,13 @@ def selftest() -> int:
             "in proportion to the time actually served",
             'not by a flat "21 days per year" rule',
             "not by half a day per incomplete month",
-            "resignation does not require three months",
+            "Article 85 sets the end-of-service benefit ratios for resignation only",
+            "Notice and resignation procedures are separate questions",
             "two consecutive years of service",
             "one third of the benefit",
             "two thirds",
             "the full benefit",
-            "Articles 75 and 79-bis",
+            "Notice and resignation procedures are separate questions",
             "Do not claim that the basic wage alone",
             "nor that all allowances are always excluded",
             "within one week at most",
