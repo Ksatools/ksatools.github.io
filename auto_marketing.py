@@ -2067,8 +2067,11 @@ def repair_empty_article85_section(data, *, reason: str, lang: str = "ar"):
 
     if len(sections) > MIN_SECTIONS:
         # Put the empty heading and its bullets in another body before removing the shell.
-        candidates = [index - 1, index + 1]
-        candidates.extend(i for i in range(len(sections)) if i not in candidates and i != index)
+        # Exclude an out-of-range neighbor before sorting: index+1 equals len(sections)
+        # when the empty section is the final item, and indexing it in the sort key crashes.
+        candidates = [i for i in (index - 1, index + 1)
+                      if 0 <= i < len(sections) and i != index]
+        candidates.extend(i for i in range(len(sections)) if i != index and i not in candidates)
         candidates.sort(key=lambda i: (
             bool(re.search(r"(?:مثال|example)", str(sections[i].get("heading", "")), re.I)),
             abs(i - index),
@@ -2323,6 +2326,87 @@ def trim_article85_excerpt(data, *, max_chars: int = 300):
     return fixed
 
 
+def repair_article85_notice_loss_claim(data, *, lang: str):
+    """Replace only unsupported notice-causes-automatic-forfeiture sentences with the approved caveat."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 notice-loss repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        replacement = (
+            "المادة 85 تحدد نسب مكافأة نهاية الخدمة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+            "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+        )
+        claim_pattern = re.compile(
+            r"(?:قد\s+)?(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)\s*(?:إلى|الى|في|عن)?\s*"
+            r".{0,50}(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,80}(?:المكافأة|مكافأة نهاية الخدمة)"
+        )
+        negated_pattern = re.compile(
+            r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)"
+        )
+    else:
+        replacement = (
+            "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+            "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+        )
+        claim_pattern = re.compile(
+            r"\b(?:may|can|could|might|will|would)\s+(?:(?:automatically|directly)\s+)?"
+            r"(?:lead to|result in|cause)\b.{0,100}\b"
+            r"(?:loss|forfeit(?:ure)?|deduct(?:ion)?|reduction|withholding)\b"
+            r".{0,100}\b(?:eosb|end[- ]of[- ]service|indemnity|severance|award|benefit)\b",
+            re.IGNORECASE,
+        )
+        negated_pattern = re.compile(
+            r"\b(?:does not|doesn't|cannot|can't|will not|won't|would not|wouldn't)\s+"
+            r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
+            re.IGNORECASE,
+        )
+
+    changed = False
+
+    def repair_text(value):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+|\n+", value)
+        repaired = []
+        for part in parts:
+            if claim_pattern.search(part) and not negated_pattern.search(part):
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(fixed[key])
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        for key in ("heading", "body"):
+            if key in section:
+                section[key] = repair_text(section[key])
+        bullets = section.get("bullets")
+        if isinstance(bullets, list):
+            section["bullets"] = [repair_text(item) for item in bullets]
+    faq = fixed.get("faq")
+    if isinstance(faq, list):
+        for item in faq:
+            if isinstance(item, dict):
+                for key in ("q", "a"):
+                    if key in item:
+                        item[key] = repair_text(item[key])
+    sources = fixed.get("official_sources")
+    if isinstance(sources, list):
+        for item in sources:
+            if isinstance(item, dict) and "title" in item:
+                item["title"] = repair_text(item["title"])
+
+    if not changed:
+        raise Reject("Article 85 notice-loss repair: no matching unsupported claim found")
+    return fixed
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -2346,6 +2430,12 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                     action = "excess sections merged with full text preserved"
                 elif re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
                     updated, action = repair_empty_article85_section(working, reason=reason, lang=lang)
+                elif reason.startswith((
+                    "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا",
+                    "Article 85: do not claim notice non-compliance automatically reduces or forfeits",
+                )):
+                    updated = repair_article85_notice_loss_claim(working, lang=lang)
+                    action = "notice loss claim"
                 elif reason.startswith((
                     "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
@@ -4706,6 +4796,26 @@ def selftest() -> int:
               and json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True) == _stacked_ar_before
               and json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True) == _stacked_en_before
               and not _stacked_ar_error and not _stacked_en_error)
+        # A narrowly scoped deterministic repair avoids a second model call for known notice-loss claims.
+        for _notice_lang, _notice_bad_claim in (
+            ("ar", "عدم الالتزام بالإشعار قد يؤدي إلى خفض مكافأة نهاية الخدمة."),
+            ("en", "Failure to comply with notice may lead to a reduction of the end-of-service award."),
+        ):
+            _notice_bad = fixture_data(_notice_lang, topic_id="labor-art85")
+            _notice_bad["sections"][0]["body"] += " " + _notice_bad_claim
+            _notice_original = json.dumps(_notice_bad, ensure_ascii=False, sort_keys=True)
+            _notice_data, _notice_article, _notice_fixes, _notice_error = (
+                repair_article85_deterministic_omissions(
+                    _notice_bad, topic=topic_by_id("labor-art85"), lang=_notice_lang,
+                    published_at=today_iso())
+            )
+            _notice_repaired_text = json.dumps(_notice_data, ensure_ascii=False)
+            check(f"Article 85: claim الإشعار لا يفقد/يخفض المكافأة يُصلح حتمياً ({_notice_lang})",
+                  _notice_article is not None and "notice loss claim" in _notice_fixes
+                  and _notice_bad_claim not in _notice_repaired_text
+                  and _notice_error == ""
+                  and json.dumps(_notice_bad, ensure_ascii=False, sort_keys=True) == _notice_original)
+
         _fixture_for_notice = fixture_data("ar", topic_id="labor-art85")
         _fixture_original_text = json.dumps(_fixture_for_notice, ensure_ascii=False)
         _fixture_with_caveat = ensure_article85_notice_caveat(_fixture_for_notice, lang="ar")
@@ -4762,6 +4872,24 @@ def selftest() -> int:
               and len(_empty_bullets_data["sections"]) >= MIN_SECTIONS
               and json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True) == _empty_bullets_original
               and not _empty_bullets_error)
+
+        # Regression: an empty final section previously put len(sections) in the sort candidates.
+        _empty_tail_en = fixture_data("en", topic_id="labor-art85")
+        _empty_tail_index = len(_empty_tail_en["sections"]) - 1
+        _empty_tail_heading = "Trailing notice section"
+        _empty_tail_bullet = "Keep this trailing-section point after repair."
+        _empty_tail_en["sections"][_empty_tail_index].update({
+            "heading": _empty_tail_heading, "body": "", "bullets": [_empty_tail_bullet],
+        })
+        _empty_tail_original = json.dumps(_empty_tail_en, ensure_ascii=False, sort_keys=True)
+        _empty_tail_fixed, _empty_tail_action = repair_empty_article85_section(
+            _empty_tail_en, reason=f"sections[{_empty_tail_index}].body: فارغ", lang="en")
+        check("Article 85: إصلاح آخر قسم فارغ لا يسبب list index out of range ويحفظ العنوان والنقاط",
+              len(_empty_tail_fixed["sections"]) == len(_empty_tail_en["sections"]) - 1
+              and any(_empty_tail_heading in sec["body"] for sec in _empty_tail_fixed["sections"])
+              and any(_empty_tail_bullet in sec["body"] for sec in _empty_tail_fixed["sections"])
+              and "empty section merged" in _empty_tail_action
+              and json.dumps(_empty_tail_en, ensure_ascii=False, sort_keys=True) == _empty_tail_original)
 
         # Critical Article 85 wording and the fixed worked example must not depend on model luck.
         _canonicalized = {}
