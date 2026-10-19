@@ -3808,6 +3808,11 @@ def selftest() -> int:
             model=DEFAULT_GROQ_MODEL, skip_source_check=True,
             topic_id="labor-art85", article_lang="ar")
         _repair_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        if not (_repair_rc == 0 and _repair_calls == {"ar": 2, "en": 0}
+                and len(_repair_requests) == 2 and len(_repair_drafts) == 1):
+            log(f"[selftest debug] Article 85 repair rc={_repair_rc}, calls={_repair_calls}, "
+                f"requests={len(_repair_requests)}, drafts={len(_repair_drafts)}, "
+                f"out={_repair_out[-500:]!r}")
         check("Article 85: إعادة التوليد بعد الرفض تمرّ بالبوابة وتحفظ مسودة فقط",
               _repair_rc == 0 and _repair_calls == {"ar": 2, "en": 0}
               and len(_repair_requests) == 2
