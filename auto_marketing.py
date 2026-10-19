@@ -1825,24 +1825,24 @@ def normalize_faq(raw) -> list:
 
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
     """Reject material wording errors in generated Article 85 articles before any draft is saved."""
-    text_norm = re.sub(r"\\s+", " ", str(article_text or "")).strip().lower()
+    text_norm = re.sub(r"\s+", " ", str(article_text or "")).strip().lower()
 
     if lang == "en":
         # Exactly five years still falls in the one-third band. Two-thirds starts
         # only after five years and ends before ten years.
         for match in re.finditer(
-            r"\\b(?:5|five)\\s*(?:to|[-–—])\\s*(?:10|ten)\\s+years?\\b",
+            r"\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?\b",
             text_norm,
         ):
             window = text_norm[max(0, match.start() - 100):match.end() + 100]
-            if re.search(r"\\b(?:two[\\s-]+thirds|2\\s*/\\s*3)\\b", window):
+            if re.search(r"\b(?:two[\s-]+thirds|2\s*/\s*3)\b", window):
                 raise Reject(
                     "Article 85: the two-thirds band must start after five years, not at five years"
                 )
-        mentions_two_thirds = bool(re.search(r"\\b(?:two[\\s-]+thirds|2\\s*/\\s*3)\\b", text_norm))
+        mentions_two_thirds = bool(re.search(r"\b(?:two[\s-]+thirds|2\s*/\s*3)\b", text_norm))
         correct_boundary = bool(re.search(
-            r"\\b(?:above|exceeds?|more than)\\s+(?:five|5)\\b"
-            r".{0,100}\\b(?:below|less than|not reach(?:es|ed)?|has not reached)\\s+(?:ten|10)\\b",
+            r"\b(?:above|exceeds?|more than)\s+(?:five|5)\b"
+            r".{0,100}\b(?:below|less than|not reach(?:es|ed)?|has not reached)\s+(?:ten|10)\b",
             text_norm,
         ))
         if mentions_two_thirds and not correct_boundary:
@@ -1862,11 +1862,11 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 raise Reject(
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements that may still apply"
                 )
-        if re.search(r"\\b(?:dismissal|dismissed|fired)\\s+(?:under|pursuant to)\\s+article\\s*81\\b", text_norm):
+        if re.search(r"\b(?:dismissal|dismissed|fired)\s+(?:under|pursuant to)\s+article\s*81\b", text_norm):
             raise Reject(
                 "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
             )
-        if re.search(r"\\b(?:commission|commissions|sales percentages?)\\b", text_norm):
+        if re.search(r"\b(?:commission|commissions|sales percentages?)\b", text_norm):
             wage_rule = (
                 "commission" in text_norm
                 and ("increase" in text_norm)
@@ -1899,7 +1899,7 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 raise Reject(
                     "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة لا يلغي متطلبات الإشعار وإجراءات الاستقالة المطبقة"
                 )
-        if re.search(r"لا\\s*يُستبعد\\s+الأجر الأساسي إلا|لا\\s*يستبعد\\s+الأجر الأساسي إلا", text_norm):
+        if re.search(r"لا\s*يُستبعد\s+الأجر الأساسي إلا|لا\s*يستبعد\s+الأجر الأساسي إلا", text_norm):
             raise Reject(
                 "المادة 86: لا تصف الحكم بأنه استبعاد للأجر الأساسي؛ النص يتعلق ببعض العمولات وعناصر الأجر المتغيرة"
             )
