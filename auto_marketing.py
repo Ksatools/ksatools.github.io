@@ -744,6 +744,14 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
         if any(h in low for h in QUOTA_STOP_HINTS):
             return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
         return True, "rate_limit", "تجاوز معدّل مؤقّت"
+    if status == 400 and "missing properties" in low and (
+        "jsonschema" in low or "expected schema" in low or "does not validate" in low
+    ):
+        # Missing required keys is a deterministic shape failure, not a transient
+        # transport failure. Return it immediately so Article 85 can make one
+        # prompt-corrected request under the same strict schema instead of
+        # repeating an identical request up to four times.
+        return False, "schema_incomplete", "استجابة المخطط تفتقد حقولاً مطلوبة"
     if status == 400 and (
         "json_validate_failed" in low or "failed to generate json" in low
     ):
@@ -758,10 +766,23 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
 
 def format_failure(status, raw, tries_used, tries) -> str:
     """رسالة فشل موحّدة (بلا أسرار): الرمز + مقتطف الاستجابة + التصنيف وعدد المحاولات."""
-    retryable, _code, note = classify_failure(status, raw)
+    retryable, code, note = classify_failure(status, raw)
     if retryable and tries_used >= tries:
         note = "خطأ مؤقّت — استُنفدت المحاولات"
-    snippet = redact(raw.decode("utf-8", "replace")[:300]) if isinstance(raw, (bytes, bytearray)) else ""
+    response_text = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else ""
+    if code == "schema_incomplete":
+        low = response_text.lower()
+        marker = low.find("missing properties:")
+        missing_region = low[marker + len("missing properties:"):] if marker >= 0 else ""
+        schema_fields = ("title", "meta_description", "excerpt", "sections", "faq",
+                         "official_sources", "calculation_example")
+        missing_fields = [
+            field for field in schema_fields
+            if re.search(rf"['\"]{re.escape(field)}['\"]", missing_region, re.IGNORECASE)
+        ]
+        snippet = "schema_missing_required: " + (", ".join(missing_fields) or "required fields")
+    else:
+        snippet = redact(response_text[:300])
     return f"http_{status}: {snippet} [{note} — محاولات {tries_used}/{tries}]"
 
 
@@ -2053,6 +2074,35 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
         return working, None, actions, str(exc)
 
 
+def is_groq_incomplete_schema_failure(message: str) -> bool:
+    """True only for Groq's explicit missing-required-properties schema failure."""
+    value = str(message or "").lower()
+    return "schema_missing_required" in value or (
+        "schema_incomplete" in value and "http_400" in value
+    )
+
+
+def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
+    """One-shot schema reminder for Groq; response_format remains json_schema/strict=true."""
+    if lang == "ar":
+        reminder = (
+            "تذكير تصحيحي للمخطط بعد رفض الاستجابة السابقة: أعد كائن JSON كاملاً يتضمن كل المفاتيح المطلوبة "
+            "مرة واحدة بالضبط: title وmeta_description وexcerpt وsections وfaq وofficial_sources وcalculation_example. "
+            "لا تحذف faq أو official_sources أو calculation_example مطلقاً. "
+            "في calculation_example أدرج جميع المفاتيح السبعة: monthly_wage وyears وmonths وdays وscenario وfull_benefit وpayable_benefit. "
+            "لموضوع المادة 85 استخدم القيم الثابتة الصحيحة في البرومبت. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
+        )
+    else:
+        reminder = (
+            "Schema correction after the prior response was rejected: return one complete JSON object containing every required top-level key "
+            "exactly once: title, meta_description, excerpt, sections, faq, official_sources, and calculation_example. "
+            "Never omit faq, official_sources, or calculation_example. "
+            "calculation_example must contain all seven keys: monthly_wage, years, months, days, scenario, full_benefit, and payable_benefit. "
+            "For Article 85, use the fixed values given in the prompt. Keep the same strict JSON Schema response format; do not switch to JSON mode."
+        )
+    return base_prompt + "\n\n" + reminder + "\n"
+
+
 def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
     """Add one compact, declarative correction after a known Article 85/86/81 or section-length rejection."""
     reason_text = str(reason or "")
@@ -3150,6 +3200,16 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
         else:
             ok, data, msg = generate_json(
                 provider, prompt, api_key=api_key, model=model)
+            if (not ok and provider == "groq" and topic["id"] == "labor-art85"
+                    and is_groq_incomplete_schema_failure(msg)):
+                log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
+                ok, data, msg = generate_json(
+                    provider,
+                    build_groq_schema_repair_prompt(prompt, lang=lang),
+                    api_key=api_key,
+                    model=model,
+                    tries=1,
+                )
         if not ok:
             log(f"[FAIL] تعذّر توليد النسخة {lang}: {redact(msg)}")
             state["topics"][topic["id"]][lang] = "error"
@@ -4127,6 +4187,32 @@ def selftest() -> int:
         _repair_prompt_en_money = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+        _strict_schema_retry_ar = build_groq_schema_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"), lang="ar")
+        _strict_schema_retry_en = build_groq_schema_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"), lang="en")
+        _schema_missing_body = (
+            '{"error":{"message":"Generated JSON does not match the expected schema. '
+            'Error: jsonschema: missing properties: \'faq\', \'official_sources\', '
+            '\'calculation_example\'","type":"invalid_request_error"}}'
+        )
+        _schema_flag = classify_failure(400, _schema_missing_body)
+        _schema_message = format_failure(400, _schema_missing_body.encode("utf-8"), 1, GEMINI_MAX_TRIES)
+        check("Groq: فشل الحقول الناقصة يُشخّص بدقة ولا يعيد الطلب المتماثل أربع مرات",
+              _schema_flag[0] is False and _schema_flag[1] == "schema_incomplete"
+              and "schema_missing_required" in _schema_message
+              and "faq" in _schema_message and "official_sources" in _schema_message
+              and "calculation_example" in _schema_message)
+        check("Groq: محاولة المخطط الإضافية تبقي كل الحقول ومخطط JSON الصارم",
+              all(key in _strict_schema_retry_ar for key in (
+                  "title", "meta_description", "excerpt", "sections", "faq",
+                  "official_sources", "calculation_example", "monthly_wage",
+                  "payable_benefit", "لا تستخدم JSON mode"))
+              and all(key in _strict_schema_retry_en for key in (
+                  "title", "meta_description", "excerpt", "sections", "faq",
+                  "official_sources", "calculation_example", "monthly_wage",
+                  "payable_benefit", "do not switch to JSON mode"))
+              and is_groq_incomplete_schema_failure(_schema_message))
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
               "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
               and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
