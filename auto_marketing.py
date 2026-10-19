@@ -1382,24 +1382,17 @@ def build_prompt(topic, lang: str) -> str:
         if topic.get("id") == "labor-art85":
             if lang == "ar":
                 article85_claims_rule = (
-                    "قواعد صياغة إلزامية لهذا المقال: اكتب أن الثلث ينطبق بعد سنتين وحتى خمس سنوات شاملةً خمس سنوات، "
-                    "وأن الثلثين ينطبقان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات؛ لا تقل «من 5 إلى 10 سنوات» للثلثين. "
-                    "وضّح أن المادة 85 تحدد نسب المكافأة فقط ولا تحدد مدة الإشعار ولا تعفي من متطلباته؛ لا تنسب إليها عبارة أن الإشعار غير مطلوب "
-                    "أو أن الاستقالة لا تحتاج إلى إشعار لمدة ثلاثة أشهر. إذا ذكرت الإشعار، أضف بوضوح: «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
-                    "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة». "
-                    "وعند شرح المادة 86، اذكر أن الاتفاق قد يستبعد بعض العمولات والنسب المئوية عن المبيعات وما يماثلها من عناصر الأجر "
-                    "القابلة بطبيعتها للزيادة والنقص؛ لا تصف ذلك باستبعاد الأجر الأساسي. ولا تصف المادة 81 بأنها فصل من صاحب العمل؛ "
-                    "بل تتعلق بترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه.\\n"
+                    "للمادة 85: ثلث المكافأة من سنتين إلى خمس سنوات شاملةً خمس سنوات، والثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر. "
+                    "المادة 85 تحدد نسبة المكافأة عند الاستقالة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام. "
+                    "وفق المادة 86، لا تُستبعد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح عندما تكون بطبيعتها متغيرة بالزيادة والنقص؛ وهذا لا يستبعد الأجر الأساسي. "
+                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\\n"
                 )
             else:
                 article85_claims_rule = (
-                    "Mandatory wording rules for this Article 85 article: state that one-third applies from two through five years inclusive, "
-                    "and two-thirds applies only when service exceeds five years but has not reached ten; never write '5 to 10 years' for two-thirds. "
-                    "Article 85 sets the benefit ratios only; it does not set or waive notice requirements. Do not attribute to Article 85 any claim that notice is not required "
-                    "or that resignation needs no three-month notice. If you mention notice, include this clarification: 'The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary to end a contract; "
-                    "applicable notice requirements and resignation procedures may still apply depending on the contract and law.' "
-                    "When explaining Article 86, say explicit agreement may exclude qualifying commissions, sales percentages and similar wage elements naturally subject to increase or decrease; "
-                    "do not describe this as excluding the basic wage. Do not call Article 81 a dismissal by the employer; describe the worker leaving without notice in statutory cases while retaining rights.\\n"
+                    "For Article 85: one third applies from two through five years inclusive; two thirds applies only above five and below ten. "
+                    "Article 85 sets the resignation benefit ratio, not contract notice requirements; notice and resignation procedures may still apply under the contract and law. "
+                    "Under Article 86, qualifying variable commissions/sales elements may be excluded only by explicit agreement; this does not exclude basic wage. "
+                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\\n"
                 )
             if lang == "ar":
                 canonical_example_rule = (
@@ -1843,50 +1836,63 @@ def is_article85_legal_rejection(reason: str) -> bool:
 
 
 def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
-    """Add focused corrective wording after a legal-claim gate rejection."""
+    """Add one compact, declarative correction after a known Article 85/86/81 wording rejection."""
+    reason_text = str(reason or "")
+    is_notice = bool(re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE))
+    is_article86 = bool(re.search(r"(?:article\\s*86|المادة\\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
+    is_article81 = bool(re.search(r"(?:article\\s*81|المادة\\s*81)", reason_text, re.IGNORECASE))
+
     if lang == "ar":
-        clauses = (
-            "1) «تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
-            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات».\n"
-            "2) «المادة 85 تحدد نسب المكافأة فقط ولا تحدد مدة الإشعار ولا تعفي من متطلباته. "
-            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
-            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة».\n"
-            "3) «وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
-            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه مكافأة "
-            "نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي».\n"
-            "4) «المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
-            "ولا تمثل فصلًا من صاحب العمل»."
-        )
+        if is_notice:
+            clause = (
+                "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+                "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+            )
+        elif is_article86:
+            clause = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+                "إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يعني ذلك استبعاد الأجر الأساسي."
+            )
+        elif is_article81:
+            clause = (
+                "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه النظامية؛ "
+                "وليست فصلاً من صاحب العمل ولا تُعامل كاستقالة عادية."
+            )
+        else:
+            clause = (
+                "ثلث المكافأة يكون من سنتين إلى خمس سنوات شاملًا خمس سنوات، والثلثان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا."
+            )
         instructions = (
-            "هذه محاولة إصلاح أخيرة بعد رفض بوابة الصياغة القانونية للنسخة السابقة. "
-            f"سبب الرفض: {reason}\n"
-            "أعِد إنشاء كائن JSON كاملاً مطابقاً للمخطط الأصلي، لا تشرح خارج JSON، "
-            "وأدرج العبارات القانونية التالية حرفياً داخل أقسام مناسبة. لا تكتفِ بتلخيصها "
-            "ولا تغيّر الحدود الزمنية أو الأثر القانوني:\n"
+            "أعد إنشاء كائن JSON كاملاً وفق المخطط الأصلي. صحح المسألة القانونية المحددة فقط، "
+            "ولا تنسخ هذه التعليمات أو وصف الخطأ إلى نص المقال. أدرج التصحيح التالي كشرح واضح موجّه للقارئ، "
+            "مع إبقاء جميع بوابات التحقق كما هي:\\n"
         )
     else:
-        clauses = (
-            "1) “The one-third benefit applies to service from two years through five years inclusive. "
-            "The two-thirds benefit applies only when service is more than five years and less than ten years.”\n"
-            "2) “Article 85 sets the benefit ratios only; it does not set or waive notice requirements. "
-            "Do not attribute to Article 85 any claim that notice is not required or that resignation needs no three-month notice. "
-            "The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary "
-            "to end a contract; applicable notice requirements and resignation procedures may still apply "
-            "depending on the contract and law.”\n"
-            "3) “Under Article 86, by agreement, commissions, sales percentages and similar wage elements "
-            "that are naturally subject to increase or decrease may be excluded from the wage used to "
-            "calculate end-of-service benefits; this does not mean the basic wage is excluded.”\n"
-            "4) “Article 81 concerns statutory cases where a worker leaves without notice while retaining "
-            "statutory rights; it is not a dismissal by the employer.”"
-        )
+        if is_notice:
+            clause = (
+                "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+                "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+            )
+        elif is_article86:
+            clause = (
+                "Under Article 86, qualifying commissions, sales percentages and similar wage elements naturally subject to increase or decrease "
+                "may be excluded from the calculation only by explicit agreement; this does not exclude basic wage."
+            )
+        elif is_article81:
+            clause = (
+                "Article 81 concerns statutory cases where a worker leaves without notice while retaining statutory rights; "
+                "it is not an employer dismissal or ordinary resignation."
+            )
+        else:
+            clause = (
+                "One third applies from two years through five years inclusive; two thirds applies only above five years and below ten years."
+            )
         instructions = (
-            "This is the final repair attempt after the prior article failed the legal-claim quality gate. "
-            f"Rejection reason: {reason}\n"
-            "Regenerate the complete JSON object under the original strict schema. Return JSON only. "
-            "Insert the following legal sentences verbatim into suitable sections; do not paraphrase them "
-            "or change their time boundaries or legal effect:\n"
+            "Regenerate the complete JSON object under the original strict schema. Correct only the identified legal issue; "
+            "do not copy these instructions or the rejection text into the article. Insert the following clear, declarative reader-facing correction "
+            "and retain all existing validation gates:\\n"
         )
-    return base_prompt + "\n\n" + instructions + clauses + "\n"
+    return base_prompt + "\\n\\n" + instructions + clause + "\\n"
 
 
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
@@ -3647,13 +3653,15 @@ def selftest() -> int:
         _repair_base_prompt = build_prompt(topic_by_id("labor-art85"), "ar")
         _repair_prompt = build_article85_repair_prompt(
             _repair_base_prompt, lang="ar", reason="المادة 85: تحذير الإشعار ناقص")
-        check("Article 85: برومبت الإصلاح يتضمن العبارات القانونية المحددة في اللغتين",
-              "أكثر من خمس سنوات وأقل من عشر سنوات" in _repair_prompt
+        _repair_prompt_en86 = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="Article 86: missing agreement")
+        check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
+              "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt
               and "متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد" in _repair_prompt
-              and "بطبيعتها قابلة للزيادة والنقص" in _repair_prompt
-              and "Article 86" in build_article85_repair_prompt(
-                  build_prompt(topic_by_id("labor-art85"), "en"),
-                  lang="en", reason="Article 86: missing agreement"))
+              and "وفق المادة 86" not in _repair_prompt
+              and "Under Article 86" in _repair_prompt_en86
+              and "Do not attribute to Article 85" not in _repair_prompt_en86)
         check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية المعروفة",
               is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
               and is_article85_legal_rejection("Article 86: missing agreement")
@@ -3678,11 +3686,10 @@ def selftest() -> int:
                       and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
                       for r in _repair_requests))
-        check("Article 85: طلب الإصلاح يضم سبب الرفض القانوني ضمن رسائل النموذج",
+        check("Article 85: طلب الإصلاح يرسل التصحيح المستهدف دون نسخ وصف الرفض",
               len(_repair_requests) == 2
-              and any("سبب الرفض:" in str(m.get("content", ""))
-                      and "متطلبات الإشعار وإجراءات الاستقالة المطبقة"
-                          in str(m.get("content", ""))
+              and any("المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in str(m.get("content", ""))
+                      and "المادة 85: تحذير الإشعار ناقص" not in str(m.get("content", ""))
                       for m in _repair_requests[1].get("messages", [])))
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
