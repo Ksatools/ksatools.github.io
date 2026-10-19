@@ -1509,6 +1509,7 @@ def build_prompt(topic, lang: str) -> str:
         '  "calculation_example": {"monthly_wage": "", "years": "", "months": "", "days": "", "scenario": "", "full_benefit": "", "payable_benefit": ""}\n'
         "}\n\n"
         f"- sections: من {MIN_SECTIONS} إلى {MAX_SECTIONS} عناصر، و bullets اختيارية (اتركها [] عند عدم الحاجة).\n"
+        "- يجب أن يكون body في كل قسم غير فارغ ويتراوح بين 120 و5000 حرف. لا تترك عنواناً بلا محتوى؛ ادمج الأقسام الفارغة مع أقسام مناسبة مع الحفاظ على كل المعلومات القانونية المهمة.\n"
         "- يجب ألا يتجاوز نص body في أي قسم منفرد 5000 حرف، بما في ذلك المسافات؛ وزّع المحتوى على أقسام متعددة ولا تضع معظم المقال في قسم واحد.\n"
         "- faq: من سؤالين إلى أربعة أسئلة.\n"
         "- إجمالي المحتوى لا يقل عن 350 كلمة.\n"
@@ -1904,9 +1905,11 @@ def is_article85_repairable_rejection(reason: str) -> bool:
     too_many_sections = bool(
         section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
     )
+    empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", value))
+    boundary_conflict = value.startswith(("Article 85 boundary:", "المادة 85 boundary:"))
     return (is_article85_legal_rejection(value) or short_section
             or overlong_excerpt or too_many_sections or unexpected_money
-            or missing_money or canonical_example)
+            or missing_money or canonical_example or empty_section or boundary_conflict)
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -1992,6 +1995,51 @@ def ensure_article85_boundary_caveat(data, *, lang: str):
     return fixed
 
 
+def repair_empty_article85_section(data, *, reason: str):
+    """Repair a truly empty Article 85 section without losing its substantive bullets."""
+    match = re.fullmatch(r"sections\[(\d+)\]\.body: فارغ", str(reason or "").strip())
+    if not match or not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 empty section: unsupported rejection or invalid structure")
+
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    index = int(match.group(1))
+    if not (0 <= index < len(sections)) or not isinstance(sections[index], dict):
+        raise Reject("Article 85 empty section: section index is invalid")
+
+    empty_section = sections[index]
+    if str(empty_section.get("body") or "").strip():
+        raise Reject("Article 85 empty section: body is not actually empty")
+    raw_bullets = empty_section.get("bullets") or []
+    if not isinstance(raw_bullets, list) or any(not isinstance(item, str) for item in raw_bullets):
+        raise Reject("Article 85 empty section: bullets cannot be preserved safely")
+    bullet_text = "\n".join(item.strip() for item in raw_bullets if item.strip())
+
+    if bullet_text:
+        # Preserve useful bullet text by folding it into a neighboring section body.
+        candidates = [index - 1, index + 1]
+        for target_index in candidates:
+            if not (0 <= target_index < len(sections)) or target_index == index:
+                continue
+            target = sections[target_index]
+            if not isinstance(target, dict) or not isinstance(target.get("body"), str):
+                continue
+            existing_body = target["body"].strip()
+            combined = existing_body + ("\n\n" if existing_body else "") + bullet_text
+            if existing_body and len(combined) <= 8000:
+                target["body"] = combined
+                sections.pop(index)
+                return fixed, "empty section merged"
+        raise Reject("Article 85 empty section: bullet content cannot be merged within the body limit")
+
+    if len(sections) > MIN_SECTIONS:
+        # An empty heading has no prose or bullets to preserve, so removing this
+        # shell loses no substantive content and keeps the section-count gate intact.
+        sections.pop(index)
+        return fixed, "empty section removed"
+    raise Reject("Article 85 empty section: cannot remove a blank section at minimum section count")
+
+
 def trim_article85_excerpt(data, *, max_chars: int = 300):
     """Copy and minimally shorten a slightly overlong excerpt; all downstream gates still rerun."""
     if not isinstance(data, dict) or not isinstance(data.get("excerpt"), str):
@@ -2025,7 +2073,9 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
     working = json.loads(json.dumps(data, ensure_ascii=False))
     actions = []
 
-    for _ in range(4):
+    # Several independent deterministic omissions may coexist in one generated article.
+    # Keep the process strictly bounded and stop immediately when a repair cannot be made safely.
+    for _ in range(MAX_SECTIONS + 4):
         try:
             article = validate_article(
                 working, topic=topic, lang=lang, published_at=published_at,
@@ -2035,7 +2085,9 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
         except Reject as exc:
             reason = str(exc)
             try:
-                if reason.startswith((
+                if re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
+                    updated, action = repair_empty_article85_section(working, reason=reason)
+                elif reason.startswith((
                     "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
                 )):
@@ -2106,6 +2158,7 @@ def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
 def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
     """Add one compact, declarative correction after a known Article 85/86/81 or section-length rejection."""
     reason_text = str(reason or "")
+    is_empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason_text))
     is_short_section = bool(re.search(
         r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason_text
     ))
@@ -2130,7 +2183,13 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
 
     if lang == "ar":
-        if is_money_mismatch:
+        if is_empty_section:
+            clause = (
+                "لا تترك body فارغاً في أي قسم. يجب أن يتراوح نص body في كل قسم بين 120 و5000 حرف. "
+                "إذا احتوى القسم على bullets مفيدة، فحافظ على مضمونها داخل فقرة مناسبة؛ وإذا لم يكن له محتوى، فادمج موضوعه في قسم مجاور أو أزل العنوان الفارغ مع الحفاظ على جميع المعلومات القانونية والحسابية المهمة، "
+                "مع بقاء عدد الأقسام بين 3 و12."
+            )
+        elif is_money_mismatch:
             clause = (
                 "صحّح المثال الرقمي فقط مع إبقاء الحقول المنظمة ثابتة تمامًا: الأجر الشهري 12,000 ريال، "
                 "مدة الخدمة 6 سنوات، المكافأة الأساسية 42,000 ريال، والمبلغ المستحق بعد نسبة الاستقالة 28,000 ريال. "
@@ -2184,7 +2243,13 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
             "مع إبقاء جميع بوابات التحقق كما هي:\n"
         )
     else:
-        if is_money_mismatch:
+        if is_empty_section:
+            clause = (
+                "Do not leave any section body empty. Every body must contain 120 to 5000 characters. "
+                "Preserve useful bullet content by moving it into a suitable neighboring paragraph; if a section has no content, merge its topic into a neighboring section or remove only the empty heading while preserving all substantive legal and calculation information. "
+                "Keep the section count between 3 and 12."
+            )
+        elif is_money_mismatch:
             clause = (
                 "Correct only the worked example and keep the structured values fixed: monthly wage SAR 12,000, "
                 "six years of service, full base benefit SAR 42,000, and payable benefit after the resignation ratio SAR 28,000. "
@@ -4181,6 +4246,9 @@ def selftest() -> int:
         _repair_prompt_en_notice_loss = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="Article 85: do not claim notice non-compliance automatically reduces the award")
+        _repair_prompt_en_empty = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections[5].body: فارغ")
         _repair_prompt_ar_money = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "ar"),
             lang="ar", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
@@ -4222,6 +4290,7 @@ def selftest() -> int:
               and "schema permits only 3 to 12 sections" in _repair_prompt_en_sections
               and "لا تقل إنه لا يوجد حد أدنى" in _repair_prompt_ar_minimum
               and "Do not claim that failure to comply with notice requirements" in _repair_prompt_en_notice_loss
+              and "Do not leave any section body empty" in _repair_prompt_en_empty
               and "صحّح المثال الرقمي فقط" in _repair_prompt_ar_money
               and "SAR 42,000" in _repair_prompt_en_money
               and "SAR 28,000" in _repair_prompt_en_money
@@ -4287,6 +4356,40 @@ def selftest() -> int:
         check("Article 85: إضافة حدّ الثلثين القياسي تنجح ولا تعدل الكائن الأصلي",
               "أكثر من خمس سنوات وأقل من عشر سنوات" in _fixture_boundary_text
               and json.dumps(_fixture_for_boundary, ensure_ascii=False) == _boundary_original)
+        _empty_shell_ar = fixture_data("ar", topic_id="labor-art85")
+        _empty_shell_ar["sections"][0]["body"] = ""
+        _empty_shell_ar["sections"][0]["bullets"] = []
+        _empty_shell_original = json.dumps(_empty_shell_ar, ensure_ascii=False, sort_keys=True)
+        _empty_shell_data, _empty_shell_article, _empty_shell_fixes, _empty_shell_error = (
+            repair_article85_deterministic_omissions(
+                _empty_shell_ar, topic=topic_by_id("labor-art85"), lang="ar",
+                published_at=today_iso())
+        )
+        check("Article 85: إزالة عنوان فارغ لا تحذف محتوى وتحافظ على صلاحية المقال",
+              _empty_shell_article is not None
+              and "empty section removed" in _empty_shell_fixes
+              and len(_empty_shell_data["sections"]) >= MIN_SECTIONS
+              and json.dumps(_empty_shell_ar, ensure_ascii=False, sort_keys=True) == _empty_shell_original
+              and not _empty_shell_error)
+
+        _empty_bullets_en = fixture_data("en", topic_id="labor-art85")
+        _empty_bullets_en["sections"][0]["body"] = ""
+        _empty_note = "This supplemental practical note must remain available after the empty section is repaired."
+        _empty_bullets_en["sections"][0]["bullets"] = [_empty_note]
+        _empty_bullets_original = json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True)
+        _empty_bullets_data, _empty_bullets_article, _empty_bullets_fixes, _empty_bullets_error = (
+            repair_article85_deterministic_omissions(
+                _empty_bullets_en, topic=topic_by_id("labor-art85"), lang="en",
+                published_at=today_iso())
+        )
+        check("Article 85: إصلاح القسم ذي body الفارغ يحافظ على bullets المفيدة",
+              _empty_bullets_article is not None
+              and "empty section merged" in _empty_bullets_fixes
+              and any(_empty_note in sec["body"] for sec in _empty_bullets_data["sections"])
+              and len(_empty_bullets_data["sections"]) >= MIN_SECTIONS
+              and json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True) == _empty_bullets_original
+              and not _empty_bullets_error)
+
         _fixture_excerpt = fixture_data("en", topic_id="labor-art85")
         _fixture_excerpt["excerpt"] = ("This is a helpful introductory summary with practical information. " * 5)[:318]
         _trimmed_excerpt = trim_article85_excerpt(_fixture_excerpt)
@@ -4300,6 +4403,8 @@ def selftest() -> int:
               and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
               and is_article85_repairable_rejection("excerpt: الطول 318 خارج المدى 40-300")
               and is_article85_repairable_rejection("sections: العدد 14 خارج المدى 3-12")
+              and is_article85_repairable_rejection("sections[5].body: فارغ")
+              and is_article85_repairable_rejection("Article 85 boundary: conflicting five-to-ten-year two-thirds claim")
               and is_article85_repairable_rejection("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
               and is_article85_repairable_rejection("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
               and is_article85_repairable_rejection("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
