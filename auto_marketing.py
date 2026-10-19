@@ -1412,6 +1412,8 @@ def build_prompt(topic, lang: str) -> str:
                 article85_claims_rule = (
                     "للمادة 85: ثلث المكافأة من سنتين إلى خمس سنوات شاملةً خمس سنوات، والثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر. "
                     "المادة 85 تحدد نسبة المكافأة عند الاستقالة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام. "
+                    "لا تقل إن عدم الالتزام بالإشعار يؤدي تلقائيًا إلى فقدان أو خفض مكافأة نهاية الخدمة؛ أي مسؤولية عن مهلة الإشعار مسألة منفصلة، ولا تستنتج أثرًا ماليًا دون سند رسمي محدد. "
+                    "في سؤال الحد الأدنى لاستحقاق مكافأة الاستقالة، لا تقل إنه لا يوجد حد أدنى: تشترط المادة 85 سنتين متتاليتين كحد أدنى. "
                     "وفق المادة 86، لا تُستبعد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح عندما تكون بطبيعتها متغيرة بالزيادة والنقص؛ وهذا لا يستبعد الأجر الأساسي. "
                     "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
                 )
@@ -1419,6 +1421,8 @@ def build_prompt(topic, lang: str) -> str:
                 article85_claims_rule = (
                     "For Article 85: one third applies from two through five years inclusive; two thirds applies only above five and below ten. "
                     "Article 85 sets the resignation benefit ratio, not contract notice requirements; notice and resignation procedures may still apply under the contract and law. "
+                    "Do not claim that notice non-compliance automatically forfeits or reduces the end-of-service award; any notice-period liability is separate, and no financial consequence should be asserted without a specific official basis. "
+                    "In any FAQ asking about the minimum service for a resignation award, do not say there is no minimum: Article 85 requires two consecutive years as the minimum. "
                     "Under Article 86, qualifying variable commissions/sales elements may be excluded only by explicit agreement; this does not exclude basic wage. "
                     "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
                 )
@@ -5044,10 +5048,12 @@ def selftest() -> int:
                 if _tid == "labor-art85":
                     _critical_markers = (
                         ("المادة 84", "المادة 85", "المادة 86", "المادة 81",
-                         "مدة إشعار العقد", "الثلثان بعد تجاوز خمس سنوات")
+                         "مدة إشعار العقد", "الثلثان بعد تجاوز خمس سنوات",
+                         "لا تقل إن عدم الالتزام بالإشعار", "سنتين متتاليتين كحد أدنى")
                         if _lang == "ar" else
                         ("Article 84", "Article 85", "Article 86", "Article 81",
-                         "contract notice requirements", "two thirds only above five")
+                         "contract notice requirements", "two thirds only above five",
+                         "Do not claim that notice non-compliance", "two consecutive years as the minimum")
                     )
                     if any(_m not in _p for _m in _critical_markers):
                         _bad_eosb_prompts.append(f"{_tid}/{_lang}:scoped")
