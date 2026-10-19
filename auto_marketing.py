@@ -4306,8 +4306,6 @@ def selftest() -> int:
               and "json_object" not in json.dumps(_recovery_requests, ensure_ascii=False))
 
         # 5-ب) فشل مستمر: لا نشر ولا مسودة، ولا تعديل على الملفات العامة.
-        _sandbox()
-        _fail_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         _fail_reqs, _fail_calls = [], {"ar": 0, "en": 0}
 
         def _schema_400(url, **kwargs):
@@ -4319,7 +4317,7 @@ def selftest() -> int:
                     b'"code":"json_validate_failed"}}', url)
 
         _sandbox()
-        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _fail_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         globals()["http_request_full"] = _schema_400
         rc, out = _capture_run(mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY)
         st = load_state()["topics"][TOPICS[0]["id"]]
