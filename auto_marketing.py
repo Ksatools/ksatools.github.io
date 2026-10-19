@@ -385,7 +385,10 @@ def collapse_paragraphs(body: str) -> list:
 
 
 ARTICLE_NUMBER_PATTERN = re.compile(
-    r"(?<![\w])(?:SAR\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s?%)?(?![\w])",
+    r"(?<![\w])(?:SAR\s+)?[<>≤≥]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+    r"(?:\s*/\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)?"
+    r"(?:\s*(?:[–—-]|\bto\b)\s*[<>≤≥]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)?"
+    r"(?:\s?%)?(?![\w])",
     re.IGNORECASE,
 )
 ARTICLE_INLINE_MARKUP_PATTERN = re.compile(r"(\*\*.+?\*\*|__.+?__|\*[^*\n]+\*)")
@@ -437,7 +440,8 @@ def _split_article_sentences(value: str) -> list:
 
 def _expand_inline_article_lists(value: str) -> str:
     """Turn inline bullets/numbered steps into line markers before HTML rendering."""
-    text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", str(value or ""))
+    text = re.sub(r"^\s*[-–]\s+", "• ", str(value or ""))
+    text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", text)
     # Only split single-digit inline markers here: Article references such as "Article 86. The"
     # must remain normal prose, not be mistaken for numbered list items.
     text = re.sub(r"(?<!\d)\s+([1-9][.)])\s+", r"\n\1 ", text)
@@ -4774,6 +4778,10 @@ def selftest() -> int:
     check("عرض المقال: تنسيق النص الغامق والأرقام النقدية",
           "<strong>important</strong>" in _formatted_bullets
           and '<bdi class="numeric" dir="ltr">SAR 12,000</bdi>' in _formatted_bullets)
+    _formatted_ratio = render_inline_prose("The ratio is 1/3 and the range is >5–<10 years.")
+    check("عرض المقال: إبقاء الكسر والنطاق الرقمي متماسكين لاتجاه النص",
+          '<bdi class="numeric" dir="ltr">1/3</bdi>' in _formatted_ratio
+          and '&gt;5–&lt;10' in _formatted_ratio)
     _formatted_steps = render_article_body("Steps: 1. Calculate the base amount. 2. Apply the ratio.")
     check("عرض المقال: تحويل الخطوات المرقمة إلى قائمة مرتبة",
           '<ol class="article-list">' in _formatted_steps
