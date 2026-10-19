@@ -3656,8 +3656,8 @@ def selftest() -> int:
         _repair_prompt_en86 = build_article85_repair_prompt(
             build_prompt(topic_by_id("labor-art85"), "en"),
             lang="en", reason="Article 86: missing agreement")
-        _repair_prompt_ar_suffix = _repair_prompt.rsplit("\\n\\n", 1)[-1]
-        _repair_prompt_en86_suffix = _repair_prompt_en86.rsplit("\\n\\n", 1)[-1]
+        _repair_prompt_ar_suffix = _repair_prompt.rsplit(chr(10) * 2, 1)[-1]
+        _repair_prompt_en86_suffix = _repair_prompt_en86.rsplit(chr(10) * 2, 1)[-1]
         check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
               "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
               and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
