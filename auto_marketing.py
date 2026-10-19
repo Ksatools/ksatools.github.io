@@ -1036,7 +1036,6 @@ EOSB_REQUIRED_SCENARIO = {
     "labor-art85": "resignation",
     "eosb-resignation": "resignation",
     "contract-end-vs-resignation": "resignation",
-    "labor-art81": "article81",
 }
 EOSB_MONEY_CLAIM_RE = re.compile(
     r"\bSAR\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
