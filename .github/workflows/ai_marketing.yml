@@ -158,6 +158,17 @@ jobs:
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
           echo "وضع النشر الفعلي: $MODE"
 
+      - name: منع النشر التلقائي عند تخطي التحقق من المصادر
+        env:
+          MODE: ${{ steps.mode.outputs.mode }}
+          SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
+        run: |
+          set -euo pipefail
+          if [ "${MODE}" = "auto" ] && [ "${SKIP_SOURCE_CHECK_INPUT}" = "true" ]; then
+            echo "::error::النشر التلقائي يتطلب التحقق من المصادر الرسمية؛ أعد التشغيل مع skip_source_check=false."
+            exit 1
+          fi
+
       - name: تشغيل دورة إنتاج المحتوى
         env:
           PUBLISH_MODE: ${{ steps.mode.outputs.mode }}
