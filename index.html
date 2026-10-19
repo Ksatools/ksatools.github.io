@@ -1,16 +1,4 @@
 <!DOCTYPE html>
-<!-- ============================================================
-  منصة خدمات الموظف والمقيم في السعودية — النسخة المطوّرة v2.1 (2026-10)
-  ملاحظات النشر:
-  1) ✅ ads.txt جاهز في جذر المستودع:  adsterra.com, ksatools.github.io, DIRECT
-     (وقد أُبقي سطر إضافي بصيغة رقم الناشر — IAB ads.txt يسمح بأكثر من سطر لنفس الشبكة)
-  2) ✅ صفحة الخصوصية جاهزة: privacy.html — وهي مرتبطة من فوتر الصفحة الرئيسة (رابط نسبي)
-     ملاحظة: استخدم روابط نسبية (privacy.html) لا مطلقة (/privacy.html) لتعمل على
-     GitHub Pages حتى لو كان الموقع منشوراً على مسار فرعي مثل username.github.io/repo/
-  3) للحصول على أفضل فهرسة: انشر الملف على مسارين /ar/ و /en/ مع تعديل القيمة
-     الافتراضية للغة في السطر الأخير من السكربت (initLang)
-  4) تُجرى الحسابات داخل المتصفح؛ وقد تعالج الخدمات الخارجية معلومات تقنية أو استخدامية عن الزيارة.
-============================================================ -->
 <html lang="ar" dir="rtl" id="html-root" data-theme="light">
 <head>
   <!-- Google tag (gtag.js) -->
@@ -37,6 +25,43 @@
   <title>منصة خدمات الموظف والمقيم في السعودية | EOSB • GOSI • خطابات • ATS</title>
   <meta name="theme-color" id="theme-color-light" content="#075135" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" id="theme-color-dark" content="#0f172a" media="(prefers-color-scheme: dark)" />
+  <script>
+  'use strict';
+  const store = {
+    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+    remove: k => {
+      try {
+        localStorage.removeItem(k);
+        return localStorage.getItem(k) === null;
+      } catch (e) {
+        return false;
+      }
+    }
+  };
+  (function applyBootPreferences() {
+    try {
+      const requestedLang = new URLSearchParams(window.location.search).get('lang');
+      const savedLang = store.get('seh_lang');
+      const lang = (requestedLang === 'ar' || requestedLang === 'en')
+        ? requestedLang : (savedLang === 'en' ? 'en' : 'ar');
+      const savedTheme = store.get('seh_theme');
+      const theme = (savedTheme === 'light' || savedTheme === 'dark')
+        ? savedTheme
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark' : 'light');
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+      document.documentElement.dataset.theme = theme;
+      const lightMeta = document.getElementById('theme-color-light');
+      const darkMeta = document.getElementById('theme-color-dark');
+      if (lightMeta) lightMeta.media = theme === 'light' ? 'all' : 'not all';
+      if (darkMeta) darkMeta.media = theme === 'dark' ? 'all' : 'not all';
+    } catch (e) {
+      /* Keep the static HTML defaults if local preferences cannot be read. */
+    }
+  })();
+  </script>
   <!-- الأيقونة (هوية الموقع: أخضر سعودي + ذهبي) -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
@@ -82,39 +107,55 @@
         "name": "منصة خدمات الموظف والمقيم في السعودية | Saudi Employee & Expat Hub",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
-        "inLanguage": ["ar-SA", "en-US"],
+        "inLanguage": [
+          "ar-SA",
+          "en-US"
+        ],
         "description": "Free bilingual Arabic & English calculators and career tools for employees and expats in Saudi Arabia: EOSB Gratuity, Net Salary & GOSI (legacy and new 2026 rates), Official Letters, and ATS Resume Builder.",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "SAR" }
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "SAR"
+        }
       },
       {
         "@type": "FAQPage",
-        "inLanguage": "ar-SA",
+        "inLanguage": [
+          "ar-SA",
+          "en-US"
+        ],
         "mainEntity": [
           {
             "@type": "Question",
             "name": "كيف تُحسب مكافأة نهاية الخدمة في السعودية؟",
-            "acceptedAnswer": { "@type": "Answer", "text": "تُحسب المكافأة على أساس آخر أجر: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. عند الاستقالة يستحق العامل ثلث المكافأة بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، وثلثيها إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات، وكاملها عند عشر سنوات فأكثر." }
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "تُحسب المكافأة على أساس آخر أجر: نصف أجر شهر عن كل سنة من السنوات الخمس الأولى، وأجر شهر عن كل سنة تالية، مع احتساب أجزاء السنة بنسبة مدتها. عند الاستقالة يستحق العامل ثلث المكافأة بعد خدمة متصلة من سنتين إلى خمس سنوات شاملة، وثلثيها إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات، وكاملها عند عشر سنوات فأكثر."
+            }
           },
           {
             "@type": "Question",
             "name": "هل يُخصم من راتب المقيم للتأمينات الاجتماعية؟",
-            "acceptedAnswer": { "@type": "Answer", "text": "لا يُخصم أي مبلغ من راتب المقيم غير السعودي؛ يدفع صاحب العمل وحده 2% لفرع الأخطار المهنية. أما المواطن السعودي فيُستقطع 9.75% (النظام القديم) أو 10.75% (النظام الجديد من يوليو 2026) حسب تاريخ أول تسجيل في التأمينات." }
-          }
-        ]
-      },
-      {
-        "@type": "FAQPage",
-        "inLanguage": "en-US",
-        "mainEntity": [
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "لا يُخصم أي مبلغ من راتب المقيم غير السعودي؛ يدفع صاحب العمل وحده 2% لفرع الأخطار المهنية. أما المواطن السعودي فيُستقطع 9.75% (النظام القديم) أو 10.75% (النظام الجديد من يوليو 2026) حسب تاريخ أول تسجيل في التأمينات."
+            }
+          },
           {
             "@type": "Question",
             "name": "How is Saudi End of Service Benefit (EOSB) calculated?",
-            "acceptedAnswer": { "@type": "Answer", "text": "The award is based on the last wage: half a month’s wage for each of the first five years, one month’s wage for each subsequent year, with fractions of a year prorated. Upon resignation, the worker receives one-third after continuous service of two to five years inclusive, two-thirds if service exceeds five years but is under ten years, and the full award at ten years or more." }
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The award is based on the last wage: half a month’s wage for each of the first five years, one month’s wage for each subsequent year, with fractions of a year prorated. Upon resignation, the worker receives one-third after continuous service of two to five years inclusive, two-thirds if service exceeds five years but is under ten years, and the full award at ten years or more."
+            }
           },
           {
             "@type": "Question",
             "name": "Is GOSI deducted from expat salaries in Saudi Arabia?",
-            "acceptedAnswer": { "@type": "Answer", "text": "No. Non-Saudi employees pay 0%; the employer pays 2% for occupational hazards. Saudi nationals pay 9.75% (legacy system) or 10.75% (new system from July 2026) depending on their first GOSI registration date." }
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Non-Saudi employees pay 0%; the employer pays 2% for occupational hazards. Saudi nationals pay 9.75% (legacy system) or 10.75% (new system from July 2026) depending on their first GOSI registration date."
+            }
           }
         ]
       }
@@ -2594,18 +2635,7 @@
 
   <script>
   'use strict';
-  const store = {
-    get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
-    remove: k => {
-      try {
-        localStorage.removeItem(k);
-        return localStorage.getItem(k) === null;
-      } catch (e) {
-        return false;
-      }
-    }
-  };
+
   /* ==================== ثوابت قابلة للتحديث المركزي ==================== */
   const CONFIG = {
     GOSI_CAP: 45000,
@@ -2627,8 +2657,9 @@
 
   /* ==================== اللغة ==================== */
   const urlLang = new URLSearchParams(location.search).get('lang');
+  const savedLang = store.get('seh_lang');
   let currentLang = (urlLang === 'ar' || urlLang === 'en') ? urlLang
-                  : (store.get('seh_lang') || 'ar');
+                  : (savedLang === 'en' ? 'en' : 'ar');
 
   const i18n = {
     ar: {
@@ -3538,6 +3569,20 @@ function cvSharePayload() {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  function formatLetterDate(value, lang) {
+    let d = new Date();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (match) d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+    try {
+      const locale = lang === 'en' ? 'en-GB' : 'ar-SA-u-ca-gregory';
+      return new Intl.DateTimeFormat(locale, {
+        day: 'numeric', month: 'long', year: 'numeric'
+      }).format(d);
+    } catch (e) {
+      return localDateStr(d);
+    }
+  }
+
   function calculateEOS(showErrors = false) {
     const reason = $('eos-reason').value;
     const salary = numVal('eos-salary');
@@ -3666,10 +3711,10 @@ function cvSharePayload() {
     const recipient = $('let-recipient').value.trim();
     const name = $('let-name').value.trim();
     const idInfo = $('let-id').value.trim();
-    const dateStr = $('let-date').value || localDateStr(new Date());
+    const dateStr = formatLetterDate($('let-date').value || localDateStr(new Date()), lang);
     const dur = $('let-duration').value.trim();
     const reason = $('let-reason').value.trim();
-    const today = localDateStr(new Date());
+    const today = formatLetterDate(localDateStr(new Date()), lang);
     const outBox = $('letter-output');
 
     if (lang === 'en') {
@@ -4672,9 +4717,16 @@ const GUIDES_JSON = 'articles.json';
     calculateEOS(); calculateSalary(); generateLetter();
   });
   </script>
-  <!-- ملاحظة: سكربت Adsterra Social Bar هنا في نهاية <body> قبل </body>؛ لا تُكرّره ولا تحذفه -->
-  <!-- ====== Adsterra: Social Bar ====== -->
-  <script data-cfasync="false" src="https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"></script>
+  <!-- ====== Adsterra: Social Bar (deferred until load) ====== -->
+  <script>
+  window.addEventListener('load', function loadAdsterraSocialBar() {
+    const script = document.createElement('script');
+    script.async = true;
+    script.setAttribute('data-cfasync', 'false');
+    script.src = 'https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3';
+    document.body.appendChild(script);
+  }, { once: true });
+  </script>
 
 </body>
 </html>
