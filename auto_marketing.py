@@ -2528,7 +2528,7 @@ def ensure_article85_article86_clause(data, *, lang: str):
             not bool(re.search(
                 heading_pattern,
                 str(fixed["sections"][index].get("heading", "")) + " "
-                + str(fixed["sections"][index].get("body", ""),
+                + str(fixed["sections"][index].get("body", "")),
                 re.IGNORECASE,
             )),
             len(str(fixed["sections"][index].get("body") or "")),
@@ -2908,6 +2908,13 @@ def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
                 raise Reject(
                     "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
                 )
+        if re.search(
+            r"\b(?:the\s+)?basic\s+(?:wage|salary)\s+(?:may|can|could|is)\s+be\s+excluded\b",
+            text_norm,
+        ):
+            raise Reject(
+                "Article 86: do not claim that the basic wage itself may be excluded"
+            )
         if re.search(r"\b(?:commission|commissions|sales percentages?)\b", text_norm):
             wage_rule = (
                 "commission" in text_norm
@@ -4951,6 +4958,9 @@ def selftest() -> int:
             _article86_bad = fixture_data(_article86_lang, topic_id="labor-art85")
             _article86_bad["sections"][0]["body"] += " " + _article86_bad_claim
             _article86_original = json.dumps(_article86_bad, ensure_ascii=False, sort_keys=True)
+            check(f"Article 86: بوابة الجودة ترفض ادعاء استبعاد الأجر الأساسي ({_article86_lang})",
+                  _rejects(lambda: validate_article85_legal_claims(
+                      _article86_bad_claim, lang=_article86_lang)))
             _article86_fixed = ensure_article85_article86_clause(_article86_bad, lang=_article86_lang)
             _article86_text = " ".join(
                 str(section.get("heading", "")) + " " + str(section.get("body", "")) + " "
@@ -4968,11 +4978,11 @@ def selftest() -> int:
 
         for _short_lang in ("ar", "en"):
             _short_data = fixture_data(_short_lang, topic_id="labor-art85")
-            _short_original = json.dumps(_short_data, ensure_ascii=False, sort_keys=True)
             _short_index = 2
             _short_body = ("شرح موجز لهذه النقطة القانونية مع مراعاة العقد والوقائع." if _short_lang == "ar"
                            else "A short explanation of this point under the applicable contract and facts.")
             _short_data["sections"][_short_index]["body"] = _short_body
+            _short_original = json.dumps(_short_data, ensure_ascii=False, sort_keys=True)
             _short_length = len(_short_body)
             _short_repaired, _short_action = repair_short_article85_section(
                 _short_data,
