@@ -1370,7 +1370,27 @@ def build_prompt(topic, lang: str) -> str:
                 "resignation (نسبة المادة 85)، article81 (حالة المادة 81)، أو article87 (استثناء المادة 87).\n"
             )
         canonical_example_rule = ""
+        article85_claims_rule = ""
         if topic.get("id") == "labor-art85":
+            if lang == "ar":
+                article85_claims_rule = (
+                    "قواعد صياغة إلزامية لهذا المقال: اكتب أن الثلث ينطبق بعد سنتين وحتى خمس سنوات شاملةً خمس سنوات، "
+                    "وأن الثلثين ينطبقان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشر سنوات؛ لا تقل «من 5 إلى 10 سنوات» للثلثين. "
+                    "إذا ذكرت الإشعار، أضف بوضوح: «عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+                    "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة». "
+                    "وعند شرح المادة 86، اذكر أن الاتفاق قد يستبعد بعض العمولات والنسب المئوية عن المبيعات وما يماثلها من عناصر الأجر "
+                    "القابلة بطبيعتها للزيادة والنقص؛ لا تصف ذلك باستبعاد الأجر الأساسي. ولا تصف المادة 81 بأنها فصل من صاحب العمل؛ "
+                    "بل تتعلق بترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه.\\n"
+                )
+            else:
+                article85_claims_rule = (
+                    "Mandatory wording rules for this Article 85 article: state that one-third applies from two through five years inclusive, "
+                    "and two-thirds applies only when service exceeds five years but has not reached ten; never write '5 to 10 years' for two-thirds. "
+                    "If you mention notice, include this clarification: 'The fact that notice is not an EOSB eligibility threshold does not mean notice is unnecessary to end a contract; "
+                    "applicable notice requirements and resignation procedures may still apply depending on the contract and law.' "
+                    "When explaining Article 86, say explicit agreement may exclude qualifying commissions, sales percentages and similar wage elements naturally subject to increase or decrease; "
+                    "do not describe this as excluding the basic wage. Do not call Article 81 a dismissal by the employer; describe the worker leaving without notice in statutory cases while retaining rights.\\n"
+                )
             if lang == "ar":
                 canonical_example_rule = (
                     "مثال هذا الموضوع ثابت ومحسوب مسبقاً؛ لا تخترع أرقاماً أخرى ولا تغيّر أي قيمة: "
@@ -1399,6 +1419,7 @@ def build_prompt(topic, lang: str) -> str:
             "ضع المثال الرقمي داخل قسم عنوانه يتضمن كلمة «مثال» أو “Example”، واذكر مدة الخدمة فيه صراحةً "
             "بصيغة مرتبطة بالخدمة؛ يجب أن تتطابق السنوات والأشهر والأيام المكتوبة في هذا القسم مع الحقول المنظمة.\n"
             + scenario_instruction
+            + article85_claims_rule
             + canonical_example_rule
             + "يُعاد حساب هذه القيم آلياً؛ إن لم تستطع ضبط المثال حسابياً فلا تخمّن ولا تكتب مثالاً مخالفاً. "
             "كل مبلغ نقدي مذكور في نص المقال يجب أن يكون أحد هذه المبالغ فقط، ويجب إظهاره بعملة واضحة مثل ريال أو SAR. وعند إنتاج النسختين، استخدم الأجر ومدة الخدمة والسيناريو والنتائج الحسابية نفسها في العربية والإنجليزية.\n"
@@ -1802,6 +1823,97 @@ def normalize_faq(raw) -> list:
     return out
 
 
+def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
+    """Reject material wording errors in generated Article 85 articles before any draft is saved."""
+    text_norm = re.sub(r"\\s+", " ", str(article_text or "")).strip().lower()
+
+    if lang == "en":
+        # Exactly five years still falls in the one-third band. Two-thirds starts
+        # only after five years and ends before ten years.
+        for match in re.finditer(
+            r"\\b(?:5|five)\\s*(?:to|[-–—])\\s*(?:10|ten)\\s+years?\\b",
+            text_norm,
+        ):
+            window = text_norm[max(0, match.start() - 100):match.end() + 100]
+            if re.search(r"\\b(?:two[\\s-]+thirds|2\\s*/\\s*3)\\b", window):
+                raise Reject(
+                    "Article 85: the two-thirds band must start after five years, not at five years"
+                )
+        mentions_two_thirds = bool(re.search(r"\\b(?:two[\\s-]+thirds|2\\s*/\\s*3)\\b", text_norm))
+        correct_boundary = bool(re.search(
+            r"\\b(?:above|exceeds?|more than)\\s+(?:five|5)\\b"
+            r".{0,100}\\b(?:below|less than|not reach(?:es|ed)?|has not reached)\\s+(?:ten|10)\\b",
+            text_norm,
+        ))
+        if mentions_two_thirds and not correct_boundary:
+            raise Reject(
+                "Article 85: clarify that two-thirds applies only after five years and before ten years"
+            )
+        if "notice" in text_norm:
+            notice_caveat = (
+                "notice requirements" in text_norm
+                and any(x in text_norm for x in ("may still apply", "still apply", "remain applicable"))
+                and any(x in text_norm for x in (
+                    "depending on the contract", "depend on the contract",
+                    "contract type", "contract and law",
+                ))
+            )
+            if not notice_caveat:
+                raise Reject(
+                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements that may still apply"
+                )
+        if re.search(r"\\b(?:dismissal|dismissed|fired)\\s+(?:under|pursuant to)\\s+article\\s*81\\b", text_norm):
+            raise Reject(
+                "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
+            )
+        if re.search(r"\\b(?:commission|commissions|sales percentages?)\\b", text_norm):
+            wage_rule = (
+                "commission" in text_norm
+                and ("increase" in text_norm)
+                and ("decrease" in text_norm)
+                and "agreement" in text_norm
+            )
+            if not wage_rule:
+                raise Reject(
+                    "Article 86: explain that qualifying variable commissions/sales elements are excluded only by agreement"
+                )
+    else:
+        has_resignation_ratio = any(x in text_norm for x in ("ثلث", "ثلثي", "الثلث"))
+        if has_resignation_ratio:
+            correct_boundary = (
+                ("أكثر من خمس" in text_norm or "زادت مدة خدمته على خمس" in text_norm)
+                and ("أقل من عشر" in text_norm or "لم تبلغ عشر" in text_norm)
+            )
+            if not correct_boundary:
+                raise Reject(
+                    "المادة 85: يجب توضيح أن الثلثين يبدأان بعد تجاوز خمس سنوات وقبل بلوغ عشر سنوات"
+                )
+        if "الإشعار" in text_norm or "اشعار" in text_norm:
+            notice_caveat = (
+                "متطلبات الإشعار" in text_norm
+                and "نوع العقد" in text_norm
+                and any(x in text_norm for x in ("تبقى", "تظل", "تنطبق", "واجبة"))
+                and any(x in text_norm for x in ("النظام", "الأحكام النظامية", "العقد"))
+            )
+            if not notice_caveat:
+                raise Reject(
+                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة لا يلغي متطلبات الإشعار وإجراءات الاستقالة المطبقة"
+                )
+        if re.search(r"لا\\s*يُستبعد\\s+الأجر الأساسي إلا|لا\\s*يستبعد\\s+الأجر الأساسي إلا", text_norm):
+            raise Reject(
+                "المادة 86: لا تصف الحكم بأنه استبعاد للأجر الأساسي؛ النص يتعلق ببعض العمولات وعناصر الأجر المتغيرة"
+            )
+        if any(x in text_norm for x in ("العمولات", "النسب المئوية", "نسب المبيعات")):
+            wage_rule = (
+                "اتفاق" in text_norm and "بطبيعتها" in text_norm
+                and "زيادة" in text_norm and "نقص" in text_norm
+            )
+            if not wage_rule:
+                raise Reject(
+                    "المادة 86: وضّح أن الاتفاق يتعلق بعناصر الأجر المتغيرة بطبيعتها للزيادة والنقص"
+                )
+
+
 def validate_article(
     data, *, topic, lang, published_at, require_canonical_article85: bool = False,
 ) -> dict:
@@ -1836,6 +1948,8 @@ def validate_article(
     body_text = " ".join(s["body"] + " " + " ".join(s["bullets"]) for s in sections)
     faq_text = " ".join(f"{f['q']} {f['a']}" for f in faq)
     audit_text = " ".join((title, meta_description, excerpt, body_text, faq_text))
+    if require_canonical_article85 and topic.get("id") == "labor-art85":
+        validate_article85_legal_claims(audit_text, lang=lang)
     example_sections = [
         section for section in sections
         if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
@@ -2792,6 +2906,53 @@ def selftest() -> int:
     check("بوابة الجودة: تعليمات التوليد تحدّ طول كل قسم إلى 5000 حرف",
           "نص body في أي قسم منفرد 5000 حرف" in _prompt_ar85
           and "نص body في أي قسم منفرد 5000 حرف" in _prompt_en85)
+    check("بوابة قانونية: تعليمات المادة 85 توضّح حدود الخمس سنوات والإشعار والمادة 86",
+          "لا تقل «من 5 إلى 10 سنوات» للثلثين" in _prompt_ar85
+          and "never write '5 to 10 years' for two-thirds" in _prompt_en85
+          and "بحسب نوع العقد" in _prompt_ar85
+          and "depending on the contract and law" in _prompt_en85)
+
+    _ar85_legal_good = (
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، "
+        "ويستحق العامل الثلثين إذا زادت مدة خدمته على خمس سنوات ولم تبلغ عشر سنوات، "
+        "والمكافأة كاملة عند عشر سنوات فأكثر. عدم كون الإشعار شرطاً لاستحقاق المكافأة "
+        "لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ فقد تبقى متطلبات الإشعار وإجراءات "
+        "الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. يجوز الاتفاق على "
+        "استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها من عناصر الأجر القابلة "
+        "بطبيعتها للزيادة والنقص. المادة 81 تتعلق بترك العامل العمل دون إشعار مع احتفاظه "
+        "بحقوقه النظامية وليست فصلاً من صاحب العمل."
+    )
+    check("بوابة قانونية: تقبل الصياغة العربية السليمة للمادة 85",
+          not _rejects(lambda: validate_article85_legal_claims(_ar85_legal_good, lang="ar")))
+    _en85_legal_good = (
+        "Under Article 85, one-third applies from two through five years inclusive; "
+        "two-thirds applies only when service exceeds five years but has not reached ten. "
+        "The fact that notice is not an EOSB eligibility threshold does not mean notice is "
+        "unnecessary to end a contract; applicable notice requirements and resignation "
+        "procedures may still apply depending on the contract and law. Article 86 allows "
+        "explicit agreement to exclude commissions, sales percentages and similar wage "
+        "elements naturally subject to increase or decrease. Leaving work under Article 81 "
+        "means the worker leaves without notice in statutory cases while retaining rights; "
+        "it is not dismissal under Article 81."
+    )
+    check("بوابة قانونية: تقبل الصياغة الإنجليزية السليمة للمادة 85",
+          not _rejects(lambda: validate_article85_legal_claims(_en85_legal_good, lang="en")))
+    _en85_bad_range = _en85_legal_good.replace(
+        "exceeds five years but has not reached ten", "5 to 10 years")
+    check("بوابة قانونية: ترفض إدراج الخمس سنوات ضمن نسبة الثلثين",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_range, lang="en")))
+    _en85_bad_notice = _en85_legal_good.replace(
+        "applicable notice requirements and resignation procedures may still apply depending on the contract and law.", "")
+    check("بوابة قانونية: ترفض ذكر الإشعار دون توضيح المتطلبات المستقلة",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_notice, lang="en")))
+    _ar85_bad_wage = _ar85_legal_good.replace(
+        "عناصر الأجر القابلة بطبيعتها للزيادة والنقص", "عناصر الأجر")
+    check("بوابة قانونية: ترفض شرح المادة 86 دون بيان طبيعة العناصر المتغيرة",
+          _rejects(lambda: validate_article85_legal_claims(_ar85_bad_wage, lang="ar")))
+    _en85_bad_article81 = _en85_legal_good.replace(
+        "it is not dismissal under Article 81", "dismissal under Article 81")
+    check("بوابة قانونية: ترفض وصف المادة 81 بأنها فصل من صاحب العمل",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_article81, lang="en")))
 
     art81_topic = topic_by_id("labor-art81")
     art81_good = fixture_data("ar", topic_id="labor-art81")
