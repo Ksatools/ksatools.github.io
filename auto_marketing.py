@@ -2234,6 +2234,15 @@ def ensure_article85_critical_content(data, *, lang: str):
         i for i, sec in enumerate(sections)
         if isinstance(sec, dict) and re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
     ]
+    if len(example_indices) > 1:
+        fixed, duplicate_actions = merge_duplicate_article85_example_sections(fixed, lang=lang)
+        sections = fixed["sections"]
+        actions.extend(duplicate_actions)
+        example_indices = [
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        ]
+
     if not example_indices:
         if len(sections) >= MAX_SECTIONS:
             fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS - 1)
@@ -2246,11 +2255,6 @@ def ensure_article85_critical_content(data, *, lang: str):
         if target_example.get("body") != example_text:
             target_example["body"] = example_text
             actions.append("canonical example prose enforced")
-        # Keep all generated bullets; they remain subject to the monetary/legal validation gates.
-        for duplicate_index in example_indices[1:]:
-            if lang == "ar":
-                raise Reject("أكثر من قسم مثال في موضوع المادة 85؛ لا يمكن دمجه تلقائياً دون خطر إسقاط محتوى")
-            raise Reject("Multiple example sections for Article 85; refusing to merge them automatically")
 
     # Structured values for this fixed example are constants, not model-controlled fields.
     if fixed.get("calculation_example") != ARTICLE85_CANONICAL_VALUES:
@@ -2295,6 +2299,24 @@ def ensure_article85_critical_content(data, *, lang: str):
 
     # Reapply local binding after any structure merge copied the object.
     fixed["sections"] = sections
+
+    before_faq = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed, faq_repaired = ensure_article85_minimum_faq(fixed, lang=lang)
+    if faq_repaired:
+        actions.append("minimum-service FAQ corrected")
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_faq and not faq_repaired:
+        actions.append("FAQ content normalized")
+
+    before_notice = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed = ensure_article85_notice_caveat(fixed, lang=lang)
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_notice:
+        actions.append("notice/resignation caveat enforced")
+
+    before_article86 = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed = ensure_article85_article86_clause(fixed, lang=lang)
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_article86:
+        actions.append("Article 86 rule enforced")
+
     return fixed, actions
 
 
@@ -2545,6 +2567,124 @@ def ensure_article85_article86_clause(data, *, lang: str):
     return fixed
 
 
+def merge_duplicate_article85_example_sections(data, *, lang: str):
+    """Keep one canonical Example section while preserving all duplicate sections' text and bullets."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 duplicate-example repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    actions = []
+
+    while True:
+        examples = [
+            i for i, section in enumerate(sections)
+            if isinstance(section, dict)
+            and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+        ]
+        if len(examples) <= 1:
+            return fixed, actions
+
+        canonical_index = examples[0]
+        for source_index in reversed(examples[1:]):
+            source = sections[source_index]
+            if not isinstance(source, dict):
+                raise Reject("Article 85 duplicate-example repair: invalid duplicate section")
+            heading = str(source.get("heading") or "").strip()
+            body = str(source.get("body") or "").strip()
+            raw_bullets = source.get("bullets") or []
+            if not heading or not body or not isinstance(raw_bullets, list):
+                raise Reject("Article 85 duplicate-example repair: incomplete duplicate section")
+            if any(not isinstance(item, str) for item in raw_bullets):
+                raise Reject("Article 85 duplicate-example repair: invalid duplicate bullets")
+
+            if lang == "ar":
+                label = "محتوى محفوظ من قسم المثال الإضافي"
+                bullet_label = "نقاط محفوظة من القسم الإضافي"
+            else:
+                label = "Preserved content from an additional generated example section"
+                bullet_label = "Preserved points from the additional section"
+
+            payload = f"{label} — {heading}\n{body}"
+            bullets = [item.strip() for item in raw_bullets if item.strip()]
+            if bullets:
+                payload += "\n\n" + bullet_label + ":\n" + "\n".join(f"- {item}" for item in bullets)
+
+            candidates = [
+                i for i, target in enumerate(sections)
+                if i != source_index and i != canonical_index
+                and isinstance(target, dict)
+                and not re.search(r"(?:مثال|example)", str(target.get("heading", "")), re.IGNORECASE)
+                and isinstance(target.get("body"), str)
+            ]
+            candidates.sort(key=lambda i: (
+                abs(i - source_index),
+                len(str(sections[i].get("body") or "")),
+            ))
+            target_index = next((
+                i for i in candidates
+                if len(str(sections[i].get("body") or "").strip())
+                + 2 + len(payload) <= 8000
+            ), None)
+            if target_index is None:
+                raise Reject(
+                    "Article 85 duplicate-example repair: no non-example section has room; refusing to discard content"
+                )
+
+            target_body = str(sections[target_index].get("body") or "").strip()
+            sections[target_index]["body"] = target_body + "\n\n" + payload
+            sections.pop(source_index)
+            actions.append("duplicate example section merged with all prose and bullets preserved")
+    return fixed, actions
+
+
+def ensure_article85_minimum_faq(data, *, lang: str):
+    """Correct only FAQs that deny a minimum service period despite asking about Article 85 eligibility."""
+    if not isinstance(data, dict) or not isinstance(data.get("faq"), list):
+        return json.loads(json.dumps(data, ensure_ascii=False)), False
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    changed = False
+    if lang == "ar":
+        asks_minimum_pattern = re.compile(
+            r"(?:الحد الأدنى|حد أدنى|أقل مدة|أدنى مدة).{0,100}(?:الخدمة|الاستحقاق|المكافأة)?",
+            re.IGNORECASE,
+        )
+        denies_minimum_pattern = re.compile(
+            r"(?:لا\s*(?:يتوفر|تتوفر|يوجد|توجد|يوجد\s+أي|توجد\s+أي)\s+حد\s+أدنى|لا\s+حد\s+أدنى)",
+            re.IGNORECASE,
+        )
+        standard_answer = (
+            "وفق المادة 85، لا يستحق العامل مكافأة الاستقالة قبل إكمال سنتين متتاليتين من الخدمة. "
+            "من سنتين إلى خمس سنوات شاملةً خمس سنوات، يستحق ثلث المكافأة؛ وبعد تجاوز خمس سنوات وقبل بلوغ عشر سنوات، "
+            "يستحق الثلثين؛ وعند عشر سنوات فأكثر، يستحق المكافأة كاملة. تتعلق هذه النسب بالاستقالة، "
+            "مع مراعاة الحالات النظامية المستثناة."
+        )
+    else:
+        asks_minimum_pattern = re.compile(
+            r"\b(?:minimum|minimum service|minimum period|how long).{0,100}\b(?:service|eligible|entitled|award|eosb)?\b",
+            re.IGNORECASE,
+        )
+        denies_minimum_pattern = re.compile(
+            r"\b(?:there is|there's|is) no minimum\b|\bno minimum (?:service|period|threshold)\b",
+            re.IGNORECASE,
+        )
+        standard_answer = (
+            "Under Article 85, no resignation benefit is due before two consecutive years of service. "
+            "For ordinary resignation, one third applies from two through five years inclusive, two thirds applies "
+            "only after five years and before ten years, and the full benefit applies at ten years or more. "
+            "These ratios are specific to resignation and remain subject to any statutory exceptions that apply."
+        )
+
+    for item in fixed["faq"]:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("q") or "")
+        answer = str(item.get("a") or "")
+        if asks_minimum_pattern.search(question) and denies_minimum_pattern.search(answer):
+            item["a"] = standard_answer
+            changed = True
+    return fixed, changed
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -2576,6 +2716,15 @@ def repair_article85_deterministic_omissions(data, *, topic, lang: str, publishe
                 )):
                     updated = repair_article85_notice_loss_claim(working, lang=lang)
                     action = "notice loss claim"
+                elif reason.startswith((
+                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى",
+                    "Article 85: FAQ about minimum service cannot say there is no minimum",
+                    "Article 85: contradictory minimum-service FAQ",
+                )):
+                    updated, faq_repaired = ensure_article85_minimum_faq(working, lang=lang)
+                    if not faq_repaired:
+                        return working, None, actions, reason
+                    action = "minimum-service FAQ corrected"
                 elif reason.startswith((
                     "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
                     "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
@@ -4993,6 +5142,84 @@ def selftest() -> int:
                   len(_short_repaired["sections"][_short_index]["body"]) >= 120
                   and _short_body in _short_repaired["sections"][_short_index]["body"]
                   and json.dumps(_short_data, ensure_ascii=False, sort_keys=True) == _short_original)
+
+        # Regression: the model can return an incorrect minimum-service FAQ even when the article body is sound.
+        for _faq_lang in ("ar", "en"):
+            _faq_bad = fixture_data(_faq_lang, topic_id="labor-art85")
+            if _faq_lang == "ar":
+                _faq_bad["faq"][0] = {
+                    "q": "ما الحد الأدنى لمدة الخدمة لاستحقاق مكافأة الاستقالة؟",
+                    "a": "لا يوجد حد أدنى، لكن لا يستحق العامل مكافأة قبل سنتين متتاليتين من الخدمة.",
+                }
+            else:
+                _faq_bad["faq"][0] = {
+                    "q": "What is the minimum service period for a resignation award?",
+                    "a": "There is no minimum, but no award is due before two consecutive years of service.",
+                }
+            _faq_fixed, _faq_changed = ensure_article85_minimum_faq(_faq_bad, lang=_faq_lang)
+            _faq_answer = str(_faq_fixed["faq"][0]["a"])
+            _faq_denial = ("لا يوجد حد أدنى" in _faq_answer) if _faq_lang == "ar" else ("There is no minimum" in _faq_answer)
+            check(f"Article 85: يناقض FAQ الحد الأدنى يُصحَّح حتميًا ({_faq_lang})",
+                  _faq_changed and not _faq_denial
+                  and "سنتين" in _faq_answer if _faq_lang == "ar"
+                  else _faq_changed and not _faq_denial and "two consecutive years" in _faq_answer)
+
+        # Regression: duplicate example headings are folded into a non-example section without dropping their prose/bullets.
+        _dup_example = fixture_data("en", topic_id="labor-art85")
+        _dup_heading = "Additional Example — alternative reader context"
+        _dup_body = (
+            "This original supplemental explanation must be preserved verbatim during safe restructuring. "
+            "It describes how a reader should compare their contract terms, employment dates, and applicable facts "
+            "with the official statutory text before drawing a conclusion about a personal case."
+        )
+        _dup_bullet = "Preserve this bullet from the additional example section"
+        _dup_example["sections"].append({
+            "heading": _dup_heading,
+            "body": _dup_body,
+            "bullets": [_dup_bullet],
+        })
+        _dup_original = json.dumps(_dup_example, ensure_ascii=False, sort_keys=True)
+        _dup_fixed, _dup_actions = merge_duplicate_article85_example_sections(_dup_example, lang="en")
+        _dup_sections = _dup_fixed["sections"]
+        _dup_nonexample_text = " ".join(
+            str(sec.get("body", "")) + " " + " ".join(sec.get("bullets") or [])
+            for sec in _dup_sections if isinstance(sec, dict)
+            and not re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        )
+        check("Article 85: يُدمج المثال الإضافي مع الحفاظ على العنوان والنص والنقاط",
+              len([sec for sec in _dup_sections if re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)]) == 1
+              and _dup_heading in _dup_nonexample_text
+              and _dup_body in _dup_nonexample_text
+              and _dup_bullet in _dup_nonexample_text
+              and "duplicate example section merged" in " ".join(_dup_actions)
+              and json.dumps(_dup_example, ensure_ascii=False, sort_keys=True) == _dup_original)
+
+        # Critical preflight must guarantee the notice and Article 86 caveats independently of model wording.
+        for _critical_lang in ("ar", "en"):
+            _critical = fixture_data(_critical_lang, topic_id="labor-art85")
+            _critical["sections"][0]["body"] = (
+                _critical["sections"][0]["body"].replace(
+                    "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة.", ""
+                ).replace(
+                    "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.", ""
+                )
+            )
+            _critical, _critical_actions = ensure_article85_critical_content(_critical, lang=_critical_lang)
+            _critical_text = " ".join(
+                str(sec.get("heading", "")) + " " + str(sec.get("body", "")
+                for sec in _critical["sections"] if isinstance(sec, dict)
+            )
+            _notice_present = (
+                "متطلبات الإشعار" in _critical_text if _critical_lang == "ar"
+                else "notice requirements" in _critical_text and "may still apply" in _critical_text
+            )
+            _article86_present = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" in _critical_text
+                if _critical_lang == "ar"
+                else "Under Article 86, commissions, sales percentages" in _critical_text
+            )
+            check(f"Article 85: يضمن preflight توضيح الإشعار والمادة 86 ({_critical_lang})",
+                  _notice_present and _article86_present)
 
         # A narrowly scoped deterministic repair avoids a second model call for known notice-loss claims.
         for _notice_lang, _notice_bad_claim in (
