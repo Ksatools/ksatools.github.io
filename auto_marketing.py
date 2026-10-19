@@ -3060,7 +3060,8 @@ def selftest() -> int:
                                "body": json.loads(kwargs["data"].decode("utf-8"))})
             prompt = _request_prompt(kwargs)
             lang = "en" if "لغة المخرجات: English" in prompt else "ar"
-            return _groq_envelope(lang=lang) + (url,)
+            topic_id = _topic_id_from_prompt(prompt)
+            return _groq_envelope(lang=lang, topic_id=topic_id) + (url,)
 
         globals()["http_request_full"] = _fake_groq_ok
         rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
@@ -3422,10 +3423,12 @@ def selftest() -> int:
 
             def _fn(url, **kwargs):
                 if "generativelanguage.googleapis.com" in url:
-                    lang = "en" if "لغة المخرجات: English" in _request_prompt(kwargs) else "ar"
+                    prompt = _request_prompt(kwargs)
+                    lang = "en" if "لغة المخرجات: English" in prompt else "ar"
+                    topic_id = _topic_id_from_prompt(prompt)
                     if lang in fail_langs:
                         return 503, {}, b'{"error":{"status":"UNAVAILABLE"}}', url
-                    return _envelope(lang) + (url,)
+                    return _envelope(lang, topic_id=topic_id) + (url,)
                 probes.append(url)
                 return source(url)
 
@@ -3528,7 +3531,8 @@ def selftest() -> int:
                     return fail + (url,)
                 prompt = _request_prompt(kwargs)
                 lang = "en" if "لغة المخرجات: English" in prompt else "ar"
-                return _groq_envelope(lang=lang) + (url,)
+                topic_id = _topic_id_from_prompt(prompt)
+                return _groq_envelope(lang=lang, topic_id=topic_id) + (url,)
             return _fn
 
         def _schema_problems(node, path="$"):
