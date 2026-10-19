@@ -26,6 +26,7 @@ tests/smoke_test.py — اختبار الدخان لصفحتَي index.html وpr
 import argparse
 import hashlib
 import io
+import json
 import pathlib
 import re
 import subprocess
@@ -35,6 +36,7 @@ import tempfile
 REPO = pathlib.Path(__file__).resolve().parent.parent
 INDEX = REPO / "index.html"
 PRIVACY = REPO / "privacy.html"
+DEPLOY_NOTES = REPO / "DEPLOY_NOTES.md"
 
 PASS, FAIL, XFAIL = "PASS", "FAIL", "XFAIL"
 results = []  # (status, name, detail, known)
@@ -75,6 +77,31 @@ def static_checks():
 
     check("index.html غير فارغ", len(raw) > 150000, "%d بايت" % len(raw))
     check("لا BOM", raw[:3] != b"\xef\xbb\xbf")
+    head = text.split("<head", 1)[0]
+    check("ملاحظات النشر خارج رأس index.html",
+          "ملاحظات النشر:" not in head and DEPLOY_NOTES.exists()
+          and "## 1) `ads.txt`" in DEPLOY_NOTES.read_text(encoding="utf-8"))
+    boot_pos = text.find("(function applyBootPreferences()")
+    style_pos = text.find("<style>")
+    check("تهيئة المظهر واللغة قبل CSS",
+          0 <= boot_pos < style_pos
+          and "document.documentElement.dataset.theme = theme" in text
+          and "document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'" in text,
+          "boot=%d style=%d" % (boot_pos, style_pos))
+    jsonld = re.search(r'<script type="application/ld\+json">([\s\S]*?)</script>', text)
+    try:
+        jsonld_data = json.loads(jsonld.group(1)) if jsonld else {}
+        faq_nodes = [node for node in jsonld_data.get("@graph", [])
+                     if node.get("@type") == "FAQPage"]
+        faq_count = len(faq_nodes)
+        question_count = len(faq_nodes[0].get("mainEntity", [])) if faq_count == 1 else 0
+        languages = faq_nodes[0].get("inLanguage", []) if faq_count == 1 else []
+    except (ValueError, AttributeError, TypeError):
+        faq_count, question_count, languages = 0, 0, []
+    check("JSON-LD صالح ويجمع FAQPage باللغتين",
+          faq_count == 1 and question_count == 4
+          and set(languages) == {"ar-SA", "en-US"},
+          "FAQPage=%d questions=%d languages=%r" % (faq_count, question_count, languages))
     check("clear local data control and bilingual messages",
           'id="clear-local-data"' in text
           and text.count("clearLocalData:") == 2
@@ -153,9 +180,15 @@ def static_checks():
             print("[SKIP] node غير متوفّر — تخطّي فحص privacy.html", flush=True)
     elif PRIVACY.exists():
         record(FAIL, "العثور على جافاسكربت privacy.html", "لم يُعثر على <script>…</script>")
+    social_url = "https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"
     check("سكربت Social Bar موجود مرة واحدة",
-          text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3") == 1,
-          "count=%d" % text.count("https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"))
+          text.count(social_url) == 1,
+          "count=%d" % text.count(social_url))
+    check("Social Bar مؤجل إلى load وليس سكربتاً متزامناً",
+          "window.addEventListener('load', function loadAdsterraSocialBar()" in text
+          and "script.async = true" in text
+          and ('src="' + social_url + '"' not in text),
+          "must be injected dynamically after load")
     check("سكربت Native Banner موجود مرة واحدة",
           text.count("https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89") == 1,
           "count=%d" % text.count("https://bauval.org/21/7af3b8325dba6708da88eed5e517ec89"))
@@ -284,6 +317,66 @@ def browser_checks(headless):
         ctx = browser.new_context(viewport={"width": 1440, "height": 1000})
         ctx.route("**/*", stub_third_party)
         pg = setup_page(ctx, errors)
+        check("Social Bar يُحقن بعد load مرة واحدة",
+              pg.evaluate("""() => document.querySelectorAll(
+                'script[src="https://bauval.org/14/7cdd0a31b4560a6ce3906a22a43c5ed3"]').length === 1"""))
+
+        letter_ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        letter_ctx.route("**/*", stub_third_party)
+        letter_pg = letter_ctx.new_page()
+        letter_pg.goto(INDEX.as_uri(), wait_until="load")
+        dates = letter_pg.evaluate("""() => {
+          const date = new Date(2026, 9, 20, 12);
+          const options = {day: 'numeric', month: 'long', year: 'numeric'};
+          document.getElementById('let-date').value = '2026-10-20';
+          document.getElementById('let-doc-lang').value = 'ar';
+          generateLetter();
+          const arText = document.getElementById('letter-output').textContent;
+          const arExpected = new Intl.DateTimeFormat('ar-SA-u-ca-gregory', options).format(date);
+          const keepsHijri = /الموافق .+ هـ/.test(arText);
+          document.getElementById('let-doc-lang').value = 'en';
+          generateLetter();
+          const enText = document.getElementById('letter-output').textContent;
+          const enExpected = new Intl.DateTimeFormat('en-GB', options).format(date);
+          return {arText, arExpected, keepsHijri, enText, enExpected};
+        }""")
+        check("تاريخ الخطاب بالعربية منسق وتاريخ الهجري محفوظ",
+              dates["arExpected"] in dates["arText"] and dates["keepsHijri"],
+              repr({"arExpected": dates["arExpected"], "keepsHijri": dates["keepsHijri"]}))
+        check("تاريخ الخطاب بالإنجليزية منسق حسب لغة المستند",
+              ("effective " + dates["enExpected"]) in dates["enText"]
+              and "Date: " in dates["enText"],
+              repr({"enExpected": dates["enExpected"], "text": dates["enText"][:180]}))
+        letter_ctx.close()
+
+        # --- تفضيلات المظهر واللغة تُطبّق في <head> قبل DOMContentLoaded.
+        boot_ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+        boot_ctx.route("**/*", stub_third_party)
+        boot_ctx.add_init_script("""
+          window.__ksaBootTimeline = [];
+          new MutationObserver(() => {
+            const r = document.documentElement;
+            if (r && r.dataset.theme === 'dark' && r.lang === 'en' && r.dir === 'ltr') {
+              window.__ksaBootTimeline.push(document.readyState);
+            }
+          }).observe(document, {subtree: true, attributes: true,
+                                attributeFilter: ['data-theme', 'lang', 'dir']});
+          localStorage.setItem('seh_theme', 'dark');
+          localStorage.setItem('seh_lang', 'en');
+        """)
+        boot_pg = boot_ctx.new_page()
+        boot_pg.goto(INDEX.as_uri(), wait_until="domcontentloaded")
+        boot_state = boot_pg.evaluate("""() => ({
+          theme: document.documentElement.dataset.theme,
+          lang: document.documentElement.lang,
+          dir: document.documentElement.dir,
+          appliedWhileLoading: (window.__ksaBootTimeline || []).includes('loading')
+        })""")
+        check("المظهر واللغة المحفوظان يظهران قبل DOMContentLoaded",
+              boot_state["theme"] == "dark" and boot_state["lang"] == "en"
+              and boot_state["dir"] == "ltr" and boot_state["appliedWhileLoading"],
+              repr(boot_state))
+        boot_ctx.close()
 
         # --- تنسيق SAR: يجب أن يتبع لغة الواجهة عند التبديل، حتى مع تخزين المهيئات مؤقتاً.
         fmt_ctx = browser.new_context(viewport={"width": 1280, "height": 900})
