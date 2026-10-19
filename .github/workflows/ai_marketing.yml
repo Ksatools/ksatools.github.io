@@ -47,6 +47,13 @@ on:
         description: "تخطّي التحقّق الشبكي من المصادر الرسمية (يدوي فقط)"
         type: boolean
         default: false
+      groq_en_reasoning_effort:
+        description: "مقارنة اختيارية للإنجليزية فقط (medium). اترك low للإعداد الافتراضي؛ العربية تبقى low دائماً."
+        type: choice
+        options:
+          - low
+          - medium
+        default: low
 
 permissions:
   contents: read
@@ -77,6 +84,7 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.8-flash' }}
       SOCIAL_LANGUAGE: ${{ vars.SOCIAL_LANGUAGE || 'both' }}
+      GROQ_EN_REASONING_EFFORT: ${{ inputs.groq_en_reasoning_effort || 'low' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -177,6 +185,7 @@ jobs:
           TOPIC_INPUT: ${{ inputs.topic }}
           SKIP_SOURCE_CHECK_INPUT: ${{ inputs.skip_source_check }}
           DRAFT_DIR: ${{ runner.temp }}/drafts
+          GENERATION_REPORT_PATH: ${{ runner.temp }}/generation_report.json
         run: |
           set -euo pipefail
           ARGS=()
@@ -221,7 +230,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: drafts
-          path: ${{ runner.temp }}/drafts
+          path: |
+            ${{ runner.temp }}/drafts
+            ${{ runner.temp }}/generation_report.json
           if-no-files-found: ignore
           retention-days: 14
 

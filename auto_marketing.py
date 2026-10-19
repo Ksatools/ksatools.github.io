@@ -82,6 +82,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from string import Template
@@ -233,7 +234,10 @@ RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 # يُزاد مرة واحدة لكل دورة في run_once، لا لكل نداء شبكة.
 GEMINI_MAX_TRIES = 4
 GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
-GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار بين محاولتين
+GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار التصاعدي العادي بين محاولتين
+GROQ_INITIAL_HTTP_TRIES = 3
+GROQ_MAX_REQUESTS_PER_LANGUAGE = 4  # hard cap including retries/schema and content repair
+GROQ_LANGUAGE_GAP_SECONDS = 12.0  # cool-down between Arabic and English requests
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
 EXIT_GENERATION_FAILED = 2
 # رمز خروج مميّز لفشل الإعداد (غياب مفتاح المزوّد): لا توليد ولا نشر ولا استهلاك محاولات.
@@ -378,6 +382,138 @@ def has_dangerous_scheme(value) -> bool:
 def collapse_paragraphs(body: str) -> list:
     parts = re.split(r"\n\s*\n", body or "")
     return [re.sub(r"\s*\n\s*", " ", p).strip() for p in parts if p.strip()]
+
+
+ARTICLE_NUMBER_PATTERN = re.compile(
+    r"(?<![\w])(?:SAR\s+)?[<>≤≥]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+    r"(?:\s*/\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)?"
+    r"(?:\s*(?:[–—-]|\bto\b)\s*[<>≤≥]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)?"
+    r"(?:\s?%)?(?![\w])",
+    re.IGNORECASE,
+)
+ARTICLE_INLINE_MARKUP_PATTERN = re.compile(r"(\*\*.+?\*\*|__.+?__|\*[^*\n]+\*)")
+
+
+def _render_numeric_text(value: str) -> str:
+    """Escape plain text and isolate numeric values for consistent LTR rendering in both languages."""
+    text = str(value or "")
+    parts = []
+    cursor = 0
+    for match in ARTICLE_NUMBER_PATTERN.finditer(text):
+        parts.append(esc(text[cursor:match.start()]))
+        parts.append(f'<bdi class="numeric" dir="ltr">{esc(match.group(0))}</bdi>')
+        cursor = match.end()
+    parts.append(esc(text[cursor:]))
+    return "".join(parts)
+
+
+def render_inline_prose(value: str) -> str:
+    """Render the small, safe inline-markup subset used in article drafts (bold/italic/numbers)."""
+    text = str(value or "")
+    chunks = ARTICLE_INLINE_MARKUP_PATTERN.split(text)
+    out = []
+    for chunk in chunks:
+        if not chunk:
+            continue
+        if chunk.startswith("**") and chunk.endswith("**"):
+            out.append("<strong>" + _render_numeric_text(chunk[2:-2]) + "</strong>")
+        elif chunk.startswith("__") and chunk.endswith("__"):
+            out.append("<strong>" + _render_numeric_text(chunk[2:-2]) + "</strong>")
+        elif chunk.startswith("*") and chunk.endswith("*"):
+            out.append("<em>" + _render_numeric_text(chunk[1:-1]) + "</em>")
+        else:
+            out.append(_render_numeric_text(chunk))
+    return "".join(out)
+
+
+def _split_article_sentences(value: str) -> list:
+    """Conservative sentence splitting used only to break very long text walls into readable paragraphs."""
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [
+        part.strip()
+        for part in re.split(r"(?<=[.!?؟])\s+(?=[A-Z0-9\u0600-\u06FF])", text)
+        if part.strip()
+    ]
+
+
+def _expand_inline_article_lists(value: str) -> str:
+    """Turn inline bullets/numbered steps into line markers before HTML rendering."""
+    text = re.sub(r"^\s*[-–]\s+", "• ", str(value or ""))
+    text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", text)
+    # Only split single-digit inline markers here: Article references such as "Article 86. The"
+    # must remain normal prose, not be mistaken for numbered list items.
+    text = re.sub(r"(?<!\d)\s+([1-9][.)])\s+", r"\n\1 ", text)
+    # Arabic drafts sometimes encode every sub-step as '- item' inside a single sentence.
+    # Require repeated spaced hyphens so a normal dash in prose is not mistaken for a list.
+    if len(re.findall(r"\s+-\s+", text)) >= 2:
+        text = re.sub(r"\s+-\s+", "\n• ", text)
+    return text
+
+
+def render_article_body(body: str) -> str:
+    """Render paragraphs, Markdown-like inline emphasis, bullets and numbered steps without allowing raw HTML."""
+    text = str(body or "").replace("\r\n", "\n").replace("\r", "\n")
+    # Models occasionally leak a duplicated FAQ heading into a regular paragraph. The article
+    # renderer adds a dedicated FAQ section below, so remove only the repeated heading artifact.
+    text = re.sub(
+        r"(?:\bCommon Questions\s+)?\bFAQ(?:\s+FAQ){1,}\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[ \t]+\n", "\n", text).strip()
+    paragraphs = [part for part in re.split(r"\n\s*\n", text) if part.strip()]
+    blocks = []
+
+    for paragraph in paragraphs:
+        expanded = _expand_inline_article_lists(re.sub(r"[ \t]*\n[ \t]*", " ", paragraph).strip())
+        lines = [line.strip() for line in expanded.split("\n") if line.strip()]
+        tokens = []
+        for line in lines:
+            ordered = re.match(r"^(\d{1,2})[.)]\s+(.+)$", line)
+            bullet = re.match(r"^[•●▪]\s+(.+)$", line)
+            if ordered:
+                tokens.append(("ol", ordered.group(2).strip()))
+            elif bullet:
+                tokens.append(("ul", bullet.group(1).strip()))
+            else:
+                sentences = _split_article_sentences(line)
+                # Keep short text intact; split long walls into pairs of sentences.
+                if len(sentences) >= 4:
+                    for index in range(0, len(sentences), 2):
+                        tokens.append(("p", " ".join(sentences[index:index + 2])))
+                else:
+                    tokens.append(("p", line))
+
+        # If a model placed additional explanation after the final inline bullet, keep the first
+        # sentence as the list item and move the explanation back into normal paragraphs.
+        list_indexes = [i for i, (kind, _) in enumerate(tokens) if kind in ("ul", "ol")]
+        if list_indexes and list_indexes[-1] == len(tokens) - 1:
+            last_index = list_indexes[-1]
+            last_kind, last_text = tokens[last_index]
+            sentences = _split_article_sentences(last_text)
+            if len(sentences) > 1:
+                tokens[last_index] = (last_kind, sentences[0])
+                trailing = sentences[1:]
+                tokens.extend(("p", sentence) for sentence in trailing)
+
+        index = 0
+        while index < len(tokens):
+            kind, value = tokens[index]
+            if kind == "p":
+                blocks.append(f"<p>{render_inline_prose(value)}</p>")
+                index += 1
+                continue
+            items = []
+            while index < len(tokens) and tokens[index][0] == kind:
+                items.append(f"<li>{render_inline_prose(tokens[index][1])}</li>")
+                index += 1
+            tag = "ol" if kind == "ol" else "ul"
+            blocks.append(f'<{tag} class="article-list">' + "".join(items) + f"</{tag}>")
+
+    return "\n      ".join(blocks)
 
 
 def sha256_text(text: str) -> str:
@@ -688,29 +824,44 @@ def header_get(headers, name):
     return value if isinstance(value, str) else None
 
 
+def retry_after_seconds(value, *, now=None):
+    """Convert numeric Retry-After or an HTTP-date to a non-negative delay."""
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    try:
+        seconds = float(text_value)
+        if seconds >= 0 and seconds == seconds:
+            return seconds
+    except (TypeError, ValueError):
+        pass
+    try:
+        requested = parsedate_to_datetime(text_value)
+        if requested.tzinfo is None:
+            requested = requested.replace(tzinfo=timezone.utc)
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return max(0.0, (requested - current).total_seconds())
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def backoff_delay(attempt, *, retry_after=None, base=GEMINI_BACKOFF_BASE,
                   cap=GEMINI_BACKOFF_MAX) -> float:
-    """انتظار تصاعدي `base × 2^attempt` بحدّ أعلى `cap`، مع احترام Retry-After إن وُجد."""
+    """Exponential backoff; honor a valid Retry-After value even when above the normal cap."""
     delay = min(base * (2 ** max(0, int(attempt))), cap)
-    if retry_after:
-        try:
-            asked = float(str(retry_after).strip())
-        except ValueError:
-            asked = 0.0   # تاريخ HTTP أو قيمة غير صالحة ⇒ نكتفي بالانتظار التصاعدي
-        if asked > 0:
-            delay = min(max(delay, asked), cap)
+    asked = retry_after_seconds(retry_after)
+    if asked is not None and asked > 0:
+        # A server-provided delay wins over local backoff; do not retry earlier than requested.
+        delay = max(delay, asked)
     return float(delay)
 
 
 def _has_numeric_retry_after(value) -> bool:
-    """True عند وجود Retry-After رقمي صالح بالثواني (تُدعَم الأرقام فقط حالياً)."""
-    if value is None:
-        return False
-    try:
-        seconds = float(str(value).strip())
-    except (TypeError, ValueError):
-        return False
-    return seconds >= 0 and seconds == seconds
+    """Backward-compatible helper for callers/tests that specifically require numeric seconds."""
+    seconds = retry_after_seconds(value)
+    return seconds is not None and str(value).strip().replace(".", "", 1).isdigit()
 
 
 def classify_failure(status, raw, *, retry_after=None) -> tuple:
@@ -720,6 +871,8 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
     - model : 404 أو رسالة تدلّ على نموذج غير متاح — لا يُعاد (العِلاج تغيير النموذج).
     - quota : 429 مع دلالة حصة يومية صريحة — لا يُعاد (تكراره بلا فائدة).
     - rate_limit : 429 مؤقّت، ومنها TPM أو Retry-After أو مهلة مذكورة في النص.
+    - structured_output : 400 ذو الرمز json_validate_failed في Groq — إعادة محدودة
+      بنفس JSON Schema الصارم لمعالجة فشل توليد عابر؛ لا تغيير إلى JSON mode.
     - transient  : 408/425/5xx — يُعاد بتراجع تصاعدي.
     - other : أي رمز آخر — لا يُعاد.
     """
@@ -737,11 +890,26 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
         # إشارات المعدّل/المهلة تتقدّم على عبارات عامة مثل "check your plan" أو "billing".
         if (any(h in low for h in TEMPORARY_RATE_LIMIT_HINTS)
                 or RETRY_DELAY_RE.search(low)
-                or _has_numeric_retry_after(retry_after)):
+                or retry_after_seconds(retry_after) is not None):
             return True, "rate_limit", "تجاوز معدّل مؤقّت"
         if any(h in low for h in QUOTA_STOP_HINTS):
             return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
         return True, "rate_limit", "تجاوز معدّل مؤقّت"
+    if status == 400 and "missing properties" in low and (
+        "jsonschema" in low or "expected schema" in low or "does not validate" in low
+    ):
+        # Missing required keys is a deterministic shape failure, not a transient
+        # transport failure. Return it immediately so Article 85 can make one
+        # prompt-corrected request under the same strict schema instead of
+        # repeating an identical request up to four times.
+        return False, "schema_incomplete", "استجابة المخطط تفتقد حقولاً مطلوبة"
+    if status == 400 and (
+        "json_validate_failed" in low or "failed to generate json" in low
+    ):
+        # Groq may intermittently report a constrained-generation failure even for
+        # a schema that passed our strict-schema checks. Retry only this exact
+        # signature a bounded number of times with the same strict request.
+        return True, "structured_output", "تعذّر توليد JSON المنظّم؛ ستُعاد المحاولة بنفس المخطط الصارم"
     if status in RETRYABLE_STATUS:
         return True, "transient", "خطأ مؤقّت"
     return False, "other", "خطأ غير قابل لإعادة المحاولة"
@@ -749,15 +917,45 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
 
 def format_failure(status, raw, tries_used, tries) -> str:
     """رسالة فشل موحّدة (بلا أسرار): الرمز + مقتطف الاستجابة + التصنيف وعدد المحاولات."""
-    retryable, _code, note = classify_failure(status, raw)
+    retryable, code, note = classify_failure(status, raw)
     if retryable and tries_used >= tries:
         note = "خطأ مؤقّت — استُنفدت المحاولات"
-    snippet = redact(raw.decode("utf-8", "replace")[:300]) if isinstance(raw, (bytes, bytearray)) else ""
+    response_text = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else ""
+    if code == "schema_incomplete":
+        low = response_text.lower()
+        marker = low.find("missing properties:")
+        missing_region = low[marker + len("missing properties:"):] if marker >= 0 else ""
+        schema_fields = ("title", "meta_description", "excerpt", "sections", "faq",
+                         "official_sources", "calculation_example")
+        missing_fields = [
+            field for field in schema_fields
+            if re.search(rf"['\"]{re.escape(field)}['\"]", missing_region, re.IGNORECASE)
+        ]
+        snippet = "schema_missing_required: " + (", ".join(missing_fields) or "required fields")
+    else:
+        snippet = redact(response_text[:300])
     return f"http_{status}: {snippet} [{note} — محاولات {tries_used}/{tries}]"
 
 
+class RequestBudgetExhausted(RuntimeError):
+    """Raised before network access when a language has used all its API-call allowance."""
+
+
+class RequestBudget:
+    """Hard cap on actual HTTP requests, shared by retries and repair calls for one language."""
+    def __init__(self, max_requests):
+        self.max_requests = max(1, int(max_requests))
+        self.used = 0
+
+    def consume(self):
+        if self.used >= self.max_requests:
+            raise RequestBudgetExhausted(
+                f"API request budget exhausted ({self.used}/{self.max_requests})")
+        self.used += 1
+
+
 def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_MAX_TRIES,
-                     sleep=None):
+                     sleep=None, request_budget=None):
     """يرسل طلب POST إلى مزوّد المحتوى ويعيد (status, raw, tries_used).
 
     إعادة المحاولة محدودة للأخطاء المؤقّتة فقط (خطأ شبكة أو رمز يُصنَّف مؤقّتاً)،
@@ -768,6 +966,8 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
     tries = max(1, int(tries))
     last_exc = None
     for attempt in range(tries):
+        if request_budget is not None:
+            request_budget.consume()
         try:
             status, resp_headers, raw, _ = http_request_full(
                 url,
@@ -815,13 +1015,15 @@ def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sl
         provider="Gemini", timeout=timeout, tries=tries, sleep=sleep)
 
 
-def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
+def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None,
+                 request_budget=None):
     """طلب Groq (OpenAI-compatible) — المفتاح في ترويسة Authorization، ولا يُطبع أبداً."""
     return provider_request(
         url, body, {"Content-Type": "application/json; charset=utf-8",
                     "Accept": "application/json",
                     "Authorization": f"Bearer {api_key}"},
-        provider="Groq", timeout=timeout, tries=tries, sleep=sleep)
+        provider="Groq", timeout=timeout, tries=tries, sleep=sleep,
+        request_budget=request_budget)
 
 
 # =====================================================================================
@@ -869,12 +1071,12 @@ EOSB_LEGAL_RULES = {
         "الأولى، وأجر شهر كامل عن كل سنة من السنوات التالية، ويُتخذ الأجر الأخير "
         "أساساً للحساب. أجزاء السنة تُحتسب بنسبة ماقضى العامل منها فعلاً — لا "
         "بقاعدة «21 يوماً عن كل سنة»، ولا بنصف يوم عن كل شهر غير مكتمل.\n"
-        "2) الاستحقاق عند الاستقالة (المادة 85): الاستقالة لا تستلزم مدة ثلاثة أشهر؛ "
-        "فحدّ الأدنى للاستحقاق هو خدمة متتالية لا تقل عن سنتين. فمن خدم سنتين إلى "
-        "خمس سنوات فله ثلث المكافأة، وما زاد على خمس سنوات ولم يبلغ عشر سنوات "
-        "ثلثاها، وما بلغ عشر سنوات فأكثر فالمكافأة كاملة. ومدة الإشعار بثلاثين "
-        "يوماً أو حسم طلب الاستقالة بعد ثلاثين يوماً (المادتان 75 و79 مكرر) ليسا "
-        "شرطاً للاستحقاق.\n"
+        "2) الاستحقاق عند الاستقالة (المادة 85): المادة 85 تنظّم نسب مكافأة نهاية الخدمة عند الاستقالة فقط؛ "
+        "ولا تحدد مدة الإشعار ولا تعفي من متطلباته. يستحق العامل ثلث المكافأة بعد خدمة متتالية لا تقل عن سنتين متتاليتين "
+        "ولا تزيد على خمس سنوات، والثلثين إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا، والمكافأة كاملة "
+        "إذا بلغت الخدمة عشر سنوات فأكثر. متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة قد تنطبق "
+        "بحسب نوع العقد والأحكام النظامية. لا تقل إن المادة 85 تنص على عدم الحاجة إلى إشعار، ولا تخلط "
+        "بين مهلة الإشعار وشروط استحقاق مكافأة نهاية الخدمة.\n"
         "3) عناصر الأجر (المادة 86): لا تُستبعد من أساس الحساب إلا العمولات والنسب "
         "المئوية عن ثمن المبيعات وما أشبهها من عناصر الأجر القابلة بطبيعتها للزيادة "
         "والنقص، وذلك باتفاق صريح بين الطرفين. فلا تدّعِ أن الأجر الأساسي وحده يدخل "
@@ -925,13 +1127,12 @@ EOSB_LEGAL_RULES = {
         "with the last wage as the basis of the calculation. Parts of a year are "
         "counted in proportion to the time actually served — not by a flat "
         "\"21 days per year\" rule, and not by half a day per incomplete month.\n"
-        "2) Entitlement on resignation (Article 85): resignation does not require "
-        "three months; the minimum threshold for entitlement is two consecutive "
-        "years of service. From two to five years the entitlement is one third of "
-        "the benefit; above five but below ten years it is two thirds; at ten "
-        "years or more it is the full benefit. The thirty-day notice period, or a "
-        "resignation request deemed accepted after thirty days (Articles 75 and "
-        "79-bis), is not an entitlement threshold.\n"
+        "2) Entitlement on resignation (Article 85): Article 85 sets the end-of-service benefit ratios for resignation only; "
+        "it does not set or waive notice requirements. The entitlement is one third of the benefit after two consecutive years of service and up to five years; "
+        "two thirds applies above five but below ten years; the full benefit applies at ten years or more. "
+        "Notice and resignation procedures are separate questions governed by the applicable contract and law. "
+        "Do not say Article 85 specifies that notice is not required or that resignation needs no three-month notice, "
+        "and do not confuse notice requirements with EOSB eligibility.\n"
         "3) Wage elements (Article 86): only commissions, sales percentages and "
         "similar wage elements that are naturally subject to increase and "
         "decrease may be excluded from the basis of the calculation, and only by "
@@ -995,11 +1196,39 @@ EOSB_LEGAL_RULES = {
 }
 
 
+EOSB_ARTICLE85_LEGAL_RULES = {
+    "ar": (
+        "قواعد قانونية خاصة بموضوع المادة 85:\n"
+        "المادة 84: نصف أجر عن كل سنة من السنوات الخمس الأولى، ثم أجر شهر عن كل سنة تالية؛ الأجر الأخير أساس الحساب، "
+        "وأجزاء السنة تُحسب بنسبة المدة الفعلية.\n"
+        "المادة 85 عند الاستقالة: لا استحقاق قبل سنتين متتاليتين؛ الثلث من سنتين إلى خمس سنوات شاملةً خمس سنوات؛ "
+        "الثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر؛ والمكافأة كاملة عند عشر سنوات فأكثر.\n"
+        "المادة 85 تحدد نسبة المكافأة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ قد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام.\n"
+        "المادة 86: لا يجوز استبعاد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح إذا كانت بطبيعتها متغيرة بالزيادة والنقص؛ لا تصف ذلك باستبعاد الأجر الأساسي.\n"
+        "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
+    ),
+    "en": (
+        "Legal rules specific to this Article 85 article:\n"
+        "Article 84: half a month's wage for each of the first five years, then one full month's wage for each subsequent year; "
+        "the last wage is the basis, and partial years are prorated to actual service.\n"
+        "Article 85 on resignation: no entitlement before two consecutive years; one third from two through five years inclusive; "
+        "two thirds only above five and below ten years; full benefit at ten years or more.\n"
+        "Article 85 sets the benefit ratio, not contract notice requirements, and does not waive notice; notice and resignation procedures may still apply under the contract and law.\n"
+        "Article 86: qualifying commissions, sales percentages and similar naturally variable wage elements may be excluded only by explicit agreement; this does not exclude basic wage.\n"
+        "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
+    ),
+}
+
+
 def legal_rules_for(topic, lang: str) -> str:
-    """قواعد المواد 80 و81 و84–88 لبرومبت الموضوع — لموضوعات المكافأة فقط وبلا تعميم."""
-    if topic.get("id") not in EOSB_TOPIC_IDS:
+    """Return topic-scoped EOSB rules; unrelated legal clauses are omitted to reduce prompt tokens."""
+    topic_id = topic.get("id")
+    if topic_id not in EOSB_TOPIC_IDS:
         return ""
-    return EOSB_LEGAL_RULES["ar" if lang == "ar" else "en"]
+    language = "ar" if lang == "ar" else "en"
+    if topic_id == "labor-art85":
+        return EOSB_ARTICLE85_LEGAL_RULES[language]
+    return EOSB_LEGAL_RULES[language]
 
 
 def eosb_reference_amount(total_years, monthly_wage, *, resigned: bool) -> float:
@@ -1157,7 +1386,10 @@ def _parse_eosb_number(value, field: str, *, integer: bool = False) -> Decimal:
     return number
 
 
-def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_text: str) -> None:
+def validate_eosb_calculation_example(
+    raw, *, topic, article_text: str, example_text: str,
+    require_canonical_article85: bool = False,
+) -> None:
     """يرفض مثال مكافأة نهاية خدمة إذا خالف معادلة المادتين 84/85 أو نص المقال."""
     if not isinstance(raw, dict) or set(raw) != set(EOSB_CALCULATION_FIELDS):
         raise Reject("calculation_example: الكائن أو حقوله غير مكتملة")
@@ -1194,6 +1426,16 @@ def validate_eosb_calculation_example(raw, *, topic, article_text: str, example_
         raise Reject("calculation_example.monthly_wage: يجب أن يكون الأجر أكبر من الصفر")
     if years > 80 or months > 11 or days > 30:
         raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
+    # Article 85 uses a code-owned worked example so the model cannot invent
+    # a new duration or wage and drift across Arabic/English calculations.
+    if require_canonical_article85 and topic_id == "labor-art85" and (
+        wage != Decimal("12000") or years != Decimal("6")
+        or months != 0 or days != 0
+    ):
+        raise Reject(
+            "calculation_example: موضوع المادة 85 يتطلب المثال الثابت "
+            "(أجر 12000، خدمة 6 سنوات، أشهر وأيام صفر)"
+        )
 
     total_years = years + months / Decimal(12) + days / Decimal(365)
     first_five = min(total_years, Decimal(5))
@@ -1356,6 +1598,45 @@ def build_prompt(topic, lang: str) -> str:
                 "اختر scenario يطابق المثال بدقة: base (أساس المادة 84 قبل أي نسبة خاصة)، "
                 "resignation (نسبة المادة 85)، article81 (حالة المادة 81)، أو article87 (استثناء المادة 87).\n"
             )
+        canonical_example_rule = ""
+        article85_claims_rule = ""
+        if topic.get("id") == "labor-art85":
+            if lang == "ar":
+                article85_claims_rule = (
+                    "للمادة 85: ثلث المكافأة من سنتين إلى خمس سنوات شاملةً خمس سنوات، والثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر. "
+                    "المادة 85 تحدد نسبة المكافأة عند الاستقالة ولا تحدد مدة إشعار العقد ولا تعفي منه؛ وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام. "
+                    "لا تقل إن عدم الالتزام بالإشعار يؤدي تلقائيًا إلى فقدان أو خفض مكافأة نهاية الخدمة؛ أي مسؤولية عن مهلة الإشعار مسألة منفصلة، ولا تستنتج أثرًا ماليًا دون سند رسمي محدد. "
+                    "في سؤال الحد الأدنى لاستحقاق مكافأة الاستقالة، لا تقل إنه لا يوجد حد أدنى: تشترط المادة 85 سنتين متتاليتين كحد أدنى. "
+                    "وفق المادة 86، لا تُستبعد العمولات ونسب المبيعات والعناصر المشابهة إلا باتفاق صريح عندما تكون بطبيعتها متغيرة بالزيادة والنقص؛ وهذا لا يستبعد الأجر الأساسي. "
+                    "المادة 81 تخص ترك العامل العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل.\n"
+                )
+            else:
+                article85_claims_rule = (
+                    "For Article 85: one third applies from two through five years inclusive; two thirds applies only above five and below ten. "
+                    "Article 85 sets the resignation benefit ratio, not contract notice requirements; notice and resignation procedures may still apply under the contract and law. "
+                    "Do not claim that notice non-compliance automatically forfeits or reduces the end-of-service award; any notice-period liability is separate, and no financial consequence should be asserted without a specific official basis. "
+                    "In any FAQ asking about the minimum service for a resignation award, do not say there is no minimum: Article 85 requires two consecutive years as the minimum. "
+                    "Under Article 86, qualifying variable commissions/sales elements may be excluded only by explicit agreement; this does not exclude basic wage. "
+                    "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal.\n"
+                )
+            if lang == "ar":
+                canonical_example_rule = (
+                    "مثال هذا الموضوع ثابت ومحسوب مسبقاً؛ لا تخترع أرقاماً أخرى ولا تغيّر أي قيمة: "
+                    "monthly_wage=12000, years=6, months=0, days=0, scenario=resignation, "
+                    "full_benefit=42000, payable_benefit=28000. "
+                    "اكتب داخل قسم «مثال» هذه الفكرة بالأرقام نفسها: الأجر الشهري 12,000 ريال، "
+                    "مدة الخدمة 6 سنوات، المكافأة الأساسية 42,000 ريال، والمبلغ المستحق بعد نسبة الاستقالة 28,000 ريال. "
+                    "لا تضف أي مبلغ نقدي آخر.\n"
+                )
+            else:
+                canonical_example_rule = (
+                    "This topic uses a fixed, pre-calculated example. Do not invent or change any value: "
+                    "monthly_wage=12000, years=6, months=0, days=0, scenario=resignation, "
+                    "full_benefit=42000, payable_benefit=28000. "
+                    "In the Example section state these same figures: monthly wage SAR 12,000, "
+                    "six years of service, full base benefit SAR 42,000, and payable benefit after the resignation ratio SAR 28,000. "
+                    "Do not add any other currency amount.\n"
+                )
         calculation_rule = (
             "7) calculation_example: املأ الحقول كلها بنصوص رقمية تستخدم أرقاماً غربية بلا فواصل داخل JSON؛ "
             "monthly_wage هو الأجر الشهري، وyears/months/days مدة الخدمة (الأشهر 0–11 والأيام 0–30). "
@@ -1366,6 +1647,8 @@ def build_prompt(topic, lang: str) -> str:
             "ضع المثال الرقمي داخل قسم عنوانه يتضمن كلمة «مثال» أو “Example”، واذكر مدة الخدمة فيه صراحةً "
             "بصيغة مرتبطة بالخدمة؛ يجب أن تتطابق السنوات والأشهر والأيام المكتوبة في هذا القسم مع الحقول المنظمة.\n"
             + scenario_instruction
+            + article85_claims_rule
+            + canonical_example_rule
             + "يُعاد حساب هذه القيم آلياً؛ إن لم تستطع ضبط المثال حسابياً فلا تخمّن ولا تكتب مثالاً مخالفاً. "
             "كل مبلغ نقدي مذكور في نص المقال يجب أن يكون أحد هذه المبالغ فقط، ويجب إظهاره بعملة واضحة مثل ريال أو SAR. وعند إنتاج النسختين، استخدم الأجر ومدة الخدمة والسيناريو والنتائج الحسابية نفسها في العربية والإنجليزية.\n"
         )
@@ -1398,6 +1681,8 @@ def build_prompt(topic, lang: str) -> str:
         '  "calculation_example": {"monthly_wage": "", "years": "", "months": "", "days": "", "scenario": "", "full_benefit": "", "payable_benefit": ""}\n'
         "}\n\n"
         f"- sections: من {MIN_SECTIONS} إلى {MAX_SECTIONS} عناصر، و bullets اختيارية (اتركها [] عند عدم الحاجة).\n"
+        "- يجب أن يكون body في كل قسم غير فارغ ويتراوح بين 120 و5000 حرف. لا تترك عنواناً بلا محتوى؛ ادمج الأقسام الفارغة مع أقسام مناسبة مع الحفاظ على كل المعلومات القانونية المهمة.\n"
+        "- يجب ألا يتجاوز نص body في أي قسم منفرد 5000 حرف، بما في ذلك المسافات؛ وزّع المحتوى على أقسام متعددة ولا تضع معظم المقال في قسم واحد.\n"
         "- faq: من سؤالين إلى أربعة أسئلة.\n"
         "- إجمالي المحتوى لا يقل عن 350 كلمة.\n"
         "- لا تُضِف حقولاً خارج البنية أعلاه.\n"
@@ -1563,7 +1848,7 @@ def groq_response_format() -> dict:
 
 
 def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
-                       sleep=None):
+                       sleep=None, request_budget=None, reasoning_effort="low"):
     """يرجع (ok, data|None, message) من Groq عبر Structured Outputs بوضع صارم.
 
     المفتاح يُرسل في ترويسة Authorization ولا يُطبع أبداً، ولا يظهر في أي رسالة خطأ.
@@ -1580,13 +1865,21 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.35,
+        # Default remains low; medium is an explicit comparison option for English only.
+        # Strict JSON schema and all downstream validation gates remain enabled.
+        "reasoning_effort": reasoning_effort if reasoning_effort in {"low", "medium", "high"} else "low",
         "max_tokens": 12000,
         "response_format": groq_response_format(),
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     try:
         status, raw, tries_used = groq_request(
-            GROQ_URL, body, api_key, timeout=timeout, tries=tries, sleep=sleep)
+            GROQ_URL, body, api_key, timeout=timeout, tries=tries, sleep=sleep,
+            request_budget=request_budget)
+    except RequestBudgetExhausted as exc:
+        used = request_budget.used if request_budget is not None else 0
+        limit = request_budget.max_requests if request_budget is not None else 0
+        return False, None, f"request_budget_exhausted ({used}/{limit}): {redact(exc)}"
     except Exception as exc:  # noqa: BLE001
         return False, None, f"network_error: {redact(exc)}"
 
@@ -1619,11 +1912,13 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
 
 
 def generate_json(provider, prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
-                  sleep=None):
+                  sleep=None, request_budget=None, reasoning_effort="low"):
     """يوجّه التوليد إلى المزوّد المطلوب فقط — بلا انتقال تلقائي عند الفشل."""
     if provider == "groq":
         return groq_generate_json(prompt, api_key=api_key, model=model,
-                                  timeout=timeout, tries=tries, sleep=sleep)
+                                  timeout=timeout, tries=tries, sleep=sleep,
+                                  request_budget=request_budget,
+                                  reasoning_effort=reasoning_effort)
     if provider == "gemini":
         return gemini_generate_json(prompt, api_key=api_key, model=model,
                                     timeout=timeout, tries=tries, sleep=sleep)
@@ -1763,14 +2058,1292 @@ def normalize_faq(raw) -> list:
     return out
 
 
-def validate_article(data, *, topic, lang, published_at) -> dict:
+def is_article85_legal_rejection(reason: str) -> bool:
+    """Only known Article 85/86/81 legal-claim failures are eligible for one repair attempt."""
+    value = str(reason or "")
+    return value.startswith((
+        "Article 85:", "Article 86:", "Article 81 ",
+        "المادة 85:", "المادة 86:", "المادة 81 ",
+    ))
+
+
+def is_article85_repairable_rejection(reason: str) -> bool:
+    """Article 85 gets one bounded re-generation for known legal/shape defects."""
+    value = str(reason or "")
+    short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
+    ))
+    overlong_excerpt = bool(re.search(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    unexpected_money = value.startswith("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")
+    missing_money = value.startswith("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
+    canonical_example = value.startswith("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    # Permit one full-JSON repair only for a small overflow (e.g. 13-16 sections),
+    # rather than silently dropping any generated content or retrying unboundedly.
+    too_many_sections = bool(
+        section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
+    )
+    empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", value))
+    boundary_conflict = value.startswith(("Article 85 boundary:", "المادة 85 boundary:"))
+    return (is_article85_legal_rejection(value) or short_section
+            or overlong_excerpt or too_many_sections or unexpected_money
+            or missing_money or canonical_example or empty_section or boundary_conflict)
+
+
+def ensure_article85_notice_caveat(data, *, lang: str):
+    """Copy an article and add only the standard notice caveat when that specific caveat is missing."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 notice caveat: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "المادة 85 تحدد نسب مكافأة نهاية الخدمة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+            "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+        )
+        heading_pattern = r"(استقالة|المادة\s*85|الإشعار)"
+    else:
+        clause = (
+            "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+            "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+        )
+        heading_pattern = r"(resignation|article\s*85|notice)"
+    combined = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in fixed["sections"] if isinstance(sec, dict)
+    )
+    if clause not in combined:
+        target = next((
+            sec for sec in fixed["sections"]
+            if isinstance(sec, dict)
+            and re.search(heading_pattern, str(sec.get("heading", "")) + " " + str(sec.get("body", "")), re.IGNORECASE)
+        ), None)
+        if target is None:
+            target = next((sec for sec in fixed["sections"] if isinstance(sec, dict)), None)
+        if target is None:
+            raise Reject("Article 85 notice caveat: no section is available")
+        existing_body = str(target.get("body", "")).strip()
+        target["body"] = existing_body + ("\n\n" if existing_body else "") + clause
+    return fixed
+
+
+def ensure_article85_boundary_caveat(data, *, lang: str):
+    """Copy the article and add the precise two-thirds boundary explanation when missing."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 boundary: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "تكون نسبة ثلثي المكافأة عند الاستقالة فقط إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات؛ "
+            "أما خمس سنوات بالضبط فتقع ضمن نطاق الثلث."
+        )
+        heading_pattern = r"(استقالة|المادة\s*85|الثلث|المكافأة)"
+        bad_range = re.compile(
+            r"(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?).{0,100}(?:ثلثي|الثلثين)|"
+            r"(?:ثلثي|الثلثين).{0,100}(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?)"
+        )
+    else:
+        clause = (
+            "The two-thirds resignation ratio applies only when service is more than five years and less than ten years; "
+            "exactly five years remains in the one-third band."
+        )
+        heading_pattern = r"(resignation|article\s*85|two.thirds|benefit)"
+        bad_range = re.compile(
+            r"(?:two[\s-]+thirds|2\s*/\s*3).{0,100}\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?\b|"
+            r"\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?.{0,100}(?:two[\s-]+thirds|2\s*/\s*3)",
+            re.IGNORECASE,
+        )
+    combined = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in fixed["sections"] if isinstance(sec, dict)
+    )
+    if bad_range.search(combined):
+        raise Reject("Article 85 boundary: conflicting five-to-ten-year two-thirds claim")
+    if clause not in combined:
+        target = next((
+            sec for sec in fixed["sections"]
+            if isinstance(sec, dict)
+            and re.search(heading_pattern, str(sec.get("heading", "")) + " " + str(sec.get("body", "")), re.IGNORECASE)
+        ), None)
+        if target is None:
+            target = next((sec for sec in fixed["sections"] if isinstance(sec, dict)), None)
+        if target is None:
+            raise Reject("Article 85 boundary: no section is available")
+        existing_body = str(target.get("body", "")).strip()
+        target["body"] = existing_body + ("\n\n" if existing_body else "") + clause
+    return fixed
+
+
+def repair_empty_article85_section(data, *, reason: str, lang: str = "ar"):
+    """Repair an empty Article 85 body while preserving its heading and any bullets."""
+    match = re.fullmatch(r"sections\[(\d+)\]\.body: فارغ", str(reason or "").strip())
+    if not match or not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject(str(reason or "Article 85 empty section: unsupported rejection"))
+
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    index = int(match.group(1))
+    if not (0 <= index < len(sections)) or not isinstance(sections[index], dict):
+        raise Reject(str(reason))
+
+    empty_section = sections[index]
+    if str(empty_section.get("body") or "").strip():
+        raise Reject(str(reason))
+    heading = str(empty_section.get("heading") or "").strip()
+    if not heading:
+        raise Reject(str(reason))
+    raw_bullets = empty_section.get("bullets") or []
+    if not isinstance(raw_bullets, list) or any(not isinstance(item, str) for item in raw_bullets):
+        raise Reject(str(reason))
+    bullet_text = "\n".join(item.strip() for item in raw_bullets if item.strip())
+    preserved_payload = heading + (("\n" + bullet_text) if bullet_text else "")
+
+    if len(sections) > MIN_SECTIONS:
+        # Put the empty heading and its bullets in another body before removing the shell.
+        # Exclude an out-of-range neighbor before sorting: index+1 equals len(sections)
+        # when the empty section is the final item, and indexing it in the sort key crashes.
+        candidates = [i for i in (index - 1, index + 1)
+                      if 0 <= i < len(sections) and i != index]
+        candidates.extend(i for i in range(len(sections)) if i != index and i not in candidates)
+        candidates.sort(key=lambda i: (
+            bool(re.search(r"(?:مثال|example)", str(sections[i].get("heading", "")), re.I)),
+            abs(i - index),
+            len(str(sections[i].get("body") or "")),
+        ))
+        for target_index in candidates:
+            if not (0 <= target_index < len(sections)) or target_index == index:
+                continue
+            target = sections[target_index]
+            if not isinstance(target, dict) or not isinstance(target.get("body"), str):
+                continue
+            existing_body = target["body"].strip()
+            combined = existing_body + ("\n\n" if existing_body else "") + preserved_payload
+            if existing_body and len(combined) <= 8000:
+                target["body"] = combined
+                sections.pop(index)
+                return fixed, "empty section merged with heading and bullets preserved"
+
+    # At the minimum section count, keep the section and give it a short, factual body.
+    if lang == "ar":
+        context = (
+            f"يتناول هذا القسم موضوع «{heading}» ضمن شرح الاستحقاق عند الاستقالة. "
+            "تُقرأ التفاصيل مع بقية قواعد المادة 85، ويجب التحقق من انطباقها بحسب مدة الخدمة وسبب انتهاء العلاقة "
+            "والوقائع ذات الصلة، بالرجوع إلى النص الرسمي لنظام العمل السعودي."
+        )
+    else:
+        context = (
+            f"This section covers “{heading}” in the context of resignation benefits. "
+            "Read it alongside the other Article 85 rules and assess applicability using the length of service, "
+            "the reason employment ended, the relevant facts, and the official Saudi Labour Law text."
+        )
+    empty_section["body"] = context
+    return fixed, "empty section populated without removing its heading or bullets"
+
+
+def merge_article85_sections(data, *, target_count=MAX_SECTIONS):
+    """Merge surplus sections into another body without dropping headings, prose, or bullets."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 section merge: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    if len(sections) > MAX_SECTIONS + 4:
+        raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}")
+    if target_count < MIN_SECTIONS or target_count > MAX_SECTIONS:
+        raise Reject("Article 85 section merge: invalid target count")
+
+    while len(sections) > target_count:
+        pairs = []
+        for source_index, source in enumerate(sections):
+            if not isinstance(source, dict):
+                continue
+            source_heading = str(source.get("heading") or "").strip()
+            source_body = str(source.get("body") or "").strip()
+            source_bullets = source.get("bullets") or []
+            if not source_heading or not source_body or not isinstance(source_bullets, list):
+                continue
+            bullets = [str(item).strip() for item in source_bullets if str(item).strip()]
+            source_payload = source_heading + "\n" + source_body
+            if bullets:
+                source_payload += "\n\n" + ("Key points:\n" if source_heading.isascii() else "نقاط مرتبطة:\n")
+                source_payload += "\n".join(f"- {item}" for item in bullets)
+            source_is_example = bool(re.search(r"(?:مثال|example)", source_heading, re.I))
+            for target_index, target in enumerate(sections):
+                if target_index == source_index or not isinstance(target, dict):
+                    continue
+                target_heading = str(target.get("heading") or "").strip()
+                target_body = str(target.get("body") or "").strip()
+                if not target_heading or not target_body:
+                    continue
+                target_is_example = bool(re.search(r"(?:مثال|example)", target_heading, re.I))
+                combined = target_body + "\n\n" + source_payload
+                if len(combined) <= 8000:
+                    # Preserve an Example section as a dedicated section where possible.
+                    priority = (
+                        source_is_example,
+                        target_is_example,
+                        abs(target_index - source_index),
+                        len(target_body),
+                    )
+                    pairs.append((priority, source_index, target_index, combined))
+        if not pairs:
+            raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}؛ لا يوجد دمج آمن ضمن حد طول القسم")
+        _, source_index, target_index, combined = min(pairs, key=lambda item: item[0])
+        sections[target_index]["body"] = combined
+        sections.pop(source_index)
+    return fixed
+
+
+ARTICLE85_CANONICAL_VALUES = {
+    "monthly_wage": "12000", "years": "6", "months": "0", "days": "0",
+    "scenario": "resignation", "full_benefit": "42000", "payable_benefit": "28000",
+}
+
+
+def ensure_article85_critical_content(data, *, lang: str):
+    """Inject canonical Article 85 boundary and worked-example text before any content gate."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 canonical content: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    actions = []
+
+    # Repair empty sections before overflow: titles and bullets are moved or kept, never silently dropped.
+    for _ in range(MAX_SECTIONS + 5):
+        empty_index = next((
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and not str(sec.get("body") or "").strip()
+        ), None)
+        if empty_index is not None:
+            fixed, action = repair_empty_article85_section(
+                fixed, reason=f"sections[{empty_index}].body: فارغ", lang=lang)
+            sections = fixed["sections"]
+            actions.append(action)
+            continue
+        if len(sections) > MAX_SECTIONS:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS)
+            sections = fixed["sections"]
+            actions.append("excess sections merged with full text preserved")
+            continue
+        break
+    else:
+        raise Reject("Article 85 canonical content: bounded structure repair did not converge")
+
+    if not (MIN_SECTIONS <= len(sections) <= MAX_SECTIONS):
+        raise Reject(f"sections: العدد {len(sections)} خارج المدى {MIN_SECTIONS}-{MAX_SECTIONS}")
+
+    if lang == "ar":
+        boundary = (
+            "عند الاستقالة وفق المادة 85، يستحق العامل ثلث المكافأة بعد سنتين متتاليتين من الخدمة وحتى خمس سنوات شاملةً خمس سنوات؛ "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات؛ "
+            "وتستحق المكافأة كاملة إذا بلغت مدة الخدمة عشر سنوات فأكثر."
+        )
+        example_text = (
+            "مثال توضيحي ثابت: إذا كان الأجر الشهري الأخير 12,000 ريال وكانت مدة الخدمة 6 سنوات، "
+            "فإن المكافأة الأساسية المحسوبة وفق المادة 84 تبلغ 42,000 ريال. "
+            "وعند انتهاء العلاقة بسبب استقالة العامل، وبعد انطباق نسبة الثلثين وفق المادة 85، "
+            "يكون المبلغ المستحق 28,000 ريال. هذا المثال خاص بالاستقالة بعد استيفاء شرط الخدمة، "
+            "ولا يغيّر القواعد التي تنطبق على أسباب انتهاء الخدمة الأخرى."
+        )
+        example_heading = "مثال حسابي توضيحي"
+        boundary_pattern = r"(استقالة|المادة\s*85|الثلث|المكافأة)"
+    else:
+        boundary = (
+            "For resignation under Article 85, one third applies after two consecutive years of service through exactly five years; "
+            "the two-thirds ratio applies only when service is more than five years and less than ten years; "
+            "the full benefit applies at ten years or more."
+        )
+        example_text = (
+            "Fixed illustrative example: With a last monthly wage of SAR 12,000 and six years of service, "
+            "the base end-of-service benefit calculated under Article 84 is SAR 42,000. "
+            "Where employment ends by the employee’s resignation and Article 85’s two-thirds ratio applies, "
+            "the payable amount is SAR 28,000. This example is specific to resignation after the qualifying service threshold; "
+            "other termination reasons follow their own applicable rules."
+        )
+        example_heading = "Worked Example"
+        boundary_pattern = r"(resignation|article\s*85|two.thirds|benefit)"
+
+    # Ensure a dedicated canonical example section exists. If at capacity, merge first without losing text.
+    example_indices = [
+        i for i, sec in enumerate(sections)
+        if isinstance(sec, dict) and re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+    ]
+    if len(example_indices) > 1:
+        fixed, duplicate_actions = merge_duplicate_article85_example_sections(fixed, lang=lang)
+        sections = fixed["sections"]
+        actions.extend(duplicate_actions)
+        example_indices = [
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        ]
+
+    if not example_indices:
+        if len(sections) >= MAX_SECTIONS:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS - 1)
+            sections = fixed["sections"]
+            actions.append("sections merged to make room for canonical example")
+        sections.append({"heading": example_heading, "body": example_text, "bullets": []})
+        actions.append("canonical example section added")
+    else:
+        target_example = sections[example_indices[0]]
+        if target_example.get("body") != example_text:
+            target_example["body"] = example_text
+            actions.append("canonical example prose enforced")
+
+    # Structured values for this fixed example are constants, not model-controlled fields.
+    if fixed.get("calculation_example") != ARTICLE85_CANONICAL_VALUES:
+        fixed["calculation_example"] = dict(ARTICLE85_CANONICAL_VALUES)
+        actions.append("canonical calculation values enforced")
+
+    # Inject the critical ratio sentence into the most relevant non-example section with sufficient capacity.
+    all_text = " ".join(
+        str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+        for sec in sections if isinstance(sec, dict)
+    )
+    if boundary not in all_text:
+        candidates = [
+            i for i, sec in enumerate(sections)
+            if isinstance(sec, dict) and not re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        ]
+        candidates.sort(key=lambda i: (
+            not bool(re.search(boundary_pattern, str(sections[i].get("heading", "")), re.I)),
+            len(str(sections[i].get("body") or "")),
+        ))
+        target_index = next((
+            i for i in candidates
+            if len(str(sections[i].get("body") or "").strip()) + 2 + len(boundary) <= 8000
+        ), None)
+        if target_index is not None:
+            body = str(sections[target_index].get("body") or "").strip()
+            sections[target_index]["body"] = body + "\n\n" + boundary
+        elif len(sections) < MAX_SECTIONS:
+            sections.append({
+                "heading": "نسب الاستقالة" if lang == "ar" else "Resignation benefit ratios",
+                "body": boundary, "bullets": [],
+            })
+        else:
+            fixed = merge_article85_sections(fixed, target_count=MAX_SECTIONS - 1)
+            sections = fixed["sections"]
+            sections.append({
+                "heading": "نسب الاستقالة" if lang == "ar" else "Resignation benefit ratios",
+                "body": boundary, "bullets": [],
+            })
+            actions.append("sections merged to make room for canonical boundary")
+        actions.append("canonical two-thirds boundary enforced")
+
+    # Reapply local binding after any structure merge copied the object.
+    fixed["sections"] = sections
+
+    before_faq = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed, faq_repaired = ensure_article85_minimum_faq(fixed, lang=lang)
+    if faq_repaired:
+        actions.append("minimum-service FAQ corrected")
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_faq and not faq_repaired:
+        actions.append("FAQ content normalized")
+
+    before_notice = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed = ensure_article85_notice_caveat(fixed, lang=lang)
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_notice:
+        actions.append("notice/resignation caveat enforced")
+
+    before_article86 = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed = ensure_article85_article86_clause(fixed, lang=lang)
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_article86:
+        actions.append("Article 86 rule enforced")
+
+    return fixed, actions
+
+
+def trim_article85_excerpt(data, *, max_chars: int = 300):
+    """Copy and minimally shorten a slightly overlong excerpt; all downstream gates still rerun."""
+    if not isinstance(data, dict) or not isinstance(data.get("excerpt"), str):
+        raise Reject("Article 85 excerpt: invalid excerpt")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    excerpt = strip_ws(fixed["excerpt"])
+    if len(excerpt) <= max_chars:
+        return fixed
+    if len(excerpt) > max_chars + 60:
+        raise Reject("Article 85 excerpt: too far beyond the length limit for deterministic trimming")
+    prefix = excerpt[:max_chars]
+    sentence_ends = [
+        m.end() for m in re.finditer(r"[.!?؟](?:\s|$)", prefix)
+        if m.end() >= 200
+    ]
+    if sentence_ends:
+        trimmed = prefix[:sentence_ends[-1]].strip()
+    else:
+        cut = prefix.rfind(" ")
+        if cut < 40:
+            raise Reject("Article 85 excerpt: no safe word boundary within the limit")
+        trimmed = prefix[:cut].rstrip(" ,;:—-") + "…"
+    if not (40 <= len(trimmed) <= max_chars):
+        raise Reject("Article 85 excerpt: deterministic trim did not meet the length bounds")
+    fixed["excerpt"] = trimmed
+    return fixed
+
+
+def repair_article85_notice_loss_claim(data, *, lang: str):
+    """Replace only unsupported notice-causes-automatic-forfeiture sentences with the approved caveat."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 notice-loss repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        replacement = (
+            "المادة 85 تحدد نسب مكافأة نهاية الخدمة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+            "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+        )
+        claim_pattern = re.compile(
+            r"(?:قد\s+)?(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)\s*(?:إلى|الى|في|عن)?\s*"
+            r".{0,50}(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,80}(?:المكافأة|مكافأة نهاية الخدمة)"
+        )
+        negated_pattern = re.compile(
+            r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)"
+        )
+    else:
+        replacement = (
+            "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+            "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+        )
+        claim_pattern = re.compile(
+            r"\b(?:may|can|could|might|will|would)\s+(?:(?:automatically|directly)\s+)?"
+            r"(?:lead to|result in|cause)\b.{0,100}\b"
+            r"(?:loss|forfeit(?:ure)?|deduct(?:ion)?|reduction|withholding)\b"
+            r".{0,100}\b(?:eosb|end[- ]of[- ]service|indemnity|severance|award|benefit)\b",
+            re.IGNORECASE,
+        )
+        negated_pattern = re.compile(
+            r"\b(?:does not|doesn't|cannot|can't|will not|won't|would not|wouldn't)\s+"
+            r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
+            re.IGNORECASE,
+        )
+
+    changed = False
+
+    def repair_text(value):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+|\n+", value)
+        repaired = []
+        for part in parts:
+            if claim_pattern.search(part) and not negated_pattern.search(part):
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(fixed[key])
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        for key in ("heading", "body"):
+            if key in section:
+                section[key] = repair_text(section[key])
+        bullets = section.get("bullets")
+        if isinstance(bullets, list):
+            section["bullets"] = [repair_text(item) for item in bullets]
+    faq = fixed.get("faq")
+    if isinstance(faq, list):
+        for item in faq:
+            if isinstance(item, dict):
+                for key in ("q", "a"):
+                    if key in item:
+                        item[key] = repair_text(item[key])
+    sources = fixed.get("official_sources")
+    if isinstance(sources, list):
+        for item in sources:
+            if isinstance(item, dict) and "title" in item:
+                item["title"] = repair_text(item["title"])
+
+    if not changed:
+        raise Reject("Article 85 notice-loss repair: no matching unsupported claim found")
+    return fixed
+
+
+def repair_short_article85_section(data, *, reason: str, lang: str):
+    """Expand only a reported short Article 85 section with neutral, topic-relevant context."""
+    match = re.fullmatch(
+        r"sections\[(\d+)\]\.body: الطول (\d+) خارج المدى 120-8000",
+        str(reason or "").strip(),
+    )
+    if not match or not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject(str(reason or "Article 85 short section: unsupported rejection"))
+
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    index, reported_length = int(match.group(1)), int(match.group(2))
+    if not (0 <= index < len(fixed["sections"])):
+        raise Reject(str(reason))
+    section = fixed["sections"][index]
+    if not isinstance(section, dict):
+        raise Reject(str(reason))
+    body = str(section.get("body") or "").strip()
+    if len(body) != reported_length or len(body) >= 120:
+        # Do not repair stale or mismatched validation errors by guessing.
+        raise Reject(str(reason))
+    if lang == "ar":
+        context = (
+            "يرتبط تطبيق هذه النقطة بمدة الخدمة ونوع العقد وسبب انتهاء العلاقة والوقائع ذات الصلة؛ "
+            "لذا ينبغي مراجعة النص الرسمي لنظام العمل السعودي قبل تطبيقها على حالة بعينها."
+        )
+    else:
+        context = (
+            "Apply this point only after checking the service period, contract type, reason employment ended, "
+            "and relevant facts against the official Saudi Labour Law text."
+        )
+    if context not in body:
+        body = body + ("\n\n" if body else "") + context
+    if not (120 <= len(body) <= 8000):
+        raise Reject(str(reason))
+    section["body"] = body
+    return fixed, "short section expanded with neutral legal context"
+
+
+def ensure_article85_article86_clause(data, *, lang: str):
+    """Add the bounded, approved Article 86 rule and replace direct basic-wage exclusion claims."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 86 repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        clause = (
+            "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "من الأجر المحتسب للمكافأة فقط إذا كانت بطبيعتها قابلة للزيادة والنقص؛ "
+            "ولا يعني ذلك استبعاد الأجر الأساسي."
+        )
+        bad_basic_wage = re.compile(
+            r"(?:لا\s*يُ?ستبعد\s+الأجر الأساسي\s+إلا.{0,80}|"
+            r"(?:يجوز|يمكن)\s+استبعاد\s+(?:الأجر الأساسي|الراتب الأساسي).{0,80})",
+            re.IGNORECASE,
+        )
+        heading_pattern = r"(المادة\s*86|الأجر|العمولات|المبيعات)"
+    else:
+        clause = (
+            "Under Article 86, commissions, sales percentages, and similar wage elements naturally subject to "
+            "increase and decrease may be excluded from the benefit calculation only by explicit agreement; "
+            "this does not exclude basic wage."
+        )
+        bad_basic_wage = re.compile(
+            r"\b(?:the\s+)?basic\s+(?:wage|salary)\s+(?:may|can|could|is)\s+be\s+excluded\b",
+            re.IGNORECASE,
+        )
+        heading_pattern = r"(article\s*86|wage|commission|sales)"
+
+    def repair_value(value):
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+|\n+", value)
+        repaired = [clause if bad_basic_wage.search(part) else part for part in parts]
+        return " ".join(repaired)
+
+    # Work through all reader-facing text fields so a false statement cannot survive in an FAQ or excerpt.
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_value(fixed[key])
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        for key in ("heading", "body"):
+            if key in section:
+                section[key] = repair_value(section[key])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_value(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                for key in ("q", "a"):
+                    if key in item:
+                        item[key] = repair_value(item[key])
+
+    combined = " ".join(
+        str(value)
+        for value in (
+            [fixed.get("title", ""), fixed.get("meta_description", ""), fixed.get("excerpt", "")]
+            + [
+                str(section.get(key, "")) if isinstance(section, dict) else ""
+                for section in fixed["sections"] for key in ("heading", "body")
+            ]
+            + [
+                str(bullet)
+                for section in fixed["sections"] if isinstance(section, dict)
+                for bullet in (section.get("bullets") or [])
+            ]
+            + [
+                str(item.get(key, "")) for item in (fixed.get("faq") or [])
+                if isinstance(item, dict) for key in ("q", "a")
+            ]
+        )
+    )
+    if clause not in combined:
+        candidates = [
+            index for index, section in enumerate(fixed["sections"])
+            if isinstance(section, dict)
+        ]
+        candidates.sort(key=lambda index: (
+            not bool(re.search(
+                heading_pattern,
+                str(fixed["sections"][index].get("heading", "")) + " "
+                + str(fixed["sections"][index].get("body", "")),
+                re.IGNORECASE,
+            )),
+            len(str(fixed["sections"][index].get("body") or "")),
+        ))
+        target = next((
+            fixed["sections"][index] for index in candidates
+            if len(str(fixed["sections"][index].get("body") or "").strip())
+            + 2 + len(clause) <= 8000
+        ), None)
+        if target is None:
+            raise Reject("Article 86 repair: no section has room for the required legal caveat")
+        body = str(target.get("body") or "").strip()
+        target["body"] = body + ("\n\n" if body else "") + clause
+    return fixed
+
+
+def merge_duplicate_article85_example_sections(data, *, lang: str):
+    """Keep one canonical Example section while preserving all duplicate sections' text and bullets."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 duplicate-example repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    sections = fixed["sections"]
+    actions = []
+
+    while True:
+        examples = [
+            i for i, section in enumerate(sections)
+            if isinstance(section, dict)
+            and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+        ]
+        if len(examples) <= 1:
+            return fixed, actions
+
+        canonical_index = examples[0]
+        for source_index in reversed(examples[1:]):
+            source = sections[source_index]
+            if not isinstance(source, dict):
+                raise Reject("Article 85 duplicate-example repair: invalid duplicate section")
+            heading = str(source.get("heading") or "").strip()
+            body = str(source.get("body") or "").strip()
+            raw_bullets = source.get("bullets") or []
+            if not heading or not body or not isinstance(raw_bullets, list):
+                raise Reject("Article 85 duplicate-example repair: incomplete duplicate section")
+            if any(not isinstance(item, str) for item in raw_bullets):
+                raise Reject("Article 85 duplicate-example repair: invalid duplicate bullets")
+
+            if lang == "ar":
+                label = "محتوى محفوظ من قسم المثال الإضافي"
+                bullet_label = "نقاط محفوظة من القسم الإضافي"
+            else:
+                label = "Preserved content from an additional generated example section"
+                bullet_label = "Preserved points from the additional section"
+
+            payload = f"{label} — {heading}\n{body}"
+            bullets = [item.strip() for item in raw_bullets if item.strip()]
+            if bullets:
+                payload += "\n\n" + bullet_label + ":\n" + "\n".join(f"- {item}" for item in bullets)
+
+            candidates = [
+                i for i, target in enumerate(sections)
+                if i != source_index and i != canonical_index
+                and isinstance(target, dict)
+                and not re.search(r"(?:مثال|example)", str(target.get("heading", "")), re.IGNORECASE)
+                and isinstance(target.get("body"), str)
+            ]
+            candidates.sort(key=lambda i: (
+                abs(i - source_index),
+                len(str(sections[i].get("body") or "")),
+            ))
+            target_index = next((
+                i for i in candidates
+                if len(str(sections[i].get("body") or "").strip())
+                + 2 + len(payload) <= 8000
+            ), None)
+            if target_index is None:
+                raise Reject(
+                    "Article 85 duplicate-example repair: no non-example section has room; refusing to discard content"
+                )
+
+            target_body = str(sections[target_index].get("body") or "").strip()
+            sections[target_index]["body"] = target_body + "\n\n" + payload
+            sections.pop(source_index)
+            actions.append("duplicate example section merged with all prose and bullets preserved")
+    return fixed, actions
+
+
+def ensure_article85_minimum_faq(data, *, lang: str):
+    """Correct only FAQs that deny a minimum service period despite asking about Article 85 eligibility."""
+    if not isinstance(data, dict) or not isinstance(data.get("faq"), list):
+        return json.loads(json.dumps(data, ensure_ascii=False)), False
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    changed = False
+    if lang == "ar":
+        asks_minimum_pattern = re.compile(
+            r"(?:الحد الأدنى|حد أدنى|أقل مدة|أدنى مدة).{0,100}(?:الخدمة|الاستحقاق|المكافأة)?",
+            re.IGNORECASE,
+        )
+        denies_minimum_pattern = re.compile(
+            r"(?:لا\s*(?:يتوفر|تتوفر|يوجد|توجد|يوجد\s+أي|توجد\s+أي)\s+حد\s+أدنى|لا\s+حد\s+أدنى)",
+            re.IGNORECASE,
+        )
+        standard_answer = (
+            "وفق المادة 85، لا يستحق العامل مكافأة الاستقالة قبل إكمال سنتين متتاليتين من الخدمة. "
+            "من سنتين إلى خمس سنوات شاملةً خمس سنوات، يستحق ثلث المكافأة؛ وبعد تجاوز خمس سنوات وقبل بلوغ عشر سنوات، "
+            "يستحق الثلثين؛ وعند عشر سنوات فأكثر، يستحق المكافأة كاملة. تتعلق هذه النسب بالاستقالة، "
+            "مع مراعاة الحالات النظامية المستثناة."
+        )
+    else:
+        asks_minimum_pattern = re.compile(
+            r"\b(?:minimum|minimum service|minimum period|how long).{0,100}\b(?:service|eligible|entitled|award|eosb)?\b",
+            re.IGNORECASE,
+        )
+        denies_minimum_pattern = re.compile(
+            r"\b(?:there is|there's|is) no minimum\b|\bno minimum (?:service|period|threshold)\b",
+            re.IGNORECASE,
+        )
+        standard_answer = (
+            "Under Article 85, no resignation benefit is due before two consecutive years of service. "
+            "For ordinary resignation, one third applies from two through five years inclusive, two thirds applies "
+            "only after five years and before ten years, and the full benefit applies at ten years or more. "
+            "These ratios are specific to resignation and remain subject to any statutory exceptions that apply."
+        )
+
+    for item in fixed["faq"]:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("q") or "")
+        answer = str(item.get("a") or "")
+        if asks_minimum_pattern.search(question) and denies_minimum_pattern.search(answer):
+            item["a"] = standard_answer
+            changed = True
+    return fixed, changed
+
+
+def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
+    """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
+    working = json.loads(json.dumps(data, ensure_ascii=False))
+    actions = []
+
+    # Several independent deterministic omissions may coexist in one generated article.
+    # Keep the process strictly bounded and stop immediately when a repair cannot be made safely.
+    for _ in range(MAX_SECTIONS + 4):
+        try:
+            article = validate_article(
+                working, topic=topic, lang=lang, published_at=published_at,
+                require_canonical_article85=True,
+            )
+            return working, article, actions, ""
+        except Reject as exc:
+            reason = str(exc)
+            try:
+                section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", reason)
+                if section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4:
+                    updated = merge_article85_sections(working, target_count=MAX_SECTIONS)
+                    action = "excess sections merged with full text preserved"
+                elif re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason):
+                    updated, action = repair_empty_article85_section(working, reason=reason, lang=lang)
+                elif re.fullmatch(r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason):
+                    updated, action = repair_short_article85_section(working, reason=reason, lang=lang)
+                elif reason.startswith((
+                    "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا",
+                    "Article 85: do not claim notice non-compliance automatically reduces or forfeits",
+                )):
+                    updated = repair_article85_notice_loss_claim(working, lang=lang)
+                    action = "notice loss claim"
+                elif reason.startswith((
+                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى",
+                    "Article 85: FAQ about minimum service cannot say there is no minimum",
+                    "Article 85: contradictory minimum-service FAQ",
+                )):
+                    updated, faq_repaired = ensure_article85_minimum_faq(working, lang=lang)
+                    if not faq_repaired:
+                        return working, None, actions, reason
+                    action = "minimum-service FAQ corrected"
+                elif reason.startswith((
+                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة",
+                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements",
+                )):
+                    updated = ensure_article85_notice_caveat(working, lang=lang)
+                    action = "notice caveat"
+                elif reason.startswith((
+                    "المادة 86:", "Article 86:",
+                )):
+                    updated = ensure_article85_article86_clause(working, lang=lang)
+                    action = "Article 86 legal clause"
+                elif reason.startswith((
+                    "المادة 85: يجب توضيح أن الثلثين يبدأان",
+                    "Article 85: clarify that two-thirds applies only after five years and before ten years",
+                )):
+                    updated = ensure_article85_boundary_caveat(working, lang=lang)
+                    action = "two-thirds boundary"
+                else:
+                    excerpt_match = re.fullmatch(r"excerpt: الطول (\d+) خارج المدى 40-300", reason)
+                    if excerpt_match and 301 <= int(excerpt_match.group(1)) <= 360:
+                        updated = trim_article85_excerpt(working, max_chars=300)
+                        action = "excerpt length"
+                    else:
+                        return working, None, actions, reason
+            except Reject as repair_exc:
+                return working, None, actions, str(repair_exc)
+
+            before = json.dumps(working, ensure_ascii=False, sort_keys=True)
+            after = json.dumps(updated, ensure_ascii=False, sort_keys=True)
+            if before == after:
+                return working, None, actions, reason
+            working = updated
+            actions.append(action)
+
+    try:
+        article = validate_article(
+            working, topic=topic, lang=lang, published_at=published_at,
+            require_canonical_article85=True,
+        )
+        return working, article, actions, ""
+    except Reject as exc:
+        return working, None, actions, str(exc)
+
+
+def is_groq_incomplete_schema_failure(message: str) -> bool:
+    """True only for Groq's explicit missing-required-properties schema failure."""
+    value = str(message or "").lower()
+    return "schema_missing_required" in value or (
+        "schema_incomplete" in value and "http_400" in value
+    )
+
+
+def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
+    """One-shot schema reminder for Groq; response_format remains json_schema/strict=true."""
+    if lang == "ar":
+        reminder = (
+            "تذكير تصحيحي للمخطط بعد رفض الاستجابة السابقة: أعد كائن JSON كاملاً يتضمن كل المفاتيح المطلوبة "
+            "مرة واحدة بالضبط: title وmeta_description وexcerpt وsections وfaq وofficial_sources وcalculation_example. "
+            "لا تحذف faq أو official_sources أو calculation_example مطلقاً. "
+            "في calculation_example أدرج جميع المفاتيح السبعة: monthly_wage وyears وmonths وdays وscenario وfull_benefit وpayable_benefit. "
+            "لموضوع المادة 85 استخدم القيم الثابتة الصحيحة في البرومبت. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
+        )
+    else:
+        reminder = (
+            "Schema correction after the prior response was rejected: return one complete JSON object containing every required top-level key "
+            "exactly once: title, meta_description, excerpt, sections, faq, official_sources, and calculation_example. "
+            "Never omit faq, official_sources, or calculation_example. "
+            "calculation_example must contain all seven keys: monthly_wage, years, months, days, scenario, full_benefit, and payable_benefit. "
+            "For Article 85, use the fixed values given in the prompt. Keep the same strict JSON Schema response format; do not switch to JSON mode."
+        )
+    return base_prompt + "\n\n" + reminder + "\n"
+
+
+def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
+    """Add one compact, declarative correction after a known Article 85/86/81 or section-length rejection."""
+    reason_text = str(reason or "")
+    is_empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", reason_text))
+    is_short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", reason_text
+    ))
+    section_count_match = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", reason_text)
+    is_sections_count = bool(
+        section_count_match and MAX_SECTIONS < int(section_count_match.group(1)) <= MAX_SECTIONS + 4
+    )
+    is_notice = bool(re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE))
+    is_notice_loss = bool(
+        re.search(r"(?:notice|الإشعار|اشعار|إشعار)", reason_text, re.IGNORECASE)
+        and re.search(r"(?:loss|forfeit|reduc|deduct|فقدان|خسارة|حرمان|خصم|حسم|خفض|المكافأة)", reason_text, re.IGNORECASE)
+    )
+    is_minimum_conflict = bool(
+        re.search(r"(?:minimum|حد أدنى|الحد الأدنى)", reason_text, re.IGNORECASE)
+    )
+    is_money_mismatch = bool(re.search(
+        r"(?:المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب|"
+        r"المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية|"
+        r"موضوع المادة 85 يتطلب المثال الثابت)", reason_text
+    ))
+    is_article86 = bool(re.search(r"(?:article\s*86|المادة\s*86|commission|العمولات|المبيعات)", reason_text, re.IGNORECASE))
+    is_article81 = bool(re.search(r"(?:article\s*81|المادة\s*81)", reason_text, re.IGNORECASE))
+
+    if lang == "ar":
+        if is_empty_section:
+            clause = (
+                "لا تترك body فارغاً في أي قسم. يجب أن يتراوح نص body في كل قسم بين 120 و5000 حرف. "
+                "إذا احتوى القسم على bullets مفيدة، فحافظ على مضمونها داخل فقرة مناسبة؛ وإذا لم يكن له محتوى، فادمج موضوعه في قسم مجاور أو أزل العنوان الفارغ مع الحفاظ على جميع المعلومات القانونية والحسابية المهمة، "
+                "مع بقاء عدد الأقسام بين 3 و12."
+            )
+        elif is_money_mismatch:
+            clause = (
+                "صحّح المثال الرقمي فقط مع إبقاء الحقول المنظمة ثابتة تمامًا: الأجر الشهري 12,000 ريال، "
+                "مدة الخدمة 6 سنوات، المكافأة الأساسية 42,000 ريال، والمبلغ المستحق بعد نسبة الاستقالة 28,000 ريال. "
+                "لا تذكر مبلغًا نقديًا آخر ولا تضع رقمًا بديلًا أو تقريبًا، ولا تغيّر الأجر أو مدة الخدمة أو السيناريو. "
+                "يجب أن يتطابق نص المثال حرفيًا في المعنى مع calculation_example وأن تجتاز جميع بوابات الحساب مجددًا."
+            )
+        elif is_sections_count:
+            clause = (
+                "يجب أن يحتوي sections على 3 إلى 12 قسمًا فقط. أعد تنظيم المحتوى بدمج الأقسام المتقاربة موضوعيًا عند الحاجة، "
+                "ولا تحذف أي قاعدة قانونية أساسية أو المثال الحسابي أو التحذيرات. اجعل كل body بطول صالح وأعد كائن JSON كاملًا مطابقًا للمخطط."
+            )
+        elif is_notice_loss:
+            clause = (
+                "لا تقل إن عدم الالتزام بمهلة الإشعار يؤدي تلقائيًا إلى فقدان جزء من مكافأة نهاية الخدمة. "
+                "افصل بين نسبة مكافأة الاستقالة وفق المادة 85 وأي مسؤولية مستقلة عن مهلة الإشعار قد تنطبق بحسب نوع العقد والوقائع والنظام؛ "
+                "ولا تجزم بأثر مالي دون سند رسمي محدد."
+            )
+        elif is_minimum_conflict:
+            clause = (
+                "في سياق مكافأة الاستقالة وفق المادة 85، لا تقل إنه لا يوجد حد أدنى للخدمة: لا يستحق العامل مكافأة الاستقالة قبل سنتين متتاليتين؛ "
+                "من سنتين إلى خمس سنوات شاملًا خمس سنوات يستحق الثلث، وبعد خمس سنوات وقبل عشر سنوات يستحق الثلثين، وعشر سنوات فأكثر تستحق المكافأة كاملة. "
+                "لا تعمم نسب الاستقالة على جميع حالات انتهاء علاقة العمل."
+            )
+        elif is_short_section:
+            clause = (
+                "يجب أن يتراوح نص body في كل قسم بين 120 و5000 حرف. وسّع أي قسم قصير بمعلومات مفيدة ودقيقة مرتبطة بعنوانه، "
+                "ولا تحذف معلومات أو تنسخ تعليمات التحرير إلى المقال."
+            )
+        elif is_notice:
+            clause = (
+                "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط، ولا تحدد مدة إشعار العقد ولا تعفي من متطلباته؛ "
+                "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+            )
+        elif is_article86:
+            clause = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+                "إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يعني ذلك استبعاد الأجر الأساسي."
+            )
+        elif is_article81:
+            clause = (
+                "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه النظامية؛ "
+                "وليست فصلاً من صاحب العمل ولا تُعامل كاستقالة عادية."
+            )
+        else:
+            clause = (
+                "ثلث المكافأة يكون من سنتين إلى خمس سنوات شاملًا خمس سنوات، والثلثان فقط إذا زادت الخدمة على خمس سنوات ولم تبلغ عشرًا."
+            )
+        instructions = (
+            "أعد إنشاء كائن JSON كاملاً وفق المخطط الأصلي. صحح المسألة المحددة فقط، "
+            "ولا تنسخ هذه التعليمات أو وصف الخطأ إلى نص المقال. أدرج التصحيح التالي بوضوح موجّه للقارئ، "
+            "مع إبقاء جميع بوابات التحقق كما هي:\n"
+        )
+    else:
+        if is_empty_section:
+            clause = (
+                "Do not leave any section body empty. Every body must contain 120 to 5000 characters. "
+                "Preserve useful bullet content by moving it into a suitable neighboring paragraph; if a section has no content, merge its topic into a neighboring section or remove only the empty heading while preserving all substantive legal and calculation information. "
+                "Keep the section count between 3 and 12."
+            )
+        elif is_money_mismatch:
+            clause = (
+                "Correct only the worked example and keep the structured values fixed: monthly wage SAR 12,000, "
+                "six years of service, full base benefit SAR 42,000, and payable benefit after the resignation ratio SAR 28,000. "
+                "Do not include any other currency amount, alternative figure, or approximation; do not change the wage, service duration, or scenario. "
+                "Make the prose agree with calculation_example and retain all calculation validation gates."
+            )
+        elif is_sections_count:
+            clause = (
+                "The schema permits only 3 to 12 sections. Reorganize by merging closely related sections where needed; "
+                "preserve every material legal rule, the worked calculation, and the caveats. Do not silently omit substantive content. "
+                "Keep every section body within the valid length bounds and return the complete JSON object under the original schema."
+            )
+        elif is_notice_loss:
+            clause = (
+                "Do not claim that failure to comply with notice requirements automatically forfeits or reduces part of the end-of-service award. "
+                "Keep the Article 85 resignation-benefit ratio separate from any distinct notice-period liability that may apply under the contract and law; "
+                "do not assert a financial consequence without a specific official legal basis."
+            )
+        elif is_minimum_conflict:
+            clause = (
+                "For resignation under Article 85, do not say there is no minimum service period: no resignation award is due before two consecutive years; "
+                "one third applies from two through five years inclusive, two thirds applies above five but below ten years, and the full award applies at ten years or more. "
+                "Do not generalize these resignation ratios to every kind of employment termination."
+            )
+        elif is_short_section:
+            clause = (
+                "Every section body must contain 120 to 5000 characters. Expand any short section with useful, accurate detail relevant to its heading; "
+                "do not delete information or copy editing instructions into the article."
+            )
+        elif is_notice:
+            clause = (
+                "Article 85 sets the resignation benefit ratio only; it does not set or waive contract notice requirements. "
+                "Applicable notice requirements and resignation procedures may still apply depending on the contract and law."
+            )
+        elif is_article86:
+            clause = (
+                "Under Article 86, qualifying commissions, sales percentages and similar wage elements naturally subject to increase or decrease "
+                "may be excluded from the calculation only by explicit agreement; this does not exclude basic wage."
+            )
+        elif is_article81:
+            clause = (
+                "Article 81 concerns statutory cases where a worker leaves without notice while retaining statutory rights; "
+                "it is not an employer dismissal or ordinary resignation."
+            )
+        else:
+            clause = (
+                "One third applies from two years through five years inclusive; two thirds applies only above five years and below ten years."
+            )
+        instructions = (
+            "Regenerate the complete JSON object under the original strict schema. Correct only the identified issue; "
+            "do not copy these instructions or the rejection text into the article. Insert the following clear, declarative reader-facing correction "
+            "and retain all existing validation gates:\n"
+        )
+    return base_prompt + "\n\n" + instructions + clause + "\n"
+
+
+def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
+    """Reject material wording errors in generated Article 85 articles before any draft is saved."""
+    text_norm = re.sub(r"\s+", " ", str(article_text or "")).strip().lower()
+
+    # A notice-period issue must not be presented as an automatic loss/reduction
+    # of the end-of-service award. Keep this detector sentence-scoped and allow
+    # explicit negation so a correct disclaimer is not rejected.
+    sentences = re.split(r"(?<=[.!?؟])\s+", text_norm)
+    if lang == "en":
+        for sentence in sentences:
+            loss_claim = re.search(
+                r"\b(?:may|can|could|might|will|would)\s+(?:(?:automatically|directly)\s+)?"
+                r"(?:lead to|result in|cause)\b.{0,100}\b(?:loss|forfeit(?:ure)?|deduct(?:ion)?|reduction|withholding)\b"
+                r".{0,100}\b(?:eosb|end[- ]of[- ]service|indemnity|severance|award|benefit)\b",
+                sentence,
+            )
+            negated = bool(re.search(
+                r"\b(?:does not|doesn't|cannot|can't|will not|won't|would not|wouldn't)\s+"
+                r"(?:(?:automatically|directly)\s+)?(?:lead to|result in|cause)\b",
+                sentence,
+            ))
+            if loss_claim and not negated:
+                raise Reject(
+                    "Article 85: do not claim notice non-compliance automatically reduces or forfeits the EOSB award"
+                )
+    else:
+        for sentence in sentences:
+            loss_claim = re.search(
+                r"(?:قد\s+)?(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)\s*(?:إلى|الى|في|عن)?\s*"
+                r".{0,50}(?:فقدان|خسارة|حرمان|خصم|حسم|تقليل|خفض).{0,80}(?:المكافأة|مكافأة نهاية الخدمة)",
+                sentence,
+            )
+            negated = bool(re.search(
+                r"(?:قد\s+)?(?:لا|ليس|لم|لن)\s*(?:يؤدي|يترتب|يتسبب|يسبب|ينتج)",
+                sentence,
+            ))
+            if loss_claim and not negated:
+                raise Reject(
+                    "المادة 85: لا تنسب فقدان المكافأة أو خفضها تلقائيًا إلى عدم الالتزام بالإشعار"
+                )
+
+    if lang == "en":
+        # Exactly five years still falls in the one-third band. Two-thirds starts
+        # only after five years and ends before ten years.
+        for match in re.finditer(
+            r"\b(?:5|five)\s*(?:to|[-–—])\s*(?:10|ten)\s+years?\b",
+            text_norm,
+        ):
+            window = text_norm[max(0, match.start() - 100):match.end() + 100]
+            if re.search(r"\b(?:two[\s-]+thirds|2\s*/\s*3)\b", window):
+                raise Reject(
+                    "Article 85: the two-thirds band must start after five years, not at five years"
+                )
+        mentions_two_thirds = bool(re.search(r"\b(?:two[\s-]+thirds|2\s*/\s*3)\b", text_norm))
+        correct_boundary = bool(re.search(
+            r"\b(?:above|exceeds?|more than)\s+(?:five|5)\b"
+            r".{0,100}\b(?:below|less than|not reach(?:es|ed)?|has not reached)\s+(?:ten|10)\b",
+            text_norm,
+        ))
+        if mentions_two_thirds and not correct_boundary:
+            raise Reject(
+                "Article 85: clarify that two-thirds applies only after five years and before ten years"
+            )
+        for sentence in re.split(r"(?<=[.!?])\s+", text_norm):
+            if not re.search(r"\barticle\s*85\b", sentence) or "notice" not in sentence:
+                continue
+            denies_notice_authority = bool(re.search(
+                r"\b(?:does not|doesn't|never|not)\s+(?:set|specify|determine|govern|address|waive)\b",
+                sentence,
+            ))
+            attributes_notice_rule = bool(re.search(
+                r"\b(?:specifies|states|says|provides|requires|sets|waives)\b", sentence
+            ))
+            asserts_no_notice = bool(re.search(
+                r"\b(?:not required|isn't required|not necessary|unnecessary|no need|"
+                r"does not require|doesn't require|does not need|doesn't need)\b",
+                sentence,
+            ))
+            if (attributes_notice_rule or asserts_no_notice) and not denies_notice_authority:
+                raise Reject(
+                    "Article 85: do not attribute notice-period rules or a notice waiver to Article 85"
+                )
+        if "notice" in text_norm:
+            notice_caveat = (
+                "notice requirements" in text_norm
+                and any(x in text_norm for x in ("may still apply", "still apply", "remain applicable"))
+                and any(x in text_norm for x in (
+                    "depending on the contract", "depend on the contract",
+                    "contract type", "contract and law",
+                ))
+            )
+            if not notice_caveat:
+                raise Reject(
+                    "Article 85: distinguish EOSB eligibility from notice/resignation requirements that may still apply"
+                )
+        for match in re.finditer(
+            r"\b(?:dismissal|dismissed|fired)\s+(?:under|pursuant to)\s+article\s*81\b",
+            text_norm,
+        ):
+            prefix = text_norm[max(0, match.start() - 40):match.start()]
+            is_negated = bool(re.search(
+                r"\b(?:not|isn't|never|incorrectly|do not call|don't call)\s+(?:a\s+)?$",
+                prefix,
+            ))
+            if not is_negated:
+                raise Reject(
+                    "Article 81 concerns the worker leaving without notice in statutory cases, not dismissal under Article 81"
+                )
+        if re.search(
+            r"\b(?:the\s+)?basic\s+(?:wage|salary)\s+(?:may|can|could|is)\s+be\s+excluded\b",
+            text_norm,
+        ):
+            raise Reject(
+                "Article 86: do not claim that the basic wage itself may be excluded"
+            )
+        if re.search(r"\b(?:commission|commissions|sales percentages?)\b", text_norm):
+            wage_rule = (
+                "commission" in text_norm
+                and ("increase" in text_norm)
+                and ("decrease" in text_norm)
+                and "agreement" in text_norm
+            )
+            if not wage_rule:
+                raise Reject(
+                    "Article 86: explain that qualifying variable commissions/sales elements are excluded only by agreement"
+                )
+    else:
+        # Catch a recurring malformed Arabic rendering of Article 88's settlement rule.
+        # Strip diacritics and normalize hamza variants, but keep this narrowly scoped
+        # so ordinary Arabic phrasing about wages and settlement remains allowed.
+        plain_ar = re.sub(r"[ًٌٍَُِّْٰ]", "", text_norm)
+        plain_ar = plain_ar.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"}))
+        if re.search(r"يجب\s+في\s+الاجر.{0,50}وصفت\s+الحقوق", plain_ar):
+            raise Reject(
+                "جودة العربية: صياغة مشوّهة في جملة دفع الأجر وتصفية الحقوق؛ أعد صياغتها بوضوح"
+            )
+        for sentence in re.split(r"(?<=[.!؟])\s+", text_norm):
+            if not re.search(r"المادة\s*(?:85|الخامسة\s+والثمانون)", sentence):
+                continue
+            if not re.search(r"(?:الإشعار|اشعار|فترة الإشعار|مهلة الإشعار|ثلاثة أشهر|ثلاثين يوماً|ثلاثين يوما)", sentence):
+                continue
+            denies_notice_authority = bool(re.search(
+                r"(?:لا\s+(?:تحدد|تنظم|تتناول|تعفي|تقرر)|ليست من اختصاص المادة\s*85)", sentence
+            ))
+            attributes_notice_rule = bool(re.search(
+                r"(?:تنص|تذكر|تقول|تقرر|تحدد|توجب|تشترط|تعفي|لا تستلزم|لا تشترط)", sentence
+            ))
+            asserts_no_notice = bool(re.search(
+                r"(?:غير مطلوب|لا يلزم|لا يتطلب|لا تحتاج|لا يستلزم|لا تشترط)", sentence
+            ))
+            if (attributes_notice_rule or asserts_no_notice) and not denies_notice_authority:
+                raise Reject(
+                    "المادة 85: لا تنسب مدة الإشعار أو الإعفاء منه إلى المادة 85"
+                )
+        has_resignation_ratio = any(x in text_norm for x in ("ثلث", "ثلثي", "الثلث"))
+        if has_resignation_ratio:
+            bad_range = re.search(
+                r"(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?).{0,100}(?:ثلثي|الثلثين)|"
+                r"(?:ثلثي|الثلثين).{0,100}(?:من\s+(?:خمس|5)\s*(?:إلى|الى|حتى|[-–—])\s*(?:عشر|10)\s+سنوات?)",
+                text_norm,
+            )
+            if bad_range:
+                raise Reject(
+                    "المادة 85: لا تُدرج خمس سنوات ضمن نطاق الثلثين؛ النسبة تبدأ بعد خمس سنوات"
+                )
+            correct_boundary = (
+                ("أكثر من خمس" in text_norm or "زادت مدة خدمته على خمس" in text_norm)
+                and ("أقل من عشر" in text_norm or "لم تبلغ عشر" in text_norm)
+            )
+            if not correct_boundary:
+                raise Reject(
+                    "المادة 85: يجب توضيح أن الثلثين يبدأان بعد تجاوز خمس سنوات وقبل بلوغ عشر سنوات"
+                )
+        if "الإشعار" in text_norm or "اشعار" in text_norm:
+            notice_caveat = (
+                "متطلبات الإشعار" in text_norm
+                and "نوع العقد" in text_norm
+                and any(x in text_norm for x in ("تبقى", "تظل", "تنطبق", "واجبة"))
+                and any(x in text_norm for x in ("النظام", "الأحكام النظامية", "العقد"))
+            )
+            if not notice_caveat:
+                raise Reject(
+                    "المادة 85: وضّح أن عدم اشتراط الإشعار لاستحقاق المكافأة لا يلغي متطلبات الإشعار وإجراءات الاستقالة المطبقة"
+                )
+        if re.search(r"لا\s*يُستبعد\s+الأجر الأساسي إلا|لا\s*يستبعد\s+الأجر الأساسي إلا", text_norm):
+            raise Reject(
+                "المادة 86: لا تصف الحكم بأنه استبعاد للأجر الأساسي؛ النص يتعلق ببعض العمولات وعناصر الأجر المتغيرة"
+            )
+        if any(x in text_norm for x in ("العمولات", "النسب المئوية", "نسب المبيعات")):
+            wage_rule = (
+                "اتفاق" in text_norm and "بطبيعتها" in text_norm
+                and "زيادة" in text_norm and "نقص" in text_norm
+            )
+            if not wage_rule:
+                raise Reject(
+                    "المادة 86: وضّح أن الاتفاق يتعلق بعناصر الأجر المتغيرة بطبيعتها للزيادة والنقص"
+                )
+
+
+def validate_article85_faq_consistency(faq: list, *, lang: str) -> None:
+    """Reject FAQ answers that deny a service threshold while also describing it."""
+    for item in faq:
+        question = str(item.get("q", "")).strip().lower()
+        answer = re.sub(r"\s+", " ", str(item.get("a", ""))).strip().lower()
+        if lang == "en":
+            asks_minimum = bool(re.search(
+                r"\b(?:minimum|minimum service|minimum period|how long).{0,100}\b(?:service|eligible|entitled|award|eosb)?\b",
+                question,
+            ))
+            denies_minimum = bool(re.search(
+                r"\b(?:there is|there's|is) no minimum\b|\bno minimum (?:service|period|threshold)\b",
+                answer,
+            ))
+            states_two_year_bar = bool(re.search(
+                r"\b(?:no award|no entitlement|not entitled|not eligible|cannot receive|can't receive).{0,90}"
+                r"\b(?:before|less than|under)\s+(?:two|2)\s+consecutive?\s+years?\b",
+                answer,
+            ))
+            if denies_minimum and states_two_year_bar:
+                raise Reject(
+                    "Article 85: contradictory minimum-service FAQ; Article 85 has a two-consecutive-year threshold for resignation"
+                )
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "Article 85: FAQ about minimum service cannot say there is no minimum for resignation entitlement"
+                )
+        else:
+            asks_minimum = bool(re.search(
+                r"(?:الحد الأدنى|حد أدنى|أقل مدة|أدنى مدة).{0,100}(?:الخدمة|الاستحقاق|المكافأة)?",
+                question,
+            ))
+            denies_minimum = bool(re.search(
+                r"(?:لا\s+يوجد|ليس\s+هناك|لا\s+يتوفر|لا\s+توجد)\s+(?:أي\s+)?حد\s+أدنى|لا\s+حد\s+أدنى",
+                answer,
+            ))
+            states_two_year_bar = bool(re.search(
+                r"(?:لا\s*(?:يُ?ستحق|يستحق|استحقاق)|لا\s+تستحق).{0,90}"
+                r"(?:قبل|أقل\s+من|دون).{0,25}(?:سنتين|عامين|سنتين\s+متتاليتين)",
+                answer,
+            ))
+            if denies_minimum and states_two_year_bar:
+                raise Reject(
+                    "المادة 85: إجابة الحد الأدنى متناقضة؛ تشترط المادة 85 سنتين متتاليتين لاستحقاق مكافأة الاستقالة"
+                )
+            if asks_minimum and denies_minimum:
+                raise Reject(
+                    "المادة 85: لا تصف مدة استحقاق مكافأة الاستقالة بأنها بلا حد أدنى"
+                )
+
+
+def validate_article(
+    data, *, topic, lang, published_at, require_canonical_article85: bool = False,
+) -> dict:
     """يرفع Reject عند فشل أي بوابة، بما فيها تدقيق حتمي لأي مثال EOSB رقمي."""
     if not isinstance(data, dict):
         raise Reject("المخرجات ليست كائن JSON")
 
-    allowed = {"title", "meta_description", "excerpt", "sections", "faq",
-               "official_sources", "calculation_example"}
-    extra = set(data) - allowed
+    required = {"title", "meta_description", "excerpt", "sections", "faq",
+                "official_sources", "calculation_example"}
+    missing = required - set(data)
+    if missing:
+        raise Reject("حقول مطلوبة مفقودة: " + ", ".join(sorted(missing)))
+    extra = set(data) - required
     if extra:
         raise Reject("حقول غير متوقّعة: " + ", ".join(sorted(extra)))
 
@@ -1788,10 +3361,14 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
     sections = normalize_sections(data.get("sections"))
     faq = normalize_faq(data.get("faq"))
     sources = normalize_sources(data.get("official_sources"))
+    if require_canonical_article85 and topic.get("id") == "labor-art85":
+        validate_article85_faq_consistency(faq, lang=lang)
 
     body_text = " ".join(s["body"] + " " + " ".join(s["bullets"]) for s in sections)
     faq_text = " ".join(f"{f['q']} {f['a']}" for f in faq)
     audit_text = " ".join((title, meta_description, excerpt, body_text, faq_text))
+    if require_canonical_article85 and topic.get("id") == "labor-art85":
+        validate_article85_legal_claims(audit_text, lang=lang)
     example_sections = [
         section for section in sections
         if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
@@ -1803,6 +3380,7 @@ def validate_article(data, *, topic, lang, published_at) -> dict:
     calculation_example = validate_eosb_calculation_example(
         data.get("calculation_example"), topic=topic, article_text=audit_text,
         example_text=example_text,
+        require_canonical_article85=require_canonical_article85,
     )
     total_chars = len(body_text) + len(faq_text) + len(title) + len(excerpt)
     if total_chars < MIN_TOTAL_CHARS:
@@ -1965,20 +3543,36 @@ ARTICLE_TEMPLATE = Template(
     header.site a { color:#fff; text-decoration:none; font-weight:700; }
     main { max-width:820px; margin:0 auto; padding:22px 18px 56px; background:var(--card); }
     h1 { font-size:1.7rem; line-height:1.4; margin:0 0 10px; }
-    h2 { font-size:1.2rem; margin:26px 0 8px; color:var(--brand); }
-    p { margin:0 0 12px; }
-    .meta { color:var(--muted); font-size:.86rem; margin-bottom:18px; }
-    ul { padding-inline-start:22px; }
-    .cta { margin:26px 0; padding:14px 16px; background:#eef6f2; border:1px solid var(--line); border-radius:10px; }
+    h2 { font-size:1.2rem; line-height:1.55; margin:0 0 12px; color:var(--brand); }
+    p { margin:0 0 14px; }
+    .meta { color:var(--muted); font-size:.86rem; margin-bottom:22px; }
+    .article-section + .article-section { border-top:1px solid var(--line); margin-top:24px; padding-top:20px; }
+    .article-section p { max-width:74ch; }
+    .article-list { margin:10px 0 18px; padding-inline-start:1.5rem; }
+    .article-list li { padding-inline-start:.22rem; margin:0 0 .58rem; }
+    .article-list li:last-child { margin-bottom:0; }
+    .numeric { direction:ltr; unicode-bidi:isolate; white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:750; color:var(--brand); }
+    .article-section strong { font-weight:750; color:#173f30; }
+    .worked-example { margin-top:22px; padding:16px 18px; border:1px solid #cfe0d6; border-radius:12px; background:#f1f7f3; }
+    .worked-example h2 { margin-top:0; }
+    .faq { margin-top:24px; }
+    .faq details { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; background:#fff; }
+    .faq summary { cursor:pointer; font-weight:750; line-height:1.6; }
+    .faq details p { margin:10px 0 0; }
+    .cta { margin:28px 0; padding:16px 18px; background:#eef6f2; border:1px solid var(--line); border-radius:12px; }
     .cta a { color:var(--brand); font-weight:700; }
-    details { border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0; }
-    summary { cursor:pointer; font-weight:700; }
+    .sources ul { padding-inline-start:1.5rem; }
+    .sources li { margin:0 0 8px; }
     .sources a { color:var(--brand); }
     .note { font-size:.88rem; color:var(--muted); border-top:1px solid var(--line); margin-top:24px; padding-top:14px; }
     .ad-slot { max-width:820px; margin:18px auto; padding:0 18px; text-align:center; }
     footer.site { max-width:820px; margin:0 auto; padding:18px; color:var(--muted); font-size:.85rem; text-align:center; }
     footer.site a { color:var(--brand); }
-    @media (max-width:600px) { main { padding:16px 14px 42px; } h1 { font-size:1.35rem; } }
+    @media (max-width:600px) {
+      main { padding:16px 14px 42px; }
+      h1 { font-size:1.35rem; }
+      .worked-example { padding:14px 12px; }
+    }
   </style>
   <script type="application/ld+json">$json_ld</script>
   $ad_social_bar
@@ -2023,21 +3617,33 @@ def render_article_html(article, *, published: bool) -> str:
 
     section_blocks = []
     for sec in article["sections"]:
-        parts = [f"<h2>{esc(sec['heading'])}</h2>"]
-        for para in collapse_paragraphs(sec["body"]):
-            parts.append(f"<p>{esc(para)}</p>")
-        if sec["bullets"]:
-            parts.append("<ul>" + "".join(f"<li>{esc(b)}</li>" for b in sec["bullets"]) + "</ul>")
+        heading = str(sec.get("heading") or "")
+        example_class = (
+            " article-section worked-example"
+            if re.search(r"(?:مثال|example)", heading, re.IGNORECASE)
+            else " article-section"
+        )
+        parts = [f'<section class="{example_class.strip()}"><h2>{esc(heading)}</h2>']
+        parts.append(render_article_body(sec.get("body", "")))
+        if sec.get("bullets"):
+            bullet_items = "".join(
+                f"<li>{render_inline_prose(item)}</li>" for item in sec["bullets"]
+            )
+            parts.append(f'<ul class="article-list">{bullet_items}</ul>')
+        parts.append("</section>")
         section_blocks.append("\n      ".join(parts))
     sections_html = "\n      ".join(section_blocks)
 
     faq_html = ""
     if article["faq"]:
         items = "".join(
-            f"<details><summary>{esc(f['q'])}</summary><p>{esc(f['a'])}</p></details>\n      "
+            f"<details><summary>{render_inline_prose(f['q'])}</summary><p>{render_inline_prose(f['a'])}</p></details>\n      "
             for f in article["faq"]
         )
-        faq_html = f"<h2>{esc('الأسئلة الشائعة' if ar else 'Frequently asked questions')}</h2>\n      {items}"
+        faq_html = (
+            f'<section class="faq"><h2>{esc("الأسئلة الشائعة" if ar else "Frequently asked questions")}</h2>\n      '
+            f'{items}</section>'
+        )
 
     sources_html = "".join(
         f'<li><a href="{esc(s["url"])}" rel="noopener noreferrer" target="_blank">{esc(s["title"])}</a></li>'
@@ -2457,35 +4063,215 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
 
     results = {}
     attempted = False
+    attempted_languages = set()
+    request_budgets = {}
+    generation_report = []
+    report_path = os.environ.get("GENERATION_REPORT_PATH")
+
+    try:
+        requested_english_effort = str(os.environ.get("GROQ_EN_REASONING_EFFORT", "low")).strip().lower()
+    except Exception:
+        requested_english_effort = "low"
+    if requested_english_effort not in {"low", "medium"}:
+        log(f"[WARN] GROQ_EN_REASONING_EFFORT غير صالح ({redact(requested_english_effort)}); سيُستخدم low.")
+        requested_english_effort = "low"
+    log(f"[CONFIG] Groq reasoning_effort: Arabic=low, English={requested_english_effort}; "
+        "الافتراضي low ولا يُستخدم medium إلا عند اختياره صراحةً.")
+
+    def record_generation_result(lang, status, stage, reason=""):
+        budget = request_budgets.get(lang)
+        row = {
+            "topic": topic["id"],
+            "language": lang,
+            "provider": provider,
+            "stage": stage,
+            "status": status,
+            "reason": redact(str(reason or ""))[:500],
+            "http_requests": budget.used if budget is not None else None,
+            "http_request_limit": budget.max_requests if budget is not None else None,
+            "reasoning_effort": (
+                requested_english_effort if provider == "groq" and lang == "en" else
+                "low" if provider == "groq" else None
+            ),
+        }
+        generation_report.append(row)
+        log("[RESULT] " + json.dumps(row, ensure_ascii=False, sort_keys=True))
+        if report_path:
+            report_file = Path(report_path)
+            report_file.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(report_file, {
+                "topic": topic["id"],
+                "provider": provider,
+                "model": model,
+                "results": generation_report,
+            })
+
     for lang in lang_order:
         if (topic["id"], lang) in published_pairs:
             log(f"[SKIP] النسخة {lang} منشورة سابقاً — لا إعادة إنشاء.")
             continue
+        if provider == "groq" and lang == "en" and "ar" in attempted_languages:
+            log(f"[WAIT] فاصل بين التوليد العربي والإنجليزي لتخفيف ضغط TPM: {GROQ_LANGUAGE_GAP_SECONDS:.0f}s.")
+            SLEEP(GROQ_LANGUAGE_GAP_SECONDS)
+        attempted_languages.add(lang)
         attempted = True
+        request_budget = RequestBudget(GROQ_MAX_REQUESTS_PER_LANGUAGE) if provider == "groq" else None
+        request_budgets[lang] = request_budget
+        reasoning_effort = (
+            requested_english_effort
+            if provider == "groq" and lang == "en"
+            else "low"
+        )
         log(f"توليد النسخة {lang}…")
+        prompt = build_prompt(topic, lang)
         if dry_run:
             ok, data, msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
         else:
             ok, data, msg = generate_json(
-                provider, build_prompt(topic, lang), api_key=api_key, model=model)
+                provider, prompt, api_key=api_key, model=model,
+                tries=GROQ_INITIAL_HTTP_TRIES if provider == "groq" else GEMINI_MAX_TRIES,
+                request_budget=request_budget, reasoning_effort=reasoning_effort)
+            if (not ok and provider == "groq" and topic["id"] == "labor-art85"
+                    and is_groq_incomplete_schema_failure(msg)):
+                record_generation_result(lang, "retrying", "schema_incomplete", msg)
+                log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
+                ok, data, msg = generate_json(
+                    provider,
+                    build_groq_schema_repair_prompt(prompt, lang=lang),
+                    api_key=api_key,
+                    model=model,
+                    tries=1,
+                    request_budget=request_budget,
+                    reasoning_effort=reasoning_effort,
+                )
         if not ok:
             log(f"[FAIL] تعذّر توليد النسخة {lang}: {redact(msg)}")
             state["topics"][topic["id"]][lang] = "error"
+            record_generation_result(lang, "error", "generation", msg)
             continue
+        deterministic_actions = []
+        if topic["id"] == "labor-art85":
+            try:
+                data, deterministic_actions = ensure_article85_critical_content(data, lang=lang)
+                if deterministic_actions:
+                    log(f"[FIX] النسخة {lang}: فرض النص القانوني والمثال الحسابي الثابتين برمجياً "
+                        f"مع حفظ البنية والمحتوى القابل للدمج ({', '.join(deterministic_actions)}).")
+            except Reject as exc:
+                reason = str(exc)
+                log(f"[REJECT] النسخة {lang} لم تجتز إصلاح البنية الآمن: {redact(reason)}")
+                state["topics"][topic["id"]][lang] = "rejected"
+                record_generation_result(lang, "rejected", "deterministic_preflight", reason)
+                continue
+        repaired = False
+        rejection_history = []
         try:
-            article = validate_article(data, topic=topic, lang=lang, published_at=today_iso())
+            article = validate_article(
+                data, topic=topic, lang=lang, published_at=today_iso(),
+                require_canonical_article85=True,
+            )
         except Reject as exc:
-            log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(exc)}")
-            state["topics"][topic["id"]][lang] = "rejected"
-            continue
+            reason = str(exc)
+            rejection_history.append(reason)
+            record_generation_result(lang, "repairing", "quality_gate_rejection", reason)
+            deterministic_repair_done = False
+            if topic["id"] == "labor-art85":
+                repaired_data, repaired_article, applied_fixes, remaining_reason = (
+                    repair_article85_deterministic_omissions(
+                        data, topic=topic, lang=lang, published_at=today_iso()
+                    )
+                )
+                if repaired_article is not None and applied_fixes:
+                    data = repaired_data
+                    article = repaired_article
+                    deterministic_repair_done = True
+                    log(f"[FIX] النسخة {lang}: طبّقت الإصلاحات المحددة ({', '.join(applied_fixes)}) ثم اجتازت جميع الفحوص.")
+                elif repaired_article is not None:
+                    # The original rejection is unexpectedly gone on a repeat validation;
+                    # accept only the result that passed every gate.
+                    data = repaired_data
+                    article = repaired_article
+                    deterministic_repair_done = True
+                else:
+                    reason = remaining_reason or reason
+                    if reason and reason != rejection_history[-1]:
+                        rejection_history.append(reason)
+                        record_generation_result(lang, "repairing", "deterministic_repair_rejection", reason)
+
+            if not deterministic_repair_done:
+                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
+                    log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(reason)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "quality_gate", reason)
+                    continue
+
+                log(f"[RETRY] النسخة {lang} رُفضت لجودة/صياغة محددة؛ محاولة إصلاح واحدة ثم إعادة جميع الفحوص.")
+                if dry_run:
+                    repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
+                else:
+                    repair_ok, repair_data, repair_msg = generate_json(
+                        provider,
+                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                        api_key=api_key,
+                        model=model,
+                        # One content-repair attempt, with at most one bounded HTTP retry for 429/5xx.
+                        # The shared request budget remains the hard ceiling, including this retry.
+                        tries=2 if provider == "groq" else GEMINI_MAX_TRIES,
+                        request_budget=request_budget,
+                        reasoning_effort=reasoning_effort,
+                    )
+                if not repair_ok:
+                    repair_failure = (
+                        f"المحاولة الإضافية غير متاحة ضمن حد الاستدعاءات: {redact(repair_msg)}"
+                        if "request_budget_exhausted" in str(repair_msg)
+                        else f"تعذّر التوليد ({redact(repair_msg)})"
+                    )
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {repair_failure}.")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "content_repair", repair_failure)
+                    continue
+                if topic["id"] == "labor-art85":
+                    try:
+                        repair_data, repair_actions = ensure_article85_critical_content(repair_data, lang=lang)
+                        if repair_actions:
+                            log(f"[FIX] النسخة {lang}: فرض النص القانوني والمثال الثابتين بعد الإصلاح ({', '.join(repair_actions)}).")
+                    except Reject as prep_exc:
+                        repair_failure = str(prep_exc)
+                        log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد الإصلاح البنيوي: {redact(repair_failure)}")
+                        state["topics"][topic["id"]][lang] = "rejected"
+                        record_generation_result(lang, "rejected", "deterministic_repair", repair_failure)
+                        continue
+                try:
+                    article = validate_article(
+                        repair_data, topic=topic, lang=lang, published_at=today_iso(),
+                        require_canonical_article85=True,
+                    )
+                except Reject as repair_exc:
+                    repair_failure = str(repair_exc)
+                    log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة إصلاح واحدة: {redact(repair_failure)}")
+                    state["topics"][topic["id"]][lang] = "rejected"
+                    record_generation_result(lang, "rejected", "final_validation", repair_failure)
+                    continue
+                repaired = True
         problems = duplicate_check(article, records)
         if problems:
-            log(f"[REJECT] النسخة {lang}: " + "; ".join(problems))
+            duplicate_reason = "; ".join(problems)
+            log(f"[REJECT] النسخة {lang}: " + duplicate_reason)
             state["topics"][topic["id"]][lang] = "rejected"
+            record_generation_result(lang, "rejected", "duplicate_check", duplicate_reason)
             continue
         article["content_hash"] = sha256_text(json.dumps(article["sections"], ensure_ascii=False))
         results[lang] = article
-        log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
+        accepted_notes = []
+        if rejection_history:
+            accepted_notes.append("rejection_history=" + " | ".join(rejection_history))
+        accepted_notes.append(
+            "deterministic_fixes=" + ", ".join(
+                deterministic_actions + (["model repair"] if repaired else [])))
+        record_generation_result(lang, "valid", "quality_gate", " ; ".join(accepted_notes))
+        if repaired:
+            log(f"[OK] النسخة {lang} اجتازت بوابة الجودة بعد محاولة إصلاح واحدة ({article['word_count']} كلمة).")
+        else:
+            log(f"[OK] النسخة {lang} اجتازت بوابة الجودة ({article['word_count']} كلمة).")
 
     if topic["id"] in EOSB_TOPIC_IDS and results.get("ar") and results.get("en"):
         pair_problems = validate_eosb_translation_pair(results["ar"], results["en"])
@@ -2494,6 +4280,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             log("[REJECT] مثال المكافأة مختلف بين النسختين؛ لن تُحفظ أي منهما: " + reason)
             for lang in ("ar", "en"):
                 state["topics"][topic["id"]][lang] = "rejected"
+                record_generation_result(lang, "rejected", "translation_pair", reason)
                 results.pop(lang, None)
 
     ready = [results[l] for l in lang_order if results.get(l)]
@@ -2691,19 +4478,15 @@ def selftest() -> int:
     check("تدقيق EOSB: المثالان العربي والإنجليزي متطابقان عند تطابق البيانات",
           validate_eosb_translation_pair(eosb_good_article, eosb_good_en_article) == [])
 
-    eosb_pair_bad = fixture_data("en", topic_id="labor-art85")
-    eosb_pair_bad["calculation_example"].update({
+    # Exercise the translation-pair guard independently of the per-topic
+    # canonical-example guard by mutating an already-normalized valid article.
+    eosb_pair_bad_article = dict(eosb_good_en_article)
+    eosb_pair_bad_article["calculation_example"] = dict(
+        eosb_good_en_article["calculation_example"])
+    eosb_pair_bad_article["calculation_example"].update({
         "monthly_wage": "10000", "full_benefit": "35000", "payable_benefit": "23333.33",
     })
-    eosb_pair_bad["sections"][3]["body"] = (
-        eosb_pair_bad["sections"][3]["body"]
-        .replace("SAR 12,000", "SAR 10,000")
-        .replace("SAR 42,000", "SAR 35,000")
-        .replace("SAR 28,000", "SAR 23,333.33")
-    )
-    eosb_pair_bad_article = validate_article(
-        eosb_pair_bad, topic=eosb_topic, lang="en", published_at="2026-01-01")
-    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين رغم صحة كل نسخة منفردة",
+    check("تدقيق EOSB: يرفض اختلاف المثال الحسابي بين اللغتين",
           validate_eosb_translation_pair(eosb_good_article, eosb_pair_bad_article) != [])
 
     eosb_bad = fixture_data("ar", topic_id="labor-art85")
@@ -2730,6 +4513,127 @@ def selftest() -> int:
     check("تدقيق EOSB: موضوع المادة 85 يتطلب نسبة الاستقالة",
           _rejects(lambda: validate_article(
               eosb_bad, topic=eosb_topic, lang="ar", published_at="2026-01-01")))
+
+    eosb_noncanonical = fixture_data("ar", topic_id="labor-art85")
+    eosb_noncanonical["calculation_example"]["monthly_wage"] = "12500"
+    check("تدقيق EOSB: يرفض تغيير الأجر في المثال الثابت للمادة 85",
+          _rejects(lambda: validate_article(
+              eosb_noncanonical, topic=eosb_topic, lang="ar", published_at="2026-01-01",
+              require_canonical_article85=True)))
+    _prompt_ar85 = build_prompt(eosb_topic, "ar")
+    _prompt_en85 = build_prompt(eosb_topic, "en")
+    check("تدقيق EOSB: المثال الثابت 12000/6 سنوات/42000/28000 محدد للغتين",
+          all(value in _prompt_ar85 and value in _prompt_en85
+              for value in ("monthly_wage=12000", "years=6", "scenario=resignation",
+                            "full_benefit=42000", "payable_benefit=28000"))
+          and "لا تخترع أرقاماً أخرى" in _prompt_ar85
+          and "Do not invent or change any value" in _prompt_en85)
+    check("بوابة الجودة: تعليمات التوليد تحدّ طول كل قسم إلى 5000 حرف",
+          "نص body في أي قسم منفرد 5000 حرف" in _prompt_ar85
+          and "نص body في أي قسم منفرد 5000 حرف" in _prompt_en85)
+    check("بوابة قانونية: تعليمات المادة 85 توضّح حدود الخمس سنوات والإشعار والمادة 86",
+          "الثلثان بعد تجاوز خمس سنوات وقبل بلوغ عشر" in _prompt_ar85
+          and "two thirds applies only above five and below ten" in _prompt_en85
+          and "متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب العقد والنظام" in _prompt_ar85
+          and "notice and resignation procedures may still apply under the contract and law" in _prompt_en85)
+
+    _ar85_legal_good = (
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، "
+        "ويستحق العامل الثلثين إذا زادت مدة خدمته على خمس سنوات ولم تبلغ عشر سنوات، "
+        "والمكافأة كاملة عند عشر سنوات فأكثر. عدم كون الإشعار شرطاً لاستحقاق المكافأة "
+        "لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ فقد تبقى متطلبات الإشعار وإجراءات "
+        "الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. يجوز الاتفاق على "
+        "استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها من عناصر الأجر القابلة "
+        "بطبيعتها للزيادة والنقص. المادة 81 تتعلق بترك العامل العمل دون إشعار مع احتفاظه "
+        "بحقوقه النظامية وليست فصلاً من صاحب العمل."
+    )
+    check("بوابة قانونية: تقبل الصياغة العربية السليمة للمادة 85",
+          not _rejects(lambda: validate_article85_legal_claims(_ar85_legal_good, lang="ar")))
+    _en85_legal_good = (
+        "Under Article 85, one-third applies from two through five years inclusive; "
+        "two-thirds applies only when service exceeds five years but has not reached ten. "
+        "The fact that notice is not an EOSB eligibility threshold does not mean notice is "
+        "unnecessary to end a contract; applicable notice requirements and resignation "
+        "procedures may still apply depending on the contract and law. Article 86 allows "
+        "explicit agreement to exclude commissions, sales percentages and similar wage "
+        "elements naturally subject to increase or decrease. Leaving work under Article 81 "
+        "means the worker leaves without notice in statutory cases while retaining rights; "
+        "it is not dismissal under Article 81."
+    )
+    check("بوابة قانونية: تقبل الصياغة الإنجليزية السليمة للمادة 85",
+          not _rejects(lambda: validate_article85_legal_claims(_en85_legal_good, lang="en")))
+    _en85_bad_range = _en85_legal_good.replace(
+        "exceeds five years but has not reached ten", "5 to 10 years")
+    check("بوابة قانونية: ترفض إدراج الخمس سنوات ضمن نسبة الثلثين",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_range, lang="en")))
+    _ar85_bad_range = _ar85_legal_good.replace(
+        "ويستحق العامل الثلثين إذا زادت مدة خدمته على خمس سنوات ولم تبلغ عشر سنوات، ",
+        "ويستحق العامل الثلثين من خمس إلى عشر سنوات، ")
+    check("بوابة قانونية: ترفض نطاق خمس إلى عشر سنوات للثلثين (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(_ar85_bad_range, lang="ar")))
+    check("بوابة قانونية: تقبل التصريح بأن المادة 85 لا تحدد مدة الإشعار",
+          not _rejects(lambda: validate_article85_legal_claims(
+              "Article 85 sets the benefit ratios only; it does not set or waive notice requirements. "
+              "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.",
+              lang="en")))
+    _en85_bad_notice_attribution = _en85_legal_good.replace(
+        "Under Article 85, one-third applies from two through five years inclusive; ",
+        "Article 85 specifies that resignation does not require a three-month notice. "
+        "Under Article 85, one-third applies from two through five years inclusive; ")
+    check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (إنجليزي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              _en85_bad_notice_attribution, lang="en")))
+    _ar85_bad_notice_attribution = _ar85_legal_good.replace(
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، ",
+        "تنص المادة 85 على أن الاستقالة لا تتطلب إشعارًا لمدة ثلاثة أشهر. "
+        "تستحق ثلث المكافأة من سنتين إلى خمس سنوات، بما فيها خمس سنوات، ")
+    check("بوابة قانونية: ترفض نسبة الإعفاء من الإشعار إلى المادة 85 (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              _ar85_bad_notice_attribution, lang="ar")))
+    check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              "عدم الالتزام قد يؤدي إلى فقدان جزء من المكافأة أو تعويضات أخرى. "
+              "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة.",
+              lang="ar")))
+    check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (إنجليزي)",
+          _rejects(lambda: validate_article85_legal_claims(
+              "Failure to comply may lead to loss of part of the end-of-service award. "
+              "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.",
+              lang="en")))
+    _ar85_bad_minimum_faq = [{
+        "q": "ما الحد الأدنى لسن الخدمة لاستحقاق المكافأة؟",
+        "a": "لا يوجد حد أدنى، لكن لا يُستحق أي مكافأة قبل سنتين متتاليتين من الخدمة."
+    }]
+    _ar85_good_minimum_faq = [{
+        "q": "ما الحد الأدنى لسن الخدمة لاستحقاق مكافأة الاستقالة؟",
+        "a": "وفق المادة 85، لا يستحق العامل مكافأة الاستقالة قبل سنتين متتاليتين من الخدمة."
+    }]
+    _en85_bad_minimum_faq = [{
+        "q": "What is the minimum service period for a resignation award?",
+        "a": "There is no minimum, but no award is due before two consecutive years of service."
+    }]
+    check("بوابة FAQ: ترفض تناقض عدم وجود حد أدنى مع شرط السنتين (عربي)",
+          _rejects(lambda: validate_article85_faq_consistency(_ar85_bad_minimum_faq, lang="ar")))
+    check("بوابة FAQ: ترفض تناقض عدم وجود حد أدنى مع شرط السنتين (إنجليزي)",
+          _rejects(lambda: validate_article85_faq_consistency(_en85_bad_minimum_faq, lang="en")))
+    check("بوابة FAQ: تقبل بيان شرط السنتين بوضوح (عربي)",
+          not _rejects(lambda: validate_article85_faq_consistency(_ar85_good_minimum_faq, lang="ar")))
+    check("بوابة جودة العربية: ترفض الجملة المشوّهة في تصفية الحقوق",
+          _rejects(lambda: validate_article85_legal_claims(
+              "إذا انتهت الخدمة من جهة صاحب العمل، يجب فُي الأجر وصُفِّت الحقوق خلال أسبوع على الأكثر.",
+              lang="ar")))
+    _en85_bad_notice = _en85_legal_good.replace(
+        "applicable notice requirements and resignation procedures may still apply depending on the contract and law.", "")
+    check("بوابة قانونية: ترفض ذكر الإشعار دون توضيح المتطلبات المستقلة",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_notice, lang="en")))
+    _ar85_bad_wage = _ar85_legal_good.replace(
+        "عناصر الأجر القابلة بطبيعتها للزيادة والنقص", "عناصر الأجر")
+    check("بوابة قانونية: ترفض شرح المادة 86 دون بيان طبيعة العناصر المتغيرة",
+          _rejects(lambda: validate_article85_legal_claims(_ar85_bad_wage, lang="ar")))
+    _en85_bad_article81 = _en85_legal_good.replace(
+        "it is not dismissal under Article 81", "dismissal under Article 81")
+    check("بوابة قانونية: ترفض وصف المادة 81 بأنها فصل من صاحب العمل",
+          _rejects(lambda: validate_article85_legal_claims(_en85_bad_article81, lang="en")))
 
     art81_topic = topic_by_id("labor-art81")
     art81_good = fixture_data("ar", topic_id="labor-art81")
@@ -2865,6 +4769,44 @@ def selftest() -> int:
     check("صفحة منشورة قابلة للفهرسة", "noindex" not in html_out)
     check("صفحة مسودة غير قابلة للفهرسة", "noindex" in draft_out)
     check("JSON-LD صالح", '"@type": "Article"' in html_out)
+    _format_probe = dict(art)
+    _format_probe["sections"] = [dict(section) for section in art["sections"]]
+    _format_probe["sections"][0]["body"] = "Formatting marker remains contiguous with SAR 12,000."
+    _format_probe["sections"][0]["bullets"] = []
+    _format_probe_html = render_article_html(_format_probe, published=True)
+    check("عرض المقال: يحتفظ HTML النهائي بالنص والأرقام ككتلة منسّقة",
+          "Formatting marker remains contiguous" in _format_probe_html
+          and '<bdi class="numeric" dir="ltr">SAR 12,000</bdi>' in _format_probe_html)
+    _formatted_bullets = render_article_body(
+        "Key points: • one **important** rule applies. • SAR 12,000 is the example amount. Further explanation follows."
+    )
+    check("عرض المقال: تحويل التعداد المضمّن إلى قائمة HTML",
+          '<ul class="article-list">' in _formatted_bullets
+          and _formatted_bullets.count("<li>") == 2)
+    check("عرض المقال: تنسيق النص الغامق والأرقام النقدية",
+          "<strong>important</strong>" in _formatted_bullets
+          and '<bdi class="numeric" dir="ltr">SAR 12,000</bdi>' in _formatted_bullets)
+    _formatted_ratio = render_inline_prose("The ratio is 1/3 and the range is >5–<10 years.")
+    check("عرض المقال: إبقاء الكسر والنطاق الرقمي متماسكين لاتجاه النص",
+          '<bdi class="numeric" dir="ltr">1/3</bdi>' in _formatted_ratio
+          and '&gt;5–&lt;10' in _formatted_ratio)
+    _formatted_steps = render_article_body("Steps: 1. Calculate the base amount. 2. Apply the ratio.")
+    check("عرض المقال: تحويل الخطوات المرقمة إلى قائمة مرتبة",
+          '<ol class="article-list">' in _formatted_steps
+          and _formatted_steps.count("<li>") == 2)
+    _article_numbers_prose = render_article_body(
+        "Articles 84 and 86. The key points are: • first rule applies. • second rule applies."
+    )
+    check("عرض المقال: أرقام مواد النظام لا تتحول إلى عناصر قائمة",
+          '<ul class="article-list">' in _article_numbers_prose
+          and '<ol class="article-list">' not in _article_numbers_prose)
+    _clean_faq_artifact = render_article_body("Common Questions FAQ FAQ FAQ FAQ For resignation, check the rules.")
+    check("عرض المقال: حذف تكرار FAQ الذي يسرّب من التوليد",
+          "FAQ" not in _clean_faq_artifact and "Common Questions" not in _clean_faq_artifact)
+    _escaped_formatted = render_article_body("Do not render <script>alert(1)</script>; use 28,000.")
+    check("عرض المقال: لا يسمح بتمرير HTML خام مع تنسيق الأرقام",
+          "<script>" not in _escaped_formatted and "&lt;script&gt;" in _escaped_formatted
+          and '<bdi class="numeric" dir="ltr">28,000</bdi>' in _escaped_formatted)
 
     # 7-أ) أكواد الإعلان المعتمدة في القالب المولَّد (bauval.org) وغياب النطاق القديم
     check("قالب المقال يستخدم كود Social Bar المعتمد (bauval.org)",
@@ -3138,7 +5080,7 @@ def selftest() -> int:
               and backoff_delay(50) == GEMINI_BACKOFF_MAX
               and backoff_delay(0) == GEMINI_BACKOFF_BASE
               and backoff_delay(0, retry_after="12") == 12.0
-              and backoff_delay(0, retry_after="600") == GEMINI_BACKOFF_MAX
+              and backoff_delay(0, retry_after="600") == 600.0
               and backoff_delay(0, retry_after="غير رقمي") == GEMINI_BACKOFF_BASE
               and {503, 429, 500, 502, 504} <= RETRYABLE_STATUS
               and not ({400, 401, 403, 404, 422} & RETRYABLE_STATUS))
@@ -3214,6 +5156,465 @@ def selftest() -> int:
             finally:
                 sys.stdout = saved
                 cap.close()
+
+        # اختبار إصلاح قانوني واحد: الاستجابة الأولى تفتقد تحذير الإشعار،
+        # والثانية تضيف العبارات النظامية؛ لا نتجاوز البوابة ولا نكتب ملفات عامة.
+        _sandbox()
+        _repair_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _repair_calls, _repair_requests = {"ar": 0, "en": 0}, []
+        _legal_repair_ar = (
+            " تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات. "
+            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. "
+            "وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
+            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه "
+            "مكافأة نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
+            "ولا تمثل فصلًا من صاحب العمل."
+        )
+
+        def _article85_repair_http(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _repair_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _repair_calls[lang] += 1
+            data = fixture_data(lang, topic_id="labor-art85")
+            if lang == "ar" and _repair_calls[lang] == 1:
+                data = ensure_article85_notice_caveat(data, lang="ar")
+                data["sections"][0]["body"] += " لا يستبعد الأجر الأساسي إلا باتفاق."
+            else:
+                data["sections"][0]["body"] += _legal_repair_ar
+            return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
+
+        _repair_base_prompt = build_prompt(topic_by_id("labor-art85"), "ar")
+        _repair_prompt = build_article85_repair_prompt(
+            _repair_base_prompt, lang="ar", reason="المادة 85: تحذير الإشعار ناقص")
+        _repair_prompt_en86 = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="Article 86: missing agreement")
+        _repair_prompt_ar_suffix = _repair_prompt.rsplit(chr(10) * 2, 1)[-1]
+        _repair_prompt_en86_suffix = _repair_prompt_en86.rsplit(chr(10) * 2, 1)[-1]
+        _repair_prompt_en_short = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections[10].body: الطول 73 خارج المدى 120-8000")
+        _repair_prompt_en_sections = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections: العدد 14 خارج المدى 3-12")
+        _repair_prompt_ar_minimum = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"),
+            lang="ar", reason="المادة 85: إجابة الحد الأدنى متناقضة مع شرط السنتين")
+        _repair_prompt_en_notice_loss = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="Article 85: do not claim notice non-compliance automatically reduces the award")
+        _repair_prompt_en_empty = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="sections[5].body: فارغ")
+        _repair_prompt_ar_money = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"),
+            lang="ar", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+        _repair_prompt_en_money = build_article85_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"),
+            lang="en", reason="المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+        _strict_schema_retry_ar = build_groq_schema_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "ar"), lang="ar")
+        _strict_schema_retry_en = build_groq_schema_repair_prompt(
+            build_prompt(topic_by_id("labor-art85"), "en"), lang="en")
+        _schema_missing_body = (
+            '{"error":{"message":"Generated JSON does not match the expected schema. '
+            'Error: jsonschema: missing properties: \'faq\', \'official_sources\', '
+            '\'calculation_example\'","type":"invalid_request_error"}}'
+        )
+        _schema_flag = classify_failure(400, _schema_missing_body)
+        _schema_message = format_failure(400, _schema_missing_body.encode("utf-8"), 1, GEMINI_MAX_TRIES)
+        check("Groq: فشل الحقول الناقصة يُشخّص بدقة ولا يعيد الطلب المتماثل أربع مرات",
+              _schema_flag[0] is False and _schema_flag[1] == "schema_incomplete"
+              and "schema_missing_required" in _schema_message
+              and "faq" in _schema_message and "official_sources" in _schema_message
+              and "calculation_example" in _schema_message)
+        check("Groq: محاولة المخطط الإضافية تبقي كل الحقول ومخطط JSON الصارم",
+              all(key in _strict_schema_retry_ar for key in (
+                  "title", "meta_description", "excerpt", "sections", "faq",
+                  "official_sources", "calculation_example", "monthly_wage",
+                  "payable_benefit", "لا تستخدم JSON mode"))
+              and all(key in _strict_schema_retry_en for key in (
+                  "title", "meta_description", "excerpt", "sections", "faq",
+                  "official_sources", "calculation_example", "monthly_wage",
+                  "payable_benefit", "do not switch to JSON mode"))
+              and is_groq_incomplete_schema_failure(_schema_message))
+        check("Article 85: الإصلاح موجه لسبب واحد وبعبارة تقريرية قصيرة",
+              "المادة 85 تحدد نسب المكافأة عند الاستقالة فقط" in _repair_prompt_ar_suffix
+              and "بحسب نوع العقد والأحكام النظامية المنطبقة" in _repair_prompt_ar_suffix
+              and "وفق المادة 86" not in _repair_prompt_ar_suffix
+              and "Under Article 86" in _repair_prompt_en86_suffix
+              and "Every section body must contain 120 to 5000 characters" in _repair_prompt_en_short
+              and "schema permits only 3 to 12 sections" in _repair_prompt_en_sections
+              and "لا تقل إنه لا يوجد حد أدنى" in _repair_prompt_ar_minimum
+              and "Do not claim that failure to comply with notice requirements" in _repair_prompt_en_notice_loss
+              and "Do not leave any section body empty" in _repair_prompt_en_empty
+              and "صحّح المثال الرقمي فقط" in _repair_prompt_ar_money
+              and "SAR 42,000" in _repair_prompt_en_money
+              and "SAR 28,000" in _repair_prompt_en_money
+              and "Do not attribute to Article 85" not in _repair_prompt_en86_suffix)
+        _stacked_ar = fixture_data("ar", topic_id="labor-art85")
+        _stacked_ar["sections"][0]["body"] += (
+            " يرد هنا ذكر الإشعار عند الاستقالة. وتستحق نسبة الثلثين في حالة الاستقالة. "
+            "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تخص حالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، وليست فصلاً من صاحب العمل."
+        )
+        _stacked_ar_before = json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True)
+        _stacked_ar_data, _stacked_ar_article, _stacked_ar_fixes, _stacked_ar_error = (
+            repair_article85_deterministic_omissions(
+                _stacked_ar, topic=topic_by_id("labor-art85"), lang="ar",
+                published_at=today_iso())
+        )
+        _stacked_en = fixture_data("en", topic_id="labor-art85")
+        _stacked_en["excerpt"] = (
+            "This is a helpful introductory summary with practical information. " * 5
+        )[:318]
+        _stacked_en["sections"][0]["body"] += (
+            " Notice may apply when a worker resigns. Article 85 discusses the two-thirds ratio. "
+            "Under Article 86, qualifying commissions, sales percentages and similar wage elements naturally subject "
+            "to increase or decrease may be excluded only by explicit agreement; this does not exclude basic wage. "
+            "Article 81 concerns a worker leaving without notice in statutory cases while retaining rights, not employer dismissal."
+        )
+        _stacked_en_before = json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True)
+        _stacked_en_data, _stacked_en_article, _stacked_en_fixes, _stacked_en_error = (
+            repair_article85_deterministic_omissions(
+                _stacked_en, topic=topic_by_id("labor-art85"), lang="en",
+                published_at=today_iso())
+        )
+        check("Article 85: الإصلاحات المحددة المتراكبة تُطبق بالتتابع دون استدعاء نموذج إضافي",
+              _stacked_ar_article is not None and _stacked_en_article is not None
+              and "notice caveat" in _stacked_ar_fixes
+              and "two-thirds boundary" in _stacked_ar_fixes
+              and "excerpt length" in _stacked_en_fixes
+              and "notice caveat" in _stacked_en_fixes
+              and "two-thirds boundary" in _stacked_en_fixes
+              and len(_stacked_en_data["excerpt"]) <= 300
+              and json.dumps(_stacked_ar, ensure_ascii=False, sort_keys=True) == _stacked_ar_before
+              and json.dumps(_stacked_en, ensure_ascii=False, sort_keys=True) == _stacked_en_before
+              and not _stacked_ar_error and not _stacked_en_error)
+        # Known Article 85/86 omissions and short bodies should be repaired without a second model call.
+        for _article86_lang, _article86_bad_claim in (
+            ("ar", "لا يستبعد الأجر الأساسي إلا باتفاق."),
+            ("en", "The basic wage may be excluded by agreement."),
+        ):
+            _article86_bad = fixture_data(_article86_lang, topic_id="labor-art85")
+            _article86_bad["sections"][0]["body"] += " " + _article86_bad_claim
+            _article86_original = json.dumps(_article86_bad, ensure_ascii=False, sort_keys=True)
+            check(f"Article 86: بوابة الجودة ترفض ادعاء استبعاد الأجر الأساسي ({_article86_lang})",
+                  _rejects(lambda: validate_article85_legal_claims(
+                      _article86_bad_claim, lang=_article86_lang)))
+            _article86_fixed = ensure_article85_article86_clause(_article86_bad, lang=_article86_lang)
+            _article86_text = " ".join(
+                str(section.get("heading", "")) + " " + str(section.get("body", "")) + " "
+                + " ".join(str(bullet) for bullet in section.get("bullets", []))
+                for section in _article86_fixed["sections"] if isinstance(section, dict)
+            )
+            _article86_clause = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" if _article86_lang == "ar"
+                else "Under Article 86, commissions, sales percentages"
+            )
+            check(f"Article 86: الإصلاح الحتمي يضيف القاعدة الدقيقة ويزيل الادعاء عن الأجر الأساسي ({_article86_lang})",
+                  _article86_clause in _article86_text
+                  and _article86_bad_claim not in _article86_text
+                  and json.dumps(_article86_bad, ensure_ascii=False, sort_keys=True) == _article86_original)
+
+        for _short_lang in ("ar", "en"):
+            _short_data = fixture_data(_short_lang, topic_id="labor-art85")
+            _short_index = 2
+            _short_body = ("شرح موجز لهذه النقطة القانونية مع مراعاة العقد والوقائع." if _short_lang == "ar"
+                           else "A short explanation of this point under the applicable contract and facts.")
+            _short_data["sections"][_short_index]["body"] = _short_body
+            _short_original = json.dumps(_short_data, ensure_ascii=False, sort_keys=True)
+            _short_length = len(_short_body)
+            _short_repaired, _short_action = repair_short_article85_section(
+                _short_data,
+                reason=f"sections[{_short_index}].body: الطول {_short_length} خارج المدى 120-8000",
+                lang=_short_lang,
+            )
+            check(f"Article 85: القسم القصير يُوسّع حتمياً دون فقد النص ({_short_lang})",
+                  len(_short_repaired["sections"][_short_index]["body"]) >= 120
+                  and _short_body in _short_repaired["sections"][_short_index]["body"]
+                  and json.dumps(_short_data, ensure_ascii=False, sort_keys=True) == _short_original)
+
+        # Regression: the model can return an incorrect minimum-service FAQ even when the article body is sound.
+        for _faq_lang in ("ar", "en"):
+            _faq_bad = fixture_data(_faq_lang, topic_id="labor-art85")
+            if _faq_lang == "ar":
+                _faq_bad["faq"][0] = {
+                    "q": "ما الحد الأدنى لمدة الخدمة لاستحقاق مكافأة الاستقالة؟",
+                    "a": "لا يوجد حد أدنى، لكن لا يستحق العامل مكافأة قبل سنتين متتاليتين من الخدمة.",
+                }
+            else:
+                _faq_bad["faq"][0] = {
+                    "q": "What is the minimum service period for a resignation award?",
+                    "a": "There is no minimum, but no award is due before two consecutive years of service.",
+                }
+            _faq_fixed, _faq_changed = ensure_article85_minimum_faq(_faq_bad, lang=_faq_lang)
+            _faq_answer = str(_faq_fixed["faq"][0]["a"])
+            _faq_denial = ("لا يوجد حد أدنى" in _faq_answer) if _faq_lang == "ar" else ("There is no minimum" in _faq_answer)
+            check(f"Article 85: يناقض FAQ الحد الأدنى يُصحَّح حتميًا ({_faq_lang})",
+                  _faq_changed and not _faq_denial
+                  and "سنتين" in _faq_answer if _faq_lang == "ar"
+                  else _faq_changed and not _faq_denial and "two consecutive years" in _faq_answer)
+
+        # Regression: duplicate example headings are folded into a non-example section without dropping their prose/bullets.
+        _dup_example = fixture_data("en", topic_id="labor-art85")
+        _dup_heading = "Additional Example — alternative reader context"
+        _dup_body = (
+            "This original supplemental explanation must be preserved verbatim during safe restructuring. "
+            "It describes how a reader should compare their contract terms, employment dates, and applicable facts "
+            "with the official statutory text before drawing a conclusion about a personal case."
+        )
+        _dup_bullet = "Preserve this bullet from the additional example section"
+        _dup_example["sections"].append({
+            "heading": _dup_heading,
+            "body": _dup_body,
+            "bullets": [_dup_bullet],
+        })
+        _dup_original = json.dumps(_dup_example, ensure_ascii=False, sort_keys=True)
+        _dup_fixed, _dup_actions = merge_duplicate_article85_example_sections(_dup_example, lang="en")
+        _dup_sections = _dup_fixed["sections"]
+        _dup_nonexample_text = " ".join(
+            str(sec.get("body", "")) + " " + " ".join(sec.get("bullets") or [])
+            for sec in _dup_sections if isinstance(sec, dict)
+            and not re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
+        )
+        check("Article 85: يُدمج المثال الإضافي مع الحفاظ على العنوان والنص والنقاط",
+              len([sec for sec in _dup_sections if re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)]) == 1
+              and _dup_heading in _dup_nonexample_text
+              and _dup_body in _dup_nonexample_text
+              and _dup_bullet in _dup_nonexample_text
+              and "duplicate example section merged" in " ".join(_dup_actions)
+              and json.dumps(_dup_example, ensure_ascii=False, sort_keys=True) == _dup_original)
+
+        # Critical preflight must guarantee the notice and Article 86 caveats independently of model wording.
+        for _critical_lang in ("ar", "en"):
+            _critical = fixture_data(_critical_lang, topic_id="labor-art85")
+            _critical["sections"][0]["body"] = (
+                _critical["sections"][0]["body"].replace(
+                    "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة.", ""
+                ).replace(
+                    "Applicable notice requirements and resignation procedures may still apply depending on the contract and law.", ""
+                )
+            )
+            _critical, _critical_actions = ensure_article85_critical_content(_critical, lang=_critical_lang)
+            _critical_text = " ".join(
+                str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
+                for sec in _critical["sections"] if isinstance(sec, dict)
+            )
+            _notice_present = (
+                "متطلبات الإشعار" in _critical_text if _critical_lang == "ar"
+                else "notice requirements" in _critical_text and "may still apply" in _critical_text
+            )
+            _article86_present = (
+                "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" in _critical_text
+                if _critical_lang == "ar"
+                else "Under Article 86, commissions, sales percentages" in _critical_text
+            )
+            check(f"Article 85: يضمن preflight توضيح الإشعار والمادة 86 ({_critical_lang})",
+                  _notice_present and _article86_present)
+
+        # A narrowly scoped deterministic repair avoids a second model call for known notice-loss claims.
+        for _notice_lang, _notice_bad_claim in (
+            ("ar", "عدم الالتزام بالإشعار قد يؤدي إلى خفض مكافأة نهاية الخدمة."),
+            ("en", "Failure to comply with notice may lead to a reduction of the end-of-service award."),
+        ):
+            _notice_bad = fixture_data(_notice_lang, topic_id="labor-art85")
+            _notice_bad["sections"][0]["body"] += " " + _notice_bad_claim
+            _notice_original = json.dumps(_notice_bad, ensure_ascii=False, sort_keys=True)
+            _notice_data, _notice_article, _notice_fixes, _notice_error = (
+                repair_article85_deterministic_omissions(
+                    _notice_bad, topic=topic_by_id("labor-art85"), lang=_notice_lang,
+                    published_at=today_iso())
+            )
+            _notice_repaired_text = json.dumps(_notice_data, ensure_ascii=False)
+            check(f"Article 85: claim الإشعار لا يفقد/يخفض المكافأة يُصلح حتمياً ({_notice_lang})",
+                  _notice_article is not None and "notice loss claim" in _notice_fixes
+                  and _notice_bad_claim not in _notice_repaired_text
+                  and _notice_error == ""
+                  and json.dumps(_notice_bad, ensure_ascii=False, sort_keys=True) == _notice_original)
+
+        _fixture_for_notice = fixture_data("ar", topic_id="labor-art85")
+        _fixture_original_text = json.dumps(_fixture_for_notice, ensure_ascii=False)
+        _fixture_with_caveat = ensure_article85_notice_caveat(_fixture_for_notice, lang="ar")
+        _fixture_with_caveat_text = " ".join(
+            str(sec.get("body", "")) for sec in _fixture_with_caveat.get("sections", [])
+            if isinstance(sec, dict))
+        check("Article 85: إدراج توضيح الإشعار القياسي لا يغيّر الكائن الأصلي",
+              "وقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة."
+              in _fixture_with_caveat_text
+              and json.dumps(_fixture_for_notice, ensure_ascii=False) == _fixture_original_text)
+        _fixture_for_boundary = fixture_data("ar", topic_id="labor-art85")
+        _fixture_for_boundary["sections"][0]["body"] = re.sub(
+            r"أكثر من خمس سنوات", "حتى خمس سنوات", _fixture_for_boundary["sections"][0]["body"])
+        _boundary_original = json.dumps(_fixture_for_boundary, ensure_ascii=False)
+        _fixture_with_boundary = ensure_article85_boundary_caveat(_fixture_for_boundary, lang="ar")
+        _fixture_boundary_text = " ".join(
+            str(sec.get("body", "")) for sec in _fixture_with_boundary.get("sections", [])
+            if isinstance(sec, dict))
+        check("Article 85: إضافة حدّ الثلثين القياسي تنجح ولا تعدل الكائن الأصلي",
+              "أكثر من خمس سنوات وأقل من عشر سنوات" in _fixture_boundary_text
+              and json.dumps(_fixture_for_boundary, ensure_ascii=False) == _boundary_original)
+        _empty_shell_ar = fixture_data("ar", topic_id="labor-art85")
+        _empty_shell_ar["sections"][0]["body"] = ""
+        _empty_shell_ar["sections"][0]["bullets"] = []
+        _empty_shell_original = json.dumps(_empty_shell_ar, ensure_ascii=False, sort_keys=True)
+        _empty_shell_data, _empty_shell_article, _empty_shell_fixes, _empty_shell_error = (
+            repair_article85_deterministic_omissions(
+                _empty_shell_ar, topic=topic_by_id("labor-art85"), lang="ar",
+                published_at=today_iso())
+        )
+        check("Article 85: دمج العنوان الفارغ يحافظ على العنوان ولا يسقط محتوى",
+              _empty_shell_article is not None
+              and any("أساس الحساب" in sec["body"] for sec in _empty_shell_data["sections"])
+              and any("empty section merged" in fix for fix in _empty_shell_fixes)
+              and len(_empty_shell_data["sections"]) >= MIN_SECTIONS
+              and json.dumps(_empty_shell_ar, ensure_ascii=False, sort_keys=True) == _empty_shell_original
+              and not _empty_shell_error)
+
+        _empty_bullets_en = fixture_data("en", topic_id="labor-art85")
+        _empty_bullets_en["sections"][0]["body"] = ""
+        _empty_note = "This supplemental practical note must remain available after the empty section is repaired."
+        _empty_bullets_en["sections"][0]["bullets"] = [_empty_note]
+        _empty_bullets_original = json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True)
+        _empty_bullets_data, _empty_bullets_article, _empty_bullets_fixes, _empty_bullets_error = (
+            repair_article85_deterministic_omissions(
+                _empty_bullets_en, topic=topic_by_id("labor-art85"), lang="en",
+                published_at=today_iso())
+        )
+        check("Article 85: إصلاح القسم ذي body الفارغ يحافظ على العنوان وbullets المفيدة",
+              _empty_bullets_article is not None
+              and any("empty section merged" in fix for fix in _empty_bullets_fixes)
+              and any("Calculation Basis" in sec["body"] for sec in _empty_bullets_data["sections"])
+              and any(_empty_note in sec["body"] for sec in _empty_bullets_data["sections"])
+              and len(_empty_bullets_data["sections"]) >= MIN_SECTIONS
+              and json.dumps(_empty_bullets_en, ensure_ascii=False, sort_keys=True) == _empty_bullets_original
+              and not _empty_bullets_error)
+
+        # Regression: an empty final section previously put len(sections) in the sort candidates.
+        _empty_tail_en = fixture_data("en", topic_id="labor-art85")
+        _empty_tail_index = len(_empty_tail_en["sections"]) - 1
+        _empty_tail_heading = "Trailing notice section"
+        _empty_tail_bullet = "Keep this trailing-section point after repair."
+        _empty_tail_en["sections"][_empty_tail_index].update({
+            "heading": _empty_tail_heading, "body": "", "bullets": [_empty_tail_bullet],
+        })
+        _empty_tail_original = json.dumps(_empty_tail_en, ensure_ascii=False, sort_keys=True)
+        _empty_tail_fixed, _empty_tail_action = repair_empty_article85_section(
+            _empty_tail_en, reason=f"sections[{_empty_tail_index}].body: فارغ", lang="en")
+        check("Article 85: إصلاح آخر قسم فارغ لا يسبب list index out of range ويحفظ العنوان والنقاط",
+              len(_empty_tail_fixed["sections"]) == len(_empty_tail_en["sections"]) - 1
+              and any(_empty_tail_heading in sec["body"] for sec in _empty_tail_fixed["sections"])
+              and any(_empty_tail_bullet in sec["body"] for sec in _empty_tail_fixed["sections"])
+              and "empty section merged" in _empty_tail_action
+              and json.dumps(_empty_tail_en, ensure_ascii=False, sort_keys=True) == _empty_tail_original)
+
+        # Critical Article 85 wording and the fixed worked example must not depend on model luck.
+        _canonicalized = {}
+        _canonical_inputs_before = {}
+        for _canonical_lang in ("ar", "en"):
+            _canonical_input = fixture_data(_canonical_lang, topic_id="labor-art85")
+            _canonical_input["calculation_example"]["payable_benefit"] = "30000"
+            _canonical_example_sec = next(
+                sec for sec in _canonical_input["sections"]
+                if re.search(r"(?:مثال|example)", sec["heading"], re.I))
+            _canonical_example_sec["body"] = (
+                "Wrong example: SAR 30,000." if _canonical_lang == "en"
+                else "مثال غير صحيح: 30,000 ريال.")
+            _canonical_inputs_before[_canonical_lang] = json.dumps(
+                _canonical_input, ensure_ascii=False, sort_keys=True)
+            _canonicalized[_canonical_lang] = ensure_article85_critical_content(
+                _canonical_input, lang=_canonical_lang)
+            check(f"Article 85: canonicalizer لا يعدّل مدخل {_canonical_lang} الأصلي",
+                  json.dumps(_canonical_input, ensure_ascii=False, sort_keys=True)
+                  == _canonical_inputs_before[_canonical_lang])
+        _critical_ar, _critical_ar_fixes = _canonicalized["ar"]
+        _critical_en, _critical_en_fixes = _canonicalized["en"]
+        _critical_ar_text = " ".join(sec["heading"] + " " + sec["body"]
+                                     for sec in _critical_ar["sections"])
+        _critical_en_text = " ".join(sec["heading"] + " " + sec["body"]
+                                     for sec in _critical_en["sections"])
+        check("Article 85: حدّ الثلثين والمثال الحسابي يُحقنان حتمياً قبل التحقق",
+              _critical_ar["calculation_example"] == ARTICLE85_CANONICAL_VALUES
+              and _critical_en["calculation_example"] == ARTICLE85_CANONICAL_VALUES
+              and "أكثر من خمس سنوات وأقل من عشر سنوات" in _critical_ar_text
+              and "more than five years and less than ten years" in _critical_en_text
+              and "28,000 ريال" in _critical_ar_text and "SAR 28,000" in _critical_en_text
+              and "30,000" not in _critical_ar_text and "30,000" not in _critical_en_text
+              and "canonical example prose enforced" in _critical_ar_fixes
+              and "canonical calculation values enforced" in _critical_en_fixes)
+
+        _overflow_data = fixture_data("en", topic_id="labor-art85")
+        for _n in range(10):
+            _overflow_data["sections"].append({
+                "heading": f"Supplemental section {_n}",
+                "body": f"Supplemental retained content marker {_n}. " * 8,
+                "bullets": [f"Supplemental bullet marker {_n}"],
+            })
+        _overflow_fixed = merge_article85_sections(_overflow_data, target_count=MAX_SECTIONS)
+        _overflow_text = " ".join(sec["heading"] + " " + sec["body"] + " " +
+                                  " ".join(sec["bullets"]) for sec in _overflow_fixed["sections"])
+        check("Article 85: تقليل الأقسام الزائدة يحافظ على العناوين والنصوص والنقاط",
+              len(_overflow_data["sections"]) == 14
+              and len(_overflow_fixed["sections"]) == MAX_SECTIONS
+              and all(f"Supplemental retained content marker {_n}." in _overflow_text
+                      and f"Supplemental bullet marker {_n}" in _overflow_text
+                      and f"Supplemental section {_n}" in _overflow_text
+                      for _n in range(10)))
+        _fixture_excerpt = fixture_data("en", topic_id="labor-art85")
+        _fixture_excerpt["excerpt"] = ("This is a helpful introductory summary with practical information. " * 5)[:318]
+        _trimmed_excerpt = trim_article85_excerpt(_fixture_excerpt)
+        check("Article 85: قص excerpt الزائد قصاً محدوداً يحافظ على الحد الأعلى",
+              len(_trimmed_excerpt["excerpt"]) <= 300
+              and len(_trimmed_excerpt["excerpt"]) >= 40
+              and len(_fixture_excerpt["excerpt"]) == 318)
+        check("Article 85: إعادة الإصلاح محصورة بأخطاء الصياغة القانونية أو قِصر القسم",
+              is_article85_legal_rejection("المادة 85: حد الخدمة غير واضح")
+              and is_article85_legal_rejection("Article 86: missing agreement")
+              and is_article85_repairable_rejection("sections[10].body: الطول 73 خارج المدى 120-8000")
+              and is_article85_repairable_rejection("excerpt: الطول 318 خارج المدى 40-300")
+              and is_article85_repairable_rejection("sections: العدد 14 خارج المدى 3-12")
+              and is_article85_repairable_rejection("sections[5].body: فارغ")
+              and is_article85_repairable_rejection("Article 85 boundary: conflicting five-to-ten-year two-thirds claim")
+              and is_article85_repairable_rejection("المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب 30000.00")
+              and is_article85_repairable_rejection("المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق")
+              and is_article85_repairable_rejection("calculation_example: موضوع المادة 85 يتطلب المثال الثابت")
+              and not is_article85_repairable_rejection("sections: العدد 18 خارج المدى 3-12")
+              and not is_article85_legal_rejection("حقول مطلوبة مفقودة: sections")
+              and not is_article85_repairable_rejection("حقول مطلوبة مفقودة: sections"))
+
+        globals()["http_request_full"] = _article85_repair_http
+        _repair_rc, _repair_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="labor-art85", article_lang="ar")
+        _repair_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        check("Article 85: إصلاح المادة 86 حتمياً يجتاز البوابات ويحفظ مسودة فقط",
+              _repair_rc == 0 and _repair_calls == {"ar": 1, "en": 0}
+              and len(_repair_requests) == 1
+              and "Article 86 rule enforced" in _repair_out
+              and len(_repair_drafts) == 1
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _repair_before)
+        check("Article 85: التوليد يبقي Groq على JSON Schema صارم وreasoning_effort=low",
+              len(_repair_requests) == 1
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
+                      for r in _repair_requests))
+        check("Article 85: إصلاح المادة 86 الحتمي لا يستدعي النموذج ثانية",
+              len(_repair_requests) == 1
+              and _repair_calls == {"ar": 1, "en": 0}
+              and "Article 86 rule enforced" in _repair_out)
+
+        # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
+        _sandbox()
+        globals()["http_request_full"] = _no_network
 
         _saved_keys = {var: os.environ.pop(var, None) for var in PROVIDER_KEY_ENV.values()}
         try:
@@ -3323,6 +5724,11 @@ def selftest() -> int:
 
         # (ي) إعادة المحاولة عند Groq: 429 مؤقّت مع Retry-After ثم نجاح
         _sleeps.clear()
+        _retry_date = datetime(2026, 1, 1, 0, 0, 45, tzinfo=timezone.utc)
+        _retry_now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        _retry_date_header = _retry_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        check("Retry-After: يقبل تاريخ HTTP ويفسره كمهلة صريحة",
+              retry_after_seconds(_retry_date_header, now=_retry_now) == 45.0)
         fake, calls = _fake_http([
             (429, {"Retry-After": "7"}, b'{"error":{"message":"rate limit reached"}}'),
             _groq_envelope(lang="ar"),
@@ -3350,6 +5756,25 @@ def selftest() -> int:
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _sleeps == [9.7425])
 
+        # Content repair uses a single model-repair pass but allows one HTTP retry after transient TPM 429.
+        _sleeps.clear()
+        _repair_tpm_body = (
+            b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
+            b'Limit 8000, Used 6327, Requested 2477. Please try again in 6.03s."}}'
+        )
+        fake, calls = _fake_http([
+            (429, {}, _repair_tpm_body),
+            _groq_envelope(lang="en"),
+        ])
+        globals()["http_request_full"] = fake
+        _repair_budget = RequestBudget(2)
+        ok, data, msg = groq_generate_json(
+            "repair prompt", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            tries=2, request_budget=_repair_budget, sleep=_sleeps.append)
+        check("Groq repair: يعيد 429 المؤقت مرة واحدة بعد مهلة الخادم ضمن سقف الطلبات",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _repair_budget.used == 2 and _sleeps == [6.03])
+
         # (ي-2) Retry-After الرقمي يتقدّم على تلميحات فوترة عامة، لكن الحصة اليومية أدناه تبقى استثناءً.
         _sleeps.clear()
         fake, calls = _fake_http([
@@ -3367,10 +5792,22 @@ def selftest() -> int:
         fake, calls = _fake_http([(503, {}, b'{"error":{"message":"overloaded"}}')])
         globals()["http_request_full"] = fake
         ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
-        check("Groq: خطأ مؤقّت مستمرّ يستنفد الحدّ الأعلى (4 محاولات) ثم يفشل بوضوح",
+        check("Groq: خطأ مؤقّت مستمرّ يستنفد الحدّ الأعلى الافتراضي (4 محاولات) ثم يفشل بوضوح",
               not ok and data is None and len(calls) == GEMINI_MAX_TRIES
               and msg.startswith("http_503") and "استُنفدت المحاولات" in msg
               and len(_sleeps) == GEMINI_MAX_TRIES - 1)
+
+        _sleeps.clear()
+        _budget_http, _budget_calls = _fake_http([
+            (503, {}, b'{"error":{"message":"overloaded"}}')])
+        globals()["http_request_full"] = _budget_http
+        _hard_budget = RequestBudget(2)
+        _budget_ok, _budget_data, _budget_msg = groq_generate_json(
+            "p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            tries=4, request_budget=_hard_budget, sleep=_sleeps.append)
+        check("Groq: حدّ الاستدعاءات المشترك يوقف الطلبات فعلياً عند السقف",
+              not _budget_ok and len(_budget_calls) == 2 and _hard_budget.used == 2
+              and "request_budget_exhausted" in _budget_msg)
 
         # (ي) 401/403 ونموذج غير متاح: لا إعادة إطلاقاً، وتصنيف واضح
         _sleeps.clear()
@@ -3768,8 +6205,9 @@ def selftest() -> int:
         _js = _rf.get("json_schema") or {}
         _schema = _js.get("schema") or {}
         _props = _schema.get("properties") or {}
-        check("Structured Outputs: الطلب يستخدم json_schema مع strict=true ولا يعود إلى json_object",
+        check("Structured Outputs: الطلب يستخدم json_schema وstrict=true وreasoning_effort=low بلا json_object",
               rc == 0 and len(_schema_reqs) == 2
+              and all(r.get("reasoning_effort") == "low" for r in _schema_reqs)
               and _rf.get("type") == "json_schema" and _js.get("strict") is True
               and _js.get("name") == GROQ_SCHEMA_NAME
               and _rf == groq_response_format()
@@ -3826,6 +6264,12 @@ def selftest() -> int:
         check("بوابة الجودة: نقص الحقل sections لا يتجاوز validate_article",
               _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
                                                 published_at="2026-01-01")))
+        for _missing_field in ("faq", "official_sources", "calculation_example"):
+            _bad = fixture_data("ar")
+            del _bad[_missing_field]
+            check(f"بوابة الجودة: نقص الحقل {_missing_field} لا يتجاوز validate_article",
+                  _rejects(lambda bad=_bad: validate_article(
+                      bad, topic=topic, lang="ar", published_at="2026-01-01")))
         _bad = fixture_data("ar")
         _bad["sections"] = "ليست قائمة"
         check("بوابة الجودة: نوع خاطئ في sections لا يتجاوز validate_article",
@@ -3842,9 +6286,62 @@ def selftest() -> int:
               _rejects(lambda: validate_article(_bad, topic=topic, lang="en",
                                                 published_at="2026-01-01")))
 
-        # 5) فشل المزوّد كما في التشغيل 38946220138 (http_400 json_validate_failed):
-        #    لا نشر ولا مسودة ولا أي كتابة في ملفات عامة، وبلا رجوع إلى وضع أضعف
-        #    وبلا إعادة لهذا الخطأ (غير قابل لإعادة المحاولة: محاولة واحدة لكل نسخة).
+        # 5) فشل متكرر في Groq Structured Outputs:
+        #    تُعاد نفس الاستجابة الصارمة حتى الحدّ الأعلى، ثم يفشل المسار
+        #    من دون نشر أو مسودات أو تعديل الملفات العامة.
+        # 5-أ) 400 json_validate_failed مرة واحدة ثم نجاح: التكرار لا يخفف المخطط.
+        _sandbox()
+        _recovery_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _recovery_calls, _recovery_requests = {"ar": 0, "en": 0}, []
+
+        _repair_ar_markers = (
+            " تنطبق نسبة الثلث على مدة خدمة من سنتين حتى خمس سنوات شاملةً خمس سنوات، "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات. "
+            "عدم كون الإشعار شرطًا لاستحقاق المكافأة لا يعني أن الإشعار غير مطلوب لإنهاء العقد؛ "
+            "فقد تبقى متطلبات الإشعار وإجراءات الاستقالة واجبة بحسب نوع العقد والأحكام النظامية المنطبقة. "
+            "وفق المادة 86، يجوز بالاتفاق استبعاد العمولات والنسب المئوية عن المبيعات وما يماثلها "
+            "من عناصر الأجر التي تكون بطبيعتها قابلة للزيادة والنقص من الأجر الذي تُحسب على أساسه "
+            "مكافأة نهاية الخدمة؛ ولا يعني ذلك استبعاد الأجر الأساسي. "
+            "المادة 81 تتعلق بحالات نظامية يترك فيها العامل العمل دون إشعار مع احتفاظه بحقوقه، "
+            "ولا تمثل فصلًا من صاحب العمل."
+        )
+
+        def _schema_recovery(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _recovery_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _recovery_calls[lang] += 1
+            if _recovery_calls[lang] == 1:
+                return (400, {}, b'{"error":{"message":"Failed to generate JSON",'
+                        b'"code":"json_validate_failed"}}', url)
+            data = fixture_data(lang, topic_id="labor-art85")
+            if lang == "ar":
+                data["sections"][0]["body"] += _repair_ar_markers
+            return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
+
+        globals()["http_request_full"] = _schema_recovery
+        _recovery_rc, _recovery_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="labor-art85", article_lang="ar")
+        _recovery_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        check("Groq Structured Outputs: نجاح بعد 400 json_validate_failed بإعادة محدودة",
+              _recovery_rc == 0 and _recovery_calls == {"ar": 2, "en": 0}
+              and len(_recovery_requests) == 2
+              and "استجابة مؤقّتة http_400" in _recovery_out
+              and len(_recovery_drafts) == 1)
+        check("Groq Structured Outputs: إعادة المحاولة تحتفظ بـjson_schema strict بلا json_object",
+              len(_recovery_requests) == 2
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
+                      and ((r.get("response_format") or {}).get("json_schema") or {}).get("strict") is True
+                      for r in _recovery_requests)
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _recovery_before
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and "json_object" not in json.dumps(_recovery_requests, ensure_ascii=False))
+
+        # 5-ب) فشل مستمر: لا نشر ولا مسودة، ولا تعديل على الملفات العامة.
         _fail_reqs, _fail_calls = [], {"ar": 0, "en": 0}
 
         def _schema_400(url, **kwargs):
@@ -3856,23 +6353,25 @@ def selftest() -> int:
                     b'"code":"json_validate_failed"}}', url)
 
         _sandbox()
-        before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _fail_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
         globals()["http_request_full"] = _schema_400
         rc, out = _capture_run(mode="auto", provider="groq", api_key=_FAKE_GROQ_KEY)
         st = load_state()["topics"][TOPICS[0]["id"]]
-        check("فشل المزوّد (http_400 json_validate_failed): لا نشر ولا أي كتابة في ملفات عامة",
+        check("فشل Groq المتكرر (json_validate_failed): لا نشر ولا أي كتابة في ملفات عامة",
               rc == EXIT_GENERATION_FAILED and st.get("ar") == "error"
               and st.get("en") == "error" and not DRAFTS_DIR.exists()
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
-              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == before)
-        check("فشل المزوّد: يبقى الطلب صارماً بلا رجوع إلى وضع أضعف وبلا إعادة",
-              _fail_calls == {"ar": 1, "en": 1} and len(_fail_reqs) == 2
-              and all((r.get("response_format") or {}).get("type") == "json_schema"
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _fail_before)
+        check("فشل Groq المتكرر: المحاولات محدودة وتبقى على المخطط الصارم",
+              _fail_calls == {"ar": GROQ_INITIAL_HTTP_TRIES, "en": GROQ_INITIAL_HTTP_TRIES}
+              and len(_fail_reqs) == 2 * GROQ_INITIAL_HTTP_TRIES
+              and all(r.get("reasoning_effort") == "low"
+                      and (r.get("response_format") or {}).get("type") == "json_schema"
                       and ((r.get("response_format") or {}).get("json_schema") or {}
                            ).get("strict") is True
                       for r in _fail_reqs)
               and "json_validate_failed" in out
-              and "غير قابل لإعادة المحاولة" in out
+              and "استُنفدت المحاولات" in out
               and "json_object" not in out)
 
         # (ض) دقة المحتوى القانوني لمكافأة نهاية الخدمة — إصلاح الأخطاء المكتشفة
@@ -3895,10 +6394,11 @@ def selftest() -> int:
             "بنسبة ماقضى العامل منها فعلاً",
             "لا بقاعدة «21 يوماً عن كل سنة»",
             "ولا بنصف يوم عن كل شهر غير مكتمل",
-            "الاستقالة لا تستلزم مدة ثلاثة أشهر",
+            "المادة 85 تنظّم نسب مكافأة نهاية الخدمة عند الاستقالة فقط",
+            "متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة",
             "خدمة متتالية لا تقل عن سنتين",
-            "فالمكافأة كاملة",
-            "المادتان 75 و79 مكرر",
+            "المكافأة كاملة إذا بلغت الخدمة عشر سنوات فأكثر",
+            "متطلبات الإشعار وإجراءات الاستقالة مسألة منفصلة",
             "فلا تدّعِ أن الأجر الأساسي وحده",
             "ولا أن جميع البدلات مستبعدة بلا استثناء",
             "خلال أسبوع على الأكثر",
@@ -3938,12 +6438,13 @@ def selftest() -> int:
             "in proportion to the time actually served",
             'not by a flat "21 days per year" rule',
             "not by half a day per incomplete month",
-            "resignation does not require three months",
+            "Article 85 sets the end-of-service benefit ratios for resignation only",
+            "Notice and resignation procedures are separate questions",
             "two consecutive years of service",
             "one third of the benefit",
             "two thirds",
             "the full benefit",
-            "Articles 75 and 79-bis",
+            "Notice and resignation procedures are separate questions",
             "Do not claim that the basic wage alone",
             "nor that all allowances are always excluded",
             "within one week at most",
@@ -3981,10 +6482,23 @@ def selftest() -> int:
         for _tid in sorted(EOSB_TOPIC_IDS):
             for _lang in ("ar", "en"):
                 _p = build_prompt(topic_by_id(_tid), _lang)
+                if _tid == "labor-art85":
+                    _critical_markers = (
+                        ("المادة 84", "المادة 85", "المادة 86", "المادة 81",
+                         "مدة إشعار العقد", "الثلثان بعد تجاوز خمس سنوات",
+                         "لا تقل إن عدم الالتزام بالإشعار", "سنتين متتاليتين كحد أدنى")
+                        if _lang == "ar" else
+                        ("Article 84", "Article 85", "Article 86", "Article 81",
+                         "contract notice requirements", "two thirds only above five",
+                         "Do not claim that notice non-compliance", "two consecutive years as the minimum")
+                    )
+                    if any(_m not in _p for _m in _critical_markers):
+                        _bad_eosb_prompts.append(f"{_tid}/{_lang}:scoped")
+                    continue
                 _markers = _eosb_ar_markers if _lang == "ar" else _eosb_en_markers
                 if any(_m not in _p for _m in _markers):
                     _bad_eosb_prompts.append(f"{_tid}/{_lang}")
-        check("EOSB: قواعد المواد 84-88 تصل بروموت كل موضوعات المكافأة في اللغتين",
+        check("EOSB: قواعد كل موضوع تصل للبرومبت بنطاق قانوني مناسب لكل لغة",
               bool(EOSB_TOPIC_IDS) and not _bad_eosb_prompts)
 
         # التمييز المنصوص عليه في التقرير: الأساس (84) قسم مستقل عن نِسَب
@@ -4203,7 +6717,9 @@ def selftest() -> int:
               and legal_rules_for(topic_by_id("eosb-resignation"), "ar")
                   == EOSB_LEGAL_RULES["ar"]
               and legal_rules_for(topic_by_id("labor-art85"), "en")
-                  == EOSB_LEGAL_RULES["en"]
+                  == EOSB_ARTICLE85_LEGAL_RULES["en"]
+              and "Article 84" in legal_rules_for(topic_by_id("labor-art85"), "en")
+              and "Article 87" not in legal_rules_for(topic_by_id("labor-art85"), "en")
               and legal_rules_for(topic_by_id("cv-ats-optimization"), "ar") == ""
               and legal_rules_for(topic_by_id("daily-monthly-wage"), "en") == ""
               and legal_rules_for(topic_by_id("eosb-basics"), "fr")
@@ -4304,6 +6820,44 @@ def selftest() -> int:
               and (DRAFTS_DIR / "ar" / "labor-art81-ar.html").exists()
               and (DRAFTS_DIR / "en" / "labor-art81-en.html").exists()
               and _st["ar"] == "draft" and _st["en"] == "draft")
+
+        # (ظ-4) تجربة reasoning_effort=medium للإنجليزية فقط؛ العربية تبقى low، والتشخيص منظم.
+        _sandbox_root = _sandbox()
+        _effort_report = _sandbox_root / "generation_report.json"
+        _saved_effort = os.environ.get("GROQ_EN_REASONING_EFFORT")
+        _saved_report_path = os.environ.get("GENERATION_REPORT_PATH")
+        os.environ["GROQ_EN_REASONING_EFFORT"] = "medium"
+        os.environ["GENERATION_REPORT_PATH"] = str(_effort_report)
+        _observed_efforts, _observed_counts = {}, {"ar": 0, "en": 0}
+        def _fake_effort(url, **kwargs):
+            body = json.loads(kwargs["data"].decode("utf-8"))
+            prompt_text = _request_prompt(kwargs)
+            chosen_lang = "en" if "لغة المخرجات: English" in prompt_text else "ar"
+            _observed_efforts[chosen_lang] = body.get("reasoning_effort")
+            _observed_counts[chosen_lang] += 1
+            tid = _topic_id_from_prompt(prompt_text)
+            return _groq_envelope(lang=chosen_lang, topic_id=tid) + (url,)
+        try:
+            globals()["http_request_full"] = _fake_effort
+            rc = run_once(mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+                          skip_source_check=True, topic_id="labor-art85", article_lang="both")
+        finally:
+            if _saved_effort is None:
+                os.environ.pop("GROQ_EN_REASONING_EFFORT", None)
+            else:
+                os.environ["GROQ_EN_REASONING_EFFORT"] = _saved_effort
+            if _saved_report_path is None:
+                os.environ.pop("GENERATION_REPORT_PATH", None)
+            else:
+                os.environ["GENERATION_REPORT_PATH"] = _saved_report_path
+        _report_data = json.loads(_effort_report.read_text(encoding="utf-8")) if _effort_report.exists() else {}
+        check("Groq: medium اختياري للإنجليزية فقط مع صفوف تشخيص موحدة وحدّ استدعاءات",
+              rc == 0 and _observed_efforts == {"ar": "low", "en": "medium"}
+              and _observed_counts == {"ar": 1, "en": 1}
+              and len(_report_data.get("results", [])) == 2
+              and all("http_requests" in row and "stage" in row and "status" in row
+                      and "reason" in row for row in _report_data["results"])
+              and all(row.get("http_requests") == 1 for row in _report_data["results"]))
 
         # (ظ-4) main() يمرّر --article-lang إلى run_once فعلاً (بمفتاح وهمي واستجابة محاكاة).
         _sandbox()
