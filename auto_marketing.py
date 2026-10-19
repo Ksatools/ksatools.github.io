@@ -3751,15 +3751,18 @@ def selftest() -> int:
             data = fixture_data(lang, topic_id="labor-art85")
             if lang == "ar" and _repair_calls[lang] == 1:
                 data = ensure_article85_notice_caveat(data, lang="ar")
-                def _remove_ar86_variable_word(value):
+                def _remove_ar85_boundary(value):
                     if isinstance(value, dict):
-                        return {k: _remove_ar86_variable_word(v) for k, v in value.items()}
+                        return {k: _remove_ar85_boundary(v) for k, v in value.items()}
                     if isinstance(value, list):
-                        return [_remove_ar86_variable_word(v) for v in value]
+                        return [_remove_ar85_boundary(v) for v in value]
                     if isinstance(value, str):
-                        return value.replace("بطبيعتها", "")
+                        value = re.sub(r"أكثر من خمس", "حتى خمس", value)
+                        value = re.sub(r"زادت(?: مدة خدمته| الخدمة)? على خمس", "بلغت خمس", value)
+                        value = re.sub(r"أقل من عشر", "حتى عشر", value)
+                        value = re.sub(r"لم تبلغ عشر", "بلغت عشر", value)
                     return value
-                data = _remove_ar86_variable_word(data)
+                data = _remove_ar85_boundary(data)
             else:
                 data["sections"][0]["body"] += _legal_repair_ar
             return _groq_envelope(content=json.dumps(data, ensure_ascii=False)) + (url,)
@@ -3820,8 +3823,8 @@ def selftest() -> int:
                       for r in _repair_requests))
         check("Article 85: طلب الإصلاح يرسل التصحيح المستهدف دون نسخ وصف الرفض",
               len(_repair_requests) == 2
-              and any("وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات" in str(m.get("content", ""))
-                      and "المادة 86: وضّح أن الاتفاق يتعلق" not in str(m.get("content", ""))
+              and any("ثلث المكافأة يكون من سنتين إلى خمس سنوات شاملًا خمس سنوات" in str(m.get("content", ""))
+                      and "المادة 85: يجب توضيح أن الثلثين يبدأان" not in str(m.get("content", ""))
                       for m in _repair_requests[1].get("messages", [])))
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
