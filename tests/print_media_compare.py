@@ -51,13 +51,14 @@ def expected_pdf_markers(page, tool):
 
     if tool == "letter-tool":
         letter = page.locator("#letter-output").inner_text().strip()
-        date_marker = digits_only(page.locator("#let-date").input_value())
-        if len(normalized_text(letter)) < 80 or date_marker != "20261020":
+        date_input = digits_only(page.locator("#let-date").input_value())
+        date_match = re.search(r"\\(([^()]*)\\)", letter)
+        # Derive the marker from the generated letter rather than assuming the
+        # display format is always ISO; the main site now localizes this date.
+        date_marker = digits_only(date_match.group(1)) if date_match else ""
+        if len(normalized_text(letter)) < 80 or date_input != "20261020" or len(date_marker) < 5:
             raise RuntimeError("Letter fixture did not generate its expected dated output.")
-        # Arabic bidirectional rendering presents this fixture's ISO input as
-        # 20-10-2026 in extracted PDF reading order; assert that visible date
-        # plus the letter's subject, not the input-field's ISO digit order.
-        return {"digits": ["20102026"], "text": []}
+        return {"digits": [date_marker], "text": []}
 
     if tool == "cv-tool":
         resume = page.locator(".cv-doc").inner_text().strip()
