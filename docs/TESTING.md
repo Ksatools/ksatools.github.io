@@ -92,7 +92,7 @@ python auto_marketing.py --verify
 
 ## 5) حالة آخر تشغيل (متحقّق)
 
-**CI لفرع PR #32 (2026-10-19؛ التغييرات لا تزال في مسودة مراجعة ولم تدمج):** [سجل التشغيل](https://github.com/Ksatools/ksatools.github.io/actions/runs/39227346452) — `PASS=118 · FAIL=0 · FAIL(known)=0`. نجحت `py_compile` و`auto_marketing.py --selftest` و`--verify` وفحص جافاسكربت و`git diff --check` واختبارات Chrome. شمل الاختبار الجديد JSON-LD وتهيئة التفضيلات قبل DOMContentLoaded وتنسيق التاريخ باللغتين وتأجيل Social Bar. لا يعني هذا تحقق الإعلان الحقيقي أو أن PR #32 أصبح منشورًا.
+**CI لفرع PR #32 (2026-10-19؛ التغييرات لا تزال في مسودة مراجعة ولم تدمج):** [سجل التشغيل](https://github.com/Ksatools/ksatools.github.io/actions/runs/39233240227) — `PASS=118 · FAIL=0 · FAIL(known)=0`. نجحت `py_compile` و`auto_marketing.py --selftest` و`--verify` وفحص جافاسكربت و`git diff --check` واختبارات Chrome. شمل الاختبار الجديد JSON-LD وتهيئة التفضيلات قبل DOMContentLoaded وتنسيق التاريخ باللغتين وتأجيل Social Bar. لا يعني هذا تحقق الإعلان الحقيقي أو أن PR #32 أصبح منشورًا.
 
 **تحقّق إضافي على فرع PR #24 (2026-10-18؛ قبل الدمج):** نجح CI على الالتزام `b6bc21a359ec8364fdbab6a404af777306c400cb` ([سجل CI](https://github.com/Ksatools/ksatools.github.io/actions/runs/39131034471)). أُزيل إعفاء `known=3` من اختبار رابط التذييل؛ بعد النقر على `#eos-tool` من تبويب السيرة، تحقّق الاختبار من القسم النشط وحالة `aria-selected`، وكانت النتيجة `active=eos-tool selected=eos-tool hash=#eos-tool`. ملخص الاختبار: `PASS=102 · FAIL=0 · FAIL(known)=0`. لا يتضمّن هذا الفرع تغييراً على `index.html`؛ مستمع `hashchange` كان موجوداً، والتصحيح كان في الاختبار وتوثيق الحالة.
 
