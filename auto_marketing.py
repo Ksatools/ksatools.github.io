@@ -440,11 +440,16 @@ def _split_article_sentences(value: str) -> list:
 
 def _expand_inline_article_lists(value: str) -> str:
     """Turn inline bullets/numbered steps into line markers before HTML rendering."""
-    text = re.sub(r"^\s*[-–]\s+", "• ", str(value or ""))
+    text = str(value or "")
+    # Strip invisible bidi controls before parsing list markers. They can appear
+    # in Arabic LLM output and prevent "5." or "٢." from matching at line start.
+    text = re.sub(r"[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]", "", text)
+    text = re.sub(r"^\s*[-–]\s+", "• ", text)
     text = re.sub(r"\s+([•●▪])\s+", lambda match: "\n" + match.group(1) + " ", text)
     # Only split single-digit inline markers here: Article references such as "Article 86. The"
-    # must remain normal prose, not be mistaken for numbered list items.
-    text = re.sub(r"(?<!\d)\s+([1-9][.)])\s+", r"\n\1 ", text)
+    # must remain normal prose, not be mistaken for numbered list items. Accept
+    # both Western and Arabic-Indic digits used by bilingual article generation.
+    text = re.sub(r"(?<!\d)\s+([1-9١-٩][.)])\s+", r"\n\1 ", text)
     # Arabic drafts sometimes encode every sub-step as '- item' inside a single sentence.
     # Require repeated spaced hyphens so a normal dash in prose is not mistaken for a list.
     if len(re.findall(r"\s+-\s+", text)) >= 2:
@@ -453,10 +458,10 @@ def _expand_inline_article_lists(value: str) -> str:
 
 
 def render_article_body(body: str) -> str:
-    """Render paragraphs, Markdown-like inline emphasis, bullets and numbered steps without allowing raw HTML."""
+    """Render readable paragraphs and semantic lists while keeping list numbering stable."""
     text = str(body or "").replace("\r\n", "\n").replace("\r", "\n")
-    # Models occasionally leak a duplicated FAQ heading into a regular paragraph. The article
-    # renderer adds a dedicated FAQ section below, so remove only the repeated heading artifact.
+    text = re.sub(r"[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]", "", text)
+    # The template renders its own FAQ section, so remove only a duplicated heading artifact.
     text = re.sub(
         r"(?:\bCommon Questions\s+)?\bFAQ(?:\s+FAQ){1,}\b",
         " ",
@@ -468,53 +473,93 @@ def render_article_body(body: str) -> str:
     blocks = []
 
     for paragraph in paragraphs:
-        expanded = _expand_inline_article_lists(re.sub(r"[ \t]*\n[ \t]*", " ", paragraph).strip())
+        expanded = _expand_inline_article_lists(
+            re.sub(r"[ \t]*\n[ \t]*", " ", paragraph).strip()
+        )
         lines = [line.strip() for line in expanded.split("\n") if line.strip()]
         tokens = []
         for line in lines:
             ordered = re.match(r"^(\d{1,2})[.)]\s+(.+)$", line)
             bullet = re.match(r"^[•●▪]\s+(.+)$", line)
             if ordered:
-                tokens.append(("ol", ordered.group(2).strip()))
+                tokens.append(("ol", ordered.group(2).strip(), int(ordered.group(1))))
             elif bullet:
-                tokens.append(("ul", bullet.group(1).strip()))
+                tokens.append(("ul", bullet.group(1).strip(), None))
             else:
                 sentences = _split_article_sentences(line)
-                # Keep short text intact; split long walls into pairs of sentences.
                 if len(sentences) >= 4:
                     for index in range(0, len(sentences), 2):
-                        tokens.append(("p", " ".join(sentences[index:index + 2])))
+                        tokens.append(("p", " ".join(sentences[index:index + 2]), None))
                 else:
-                    tokens.append(("p", line))
+                    tokens.append(("p", line, None))
 
-        # If a model placed additional explanation after the final inline bullet, keep the first
-        # sentence as the list item and move the explanation back into normal paragraphs.
-        list_indexes = [i for i, (kind, _) in enumerate(tokens) if kind in ("ul", "ol")]
+        # If prose follows the final inline list item, move that prose back to paragraphs.
+        list_indexes = [i for i, token in enumerate(tokens) if token[0] in ("ul", "ol")]
         if list_indexes and list_indexes[-1] == len(tokens) - 1:
             last_index = list_indexes[-1]
-            last_kind, last_text = tokens[last_index]
+            last_kind, last_text, last_number = tokens[last_index]
             sentences = _split_article_sentences(last_text)
             if len(sentences) > 1:
-                tokens[last_index] = (last_kind, sentences[0])
-                trailing = sentences[1:]
-                tokens.extend(("p", sentence) for sentence in trailing)
+                tokens[last_index] = (last_kind, sentences[0], last_number)
+                tokens.extend(("p", sentence, None) for sentence in sentences[1:])
 
         index = 0
         while index < len(tokens):
-            kind, value = tokens[index]
+            kind, value, number = tokens[index]
             if kind == "p":
                 blocks.append(f"<p>{render_inline_prose(value)}</p>")
                 index += 1
                 continue
+
             items = []
+            list_start = number if kind == "ol" and number is not None else 1
+            expected_number = list_start
             while index < len(tokens) and tokens[index][0] == kind:
-                items.append(f"<li>{render_inline_prose(tokens[index][1])}</li>")
+                token_kind, token_text, token_number = tokens[index]
+                if kind == "ol":
+                    current_number = token_number if token_number is not None else expected_number
+                    if items and current_number != expected_number:
+                        break
+                    if not items:
+                        list_start = current_number
+                    expected_number = current_number + 1
+                items.append(token_text)
                 index += 1
+
+            # Bullets immediately following a numbered item ending in a colon are
+            # visually and semantically part of that step; nest them in its <li>.
+            nested_items = []
+            if (
+                kind == "ol"
+                and items
+                and items[-1].rstrip().endswith((":", "："))
+                and index < len(tokens)
+                and tokens[index][0] == "ul"
+            ):
+                while index < len(tokens) and tokens[index][0] == "ul":
+                    nested_items.append(tokens[index][1])
+                    index += 1
+
+            rendered_items = [render_inline_prose(item) for item in items]
+            if nested_items:
+                nested_html = '<ul class="article-list">' + "".join(
+                    f"<li>{render_inline_prose(item)}</li>" for item in nested_items
+                ) + "</ul>"
+                rendered_items[-1] += nested_html
+
             tag = "ol" if kind == "ol" else "ul"
-            blocks.append(f'<{tag} class="article-list">' + "".join(items) + f"</{tag}>")
+            start_attr = (
+                f' start="{list_start}"'
+                if kind == "ol" and list_start != 1
+                else ""
+            )
+            blocks.append(
+                f'<{tag} class="article-list"{start_attr}>'
+                + "".join(f"<li>{item}</li>" for item in rendered_items)
+                + f"</{tag}>"
+            )
 
     return "\n      ".join(blocks)
-
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -4794,6 +4839,14 @@ def selftest() -> int:
     check("عرض المقال: تحويل الخطوات المرقمة إلى قائمة مرتبة",
           '<ol class="article-list">' in _formatted_steps
           and _formatted_steps.count("<li>") == 2)
+    _stable_lists = render_article_body(
+        "Steps: 1. Calculate the base amount: • half a month per year. • a full month after five years. "
+        "\u200f2. Apply the resignation ratio."
+    )
+    check("عرض المقال: يعالج علامات اتجاه النص المخفية ويُبقي ترقيم الخطوات متسلسلاً",
+          '<ol class="article-list" start="2">' in _stable_lists
+          and '<ul class="article-list"><li>half a month per year.</li><li>a full month after five years.</li></ul>' in _stable_lists
+          and '<bdi class="numeric" dir="ltr">2</bdi>.' not in _stable_lists)
     _article_numbers_prose = render_article_body(
         "Articles 84 and 86. The key points are: • first rule applies. • second rule applies."
     )
