@@ -82,6 +82,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from string import Template
@@ -233,7 +234,10 @@ RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 # يُزاد مرة واحدة لكل دورة في run_once، لا لكل نداء شبكة.
 GEMINI_MAX_TRIES = 4
 GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
-GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار بين محاولتين
+GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار التصاعدي العادي بين محاولتين
+GROQ_INITIAL_HTTP_TRIES = 3
+GROQ_MAX_REQUESTS_PER_LANGUAGE = 4  # hard cap including retries/schema and content repair
+GROQ_LANGUAGE_GAP_SECONDS = 12.0  # cool-down between Arabic and English requests
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
 EXIT_GENERATION_FAILED = 2
 # رمز خروج مميّز لفشل الإعداد (غياب مفتاح المزوّد): لا توليد ولا نشر ولا استهلاك محاولات.
@@ -688,29 +692,44 @@ def header_get(headers, name):
     return value if isinstance(value, str) else None
 
 
+def retry_after_seconds(value, *, now=None):
+    """Convert numeric Retry-After or an HTTP-date to a non-negative delay."""
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    try:
+        seconds = float(text_value)
+        if seconds >= 0 and seconds == seconds:
+            return seconds
+    except (TypeError, ValueError):
+        pass
+    try:
+        requested = parsedate_to_datetime(text_value)
+        if requested.tzinfo is None:
+            requested = requested.replace(tzinfo=timezone.utc)
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        return max(0.0, (requested - current).total_seconds())
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def backoff_delay(attempt, *, retry_after=None, base=GEMINI_BACKOFF_BASE,
                   cap=GEMINI_BACKOFF_MAX) -> float:
-    """انتظار تصاعدي `base × 2^attempt` بحدّ أعلى `cap`، مع احترام Retry-After إن وُجد."""
+    """Exponential backoff; honor a valid Retry-After value even when above the normal cap."""
     delay = min(base * (2 ** max(0, int(attempt))), cap)
-    if retry_after:
-        try:
-            asked = float(str(retry_after).strip())
-        except ValueError:
-            asked = 0.0   # تاريخ HTTP أو قيمة غير صالحة ⇒ نكتفي بالانتظار التصاعدي
-        if asked > 0:
-            delay = min(max(delay, asked), cap)
+    asked = retry_after_seconds(retry_after)
+    if asked is not None and asked > 0:
+        # A server-provided delay wins over local backoff; do not retry earlier than requested.
+        delay = max(delay, asked)
     return float(delay)
 
 
 def _has_numeric_retry_after(value) -> bool:
-    """True عند وجود Retry-After رقمي صالح بالثواني (تُدعَم الأرقام فقط حالياً)."""
-    if value is None:
-        return False
-    try:
-        seconds = float(str(value).strip())
-    except (TypeError, ValueError):
-        return False
-    return seconds >= 0 and seconds == seconds
+    """Backward-compatible helper for callers/tests that specifically require numeric seconds."""
+    seconds = retry_after_seconds(value)
+    return seconds is not None and str(value).strip().replace(".", "", 1).isdigit()
 
 
 def classify_failure(status, raw, *, retry_after=None) -> tuple:
@@ -739,7 +758,7 @@ def classify_failure(status, raw, *, retry_after=None) -> tuple:
         # إشارات المعدّل/المهلة تتقدّم على عبارات عامة مثل "check your plan" أو "billing".
         if (any(h in low for h in TEMPORARY_RATE_LIMIT_HINTS)
                 or RETRY_DELAY_RE.search(low)
-                or _has_numeric_retry_after(retry_after)):
+                or retry_after_seconds(retry_after) is not None):
             return True, "rate_limit", "تجاوز معدّل مؤقّت"
         if any(h in low for h in QUOTA_STOP_HINTS):
             return False, "quota", "حصة/فوترة — تكرار الطلب بلا فائدة"
@@ -786,8 +805,25 @@ def format_failure(status, raw, tries_used, tries) -> str:
     return f"http_{status}: {snippet} [{note} — محاولات {tries_used}/{tries}]"
 
 
+class RequestBudgetExhausted(RuntimeError):
+    """Raised before network access when a language has used all its API-call allowance."""
+
+
+class RequestBudget:
+    """Hard cap on actual HTTP requests, shared by retries and repair calls for one language."""
+    def __init__(self, max_requests):
+        self.max_requests = max(1, int(max_requests))
+        self.used = 0
+
+    def consume(self):
+        if self.used >= self.max_requests:
+            raise RequestBudgetExhausted(
+                f"API request budget exhausted ({self.used}/{self.max_requests})")
+        self.used += 1
+
+
 def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_MAX_TRIES,
-                     sleep=None):
+                     sleep=None, request_budget=None):
     """يرسل طلب POST إلى مزوّد المحتوى ويعيد (status, raw, tries_used).
 
     إعادة المحاولة محدودة للأخطاء المؤقّتة فقط (خطأ شبكة أو رمز يُصنَّف مؤقّتاً)،
@@ -798,6 +834,8 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
     tries = max(1, int(tries))
     last_exc = None
     for attempt in range(tries):
+        if request_budget is not None:
+            request_budget.consume()
         try:
             status, resp_headers, raw, _ = http_request_full(
                 url,
@@ -845,13 +883,15 @@ def gemini_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sl
         provider="Gemini", timeout=timeout, tries=tries, sleep=sleep)
 
 
-def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None):
+def groq_request(url, body, api_key, *, timeout=90, tries=GEMINI_MAX_TRIES, sleep=None,
+                 request_budget=None):
     """طلب Groq (OpenAI-compatible) — المفتاح في ترويسة Authorization، ولا يُطبع أبداً."""
     return provider_request(
         url, body, {"Content-Type": "application/json; charset=utf-8",
                     "Accept": "application/json",
                     "Authorization": f"Bearer {api_key}"},
-        provider="Groq", timeout=timeout, tries=tries, sleep=sleep)
+        provider="Groq", timeout=timeout, tries=tries, sleep=sleep,
+        request_budget=request_budget)
 
 
 # =====================================================================================
@@ -1676,7 +1716,7 @@ def groq_response_format() -> dict:
 
 
 def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
-                       sleep=None):
+                       sleep=None, request_budget=None, reasoning_effort="low"):
     """يرجع (ok, data|None, message) من Groq عبر Structured Outputs بوضع صارم.
 
     المفتاح يُرسل في ترويسة Authorization ولا يُطبع أبداً، ولا يظهر في أي رسالة خطأ.
@@ -1693,17 +1733,21 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.35,
-        # GPT-OSS supports low|medium|high reasoning_effort in Chat Completions.
-        # Low effort reduces reasoning-token overhead; strict JSON schema and all
-        # downstream validation gates remain enabled.
-        "reasoning_effort": "low",
+        # Default remains low; medium is an explicit comparison option for English only.
+        # Strict JSON schema and all downstream validation gates remain enabled.
+        "reasoning_effort": reasoning_effort if reasoning_effort in {"low", "medium", "high"} else "low",
         "max_tokens": 12000,
         "response_format": groq_response_format(),
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     try:
         status, raw, tries_used = groq_request(
-            GROQ_URL, body, api_key, timeout=timeout, tries=tries, sleep=sleep)
+            GROQ_URL, body, api_key, timeout=timeout, tries=tries, sleep=sleep,
+            request_budget=request_budget)
+    except RequestBudgetExhausted as exc:
+        used = request_budget.used if request_budget is not None else 0
+        limit = request_budget.max_requests if request_budget is not None else 0
+        return False, None, f"request_budget_exhausted ({used}/{limit}): {redact(exc)}"
     except Exception as exc:  # noqa: BLE001
         return False, None, f"network_error: {redact(exc)}"
 
@@ -1736,11 +1780,13 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
 
 
 def generate_json(provider, prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_TRIES,
-                  sleep=None):
+                  sleep=None, request_budget=None, reasoning_effort="low"):
     """يوجّه التوليد إلى المزوّد المطلوب فقط — بلا انتقال تلقائي عند الفشل."""
     if provider == "groq":
         return groq_generate_json(prompt, api_key=api_key, model=model,
-                                  timeout=timeout, tries=tries, sleep=sleep)
+                                  timeout=timeout, tries=tries, sleep=sleep,
+                                  request_budget=request_budget,
+                                  reasoning_effort=reasoning_effort)
     if provider == "gemini":
         return gemini_generate_json(prompt, api_key=api_key, model=model,
                                     timeout=timeout, tries=tries, sleep=sleep)
