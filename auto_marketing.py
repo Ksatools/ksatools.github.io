@@ -236,14 +236,14 @@ MAX_ATTEMPTS = 3
 #   408/425 = انتهاء مهلة أو طلب مبكّر، 429 = تجاوز المعدّل، 5xx = خلل مؤقّت عند المزوّد.
 #   503 (UNAVAILABLE) هو الأكثر وقوعاً: «النموذج يواجه طلباً مرتفعاً حالياً».
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
-# حدّ أعلى صريح: المحاولة الأولى + 3 إعادات = 4 محاولات كحدّ أقصى لكل نسخة لغوية.
+# حدّ أعلى صريح لإعادات Groq المؤقّتة، مع سقف مستقل لكل نسخة لغوية.
 # الإعادة الداخلية ليست محاولة موضوع جديدة ولا دورة تسويق جديدة: عدّاد `attempts`
 # يُزاد مرة واحدة لكل دورة في run_once، لا لكل نداء شبكة.
 GEMINI_MAX_TRIES = 4
 GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
 GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار التصاعدي العادي بين محاولتين
-GROQ_INITIAL_HTTP_TRIES = 3
-GROQ_MAX_REQUESTS_PER_LANGUAGE = 4  # hard cap including retries/schema and content repair
+GROQ_INITIAL_HTTP_TRIES = 4
+GROQ_MAX_REQUESTS_PER_LANGUAGE = 5  # hard cap including retries/schema and content repair; allows one bounded retry after transient repair 429
 GROQ_LANGUAGE_GAP_SECONDS = 12.0  # cool-down between Arabic and English requests
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
 EXIT_GENERATION_FAILED = 2
@@ -282,7 +282,8 @@ QUOTA_STOP_HINTS = ("check your plan", "billing")
 TEMPORARY_RATE_LIMIT_HINTS = ("tokens per minute", "requests per minute")
 RETRY_DELAY_RE = re.compile(
     r"\b(?:try again|retry(?: after)?)\s+(?:in\s+)?"
-    r"(?P<seconds>\d+(?:\.\d+)?)\s*(?:s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\b",
+    r"(?P<seconds>\d+(?:\.\d+)?)\s*"
+    r"(?P<unit>s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\b",
     re.IGNORECASE,
 )
 
@@ -691,10 +692,11 @@ _EN_BODY = (
 def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
     """نموذج اختباري داخلي؛ يتضمن مثال مكافأة مضبوطاً للموضوعات القانونية فقط."""
     is_eosb = topic_id in EOSB_TOPIC_IDS
-    scenario = (
+    scenario = EOSB_REQUIRED_SCENARIO.get(
+        topic_id,
         "resignation" if topic_id in {"labor-art85", "eosb-resignation", "contract-end-vs-resignation"}
         else "article81" if topic_id == "labor-art81"
-        else "base"
+        else "base",
     )
     calculation_example = ({
         "monthly_wage": "12000", "years": "6", "months": "0", "days": "0",
@@ -715,6 +717,12 @@ def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
             example = (
                 " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
                 "المكافأة الأساسية والمبلغ المستحق في هذا المثال 42,000 ريال."
+            )
+        elif is_eosb and scenario == "article87":
+            example = (
+                " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
+                "يفترض هذا المثال ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته وفق المادة 87، "
+                "وليس استقالة عادية تخضع لنسب المادة 85؛ المكافأة الأساسية والمبلغ المستحق 42,000 ريال."
             )
         elif is_eosb:
             example = (
@@ -751,6 +759,12 @@ def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
         example = (
             " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
             "the base benefit and payable amount in this example are SAR 42,000."
+        )
+    elif is_eosb and scenario == "article87":
+        example = (
+            " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
+            "this scenario assumes the worker left work due to force majeure beyond their control under Article 87, "
+            "not an ordinary resignation under Article 85; the base benefit and payable amount are SAR 42,000."
         )
     elif is_eosb:
         example = (
@@ -1009,6 +1023,46 @@ class RequestBudget:
     def __init__(self, max_requests):
         self.max_requests = max(1, int(max_requests))
         self.used = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+        self.usage_responses = 0
+        self.rate_limit_hits = 0
+        self.last_rate_limit_limit_tokens = None
+        self.last_rate_limit_remaining_tokens = None
+        self.last_rate_limit_reset_tokens = None
+
+    def record_usage(self, usage):
+        if not isinstance(usage, dict):
+            return
+        def token_count(name):
+            value = usage.get(name)
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError, OverflowError):
+                return 0
+            return max(0, parsed)
+        prompt = token_count("prompt_tokens")
+        completion = token_count("completion_tokens")
+        total = token_count("total_tokens")
+        if not any(name in usage for name in ("prompt_tokens", "completion_tokens", "total_tokens")):
+            return
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
+        self.total_tokens += total if "total_tokens" in usage else prompt + completion
+        self.usage_responses += 1
+
+    def record_response(self, status, headers):
+        if status == 429:
+            self.rate_limit_hits += 1
+        for field, header_name in (
+            ("last_rate_limit_limit_tokens", "x-ratelimit-limit-tokens"),
+            ("last_rate_limit_remaining_tokens", "x-ratelimit-remaining-tokens"),
+            ("last_rate_limit_reset_tokens", "x-ratelimit-reset-tokens"),
+        ):
+            value = header_get(headers, header_name)
+            if value is not None:
+                setattr(self, field, value)
 
     def consume(self):
         if self.used >= self.max_requests:
@@ -1040,6 +1094,8 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
                 timeout=timeout,
                 retries=0,
             )
+            if request_budget is not None:
+                request_budget.record_response(status, resp_headers)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last_exc = exc
             if attempt + 1 >= tries:
@@ -1053,13 +1109,23 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
         retry_after = header_get(resp_headers, "Retry-After")
         retryable, _code, _note = classify_failure(status, raw, retry_after=retry_after)
         if retryable and attempt + 1 < tries:
-            # بعض استجابات Groq تذكر مهلة في نص الخطأ من دون ترويسة Retry-After.
-            if not retry_after:
-                response_text = raw.decode("utf-8", "replace") if isinstance(
-                    raw, (bytes, bytearray)) else str(raw or "")
-                wait_match = RETRY_DELAY_RE.search(response_text)
-                if wait_match:
-                    retry_after = wait_match.group("seconds")
+            # Respect whichever server hint asks us to wait longer. Some gateways set
+            # Retry-After=0/1 while the body gives the real TPM window (e.g. 9.7425s).
+            response_text = raw.decode("utf-8", "replace") if isinstance(
+                raw, (bytes, bytearray)) else str(raw or "")
+            wait_match = RETRY_DELAY_RE.search(response_text)
+            body_delay = None
+            if wait_match:
+                try:
+                    body_delay = float(wait_match.group("seconds"))
+                    if wait_match.group("unit").lower().startswith(("m", "min")):
+                        body_delay *= 60.0
+                except (TypeError, ValueError):
+                    body_delay = None
+            header_delay = retry_after_seconds(retry_after)
+            if body_delay is not None and (
+                    header_delay is None or body_delay > header_delay):
+                retry_after = str(body_delay)
             delay = backoff_delay(attempt, retry_after=retry_after)
             log(f"[RETRY] {provider}: استجابة مؤقّتة http_{status} — "
                 f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
@@ -1329,6 +1395,9 @@ EOSB_REQUIRED_SCENARIO = {
     "eosb-resignation": "resignation",
     "contract-end-vs-resignation": "resignation",
     "labor-art81": "article81",
+    # This topic specifically covers full-entitlement exceptions; the worked
+    # example is code-owned as Article 87 so AR/EN cannot drift into resignation.
+    "eosb-full-entitlement": "article87",
 }
 EOSB_MONEY_CLAIM_RE = re.compile(
     r"\bSAR\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
@@ -1449,6 +1518,91 @@ def _parse_eosb_number(value, field: str, *, integer: bool = False) -> Decimal:
     return number
 
 
+def _article87_qualifying_basis(example_text: str) -> bool:
+    """Return whether an Article 87 worked example states a recognized qualifying circumstance."""
+    value = _normalize_eosb_digits(str(example_text or ""))
+    lower = value.lower()
+    if re.search(r"\bforce\s+majeure\b", lower) or re.search(r"قوة\s+قاهرة", value):
+        return True
+    female_worker = bool(re.search(
+        r"\b(?:female worker|woman worker|working woman)\b|المرأة العاملة|العاملة|عاملة",
+        value, re.IGNORECASE,
+    ))
+    if not female_worker:
+        return False
+    marriage = bool(re.search(r"\bmarriage\b|\bmarried\b|زواج|الزواج", lower))
+    childbirth = bool(re.search(
+        r"\b(?:childbirth|giving birth|delivery)\b|ولادة|الوضع|الولادة", lower
+    ))
+    six_months = bool(re.search(r"\b(?:six|6) months\b|ستة أشهر|٦ أشهر|6 أشهر", lower))
+    three_months = bool(re.search(r"\b(?:three|3) months\b|ثلاثة أشهر|٣ أشهر|3 أشهر", lower))
+    return (marriage and six_months) or (childbirth and three_months)
+
+
+def _article87_ordinary_resignation_claim(example_text: str, *, lang: str) -> bool:
+    """Detect explicit prose that defines the Article 87 numeric example as ordinary resignation."""
+    patterns = (
+        [
+            re.compile(
+                r"\b(?:this|the)\s+(?:worked\s+)?example\s+"
+                r"(?:assumes|is|describes|covers|shows)\s+"
+                r"(?:(?:an?|the)\s+)?(?:ordinary\s+)?resignation\b",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\b(?:the\s+)?(?:worker|employee)\s+"
+                r"(?:resigned|resigns|is\s+resigning)\b.{0,70}"
+                r"\b(?:in|for)\s+(?:this|the)\s+example\b",
+                re.IGNORECASE,
+            ),
+        ]
+        if lang != "ar"
+        else [
+            re.compile(
+                r"(?:هذا المثال|المثال|هذا السيناريو|سيناريو المثال).{0,30}"
+                r"(?:يفترض|يصف|يعرض|يتناول|هو).{0,40}"
+                r"(?:استقالة عادية|الاستقالة العادية|استقالة|الاستقالة|استقال|استقالت)"
+            ),
+            re.compile(
+                r"(?:العامل|العاملة)\s+(?:استقال|استقالت|يستقيل|تستقيل)"
+                r".{0,50}(?:في هذا المثال|في المثال)"
+            ),
+        ]
+    )
+    for sentence in re.split(r"(?<=[.!?؟])\s+", str(example_text or "")):
+        for pattern in patterns:
+            match = pattern.search(sentence)
+            if not match:
+                continue
+            prefix = sentence[:match.end()].lower()
+            if lang == "ar":
+                if re.search(r"(?:ليس|ليست|لا|لم|لن|غير|بدون|وليس|وليست).{0,35}(?:استقال|الاستقالة)", prefix):
+                    continue
+            elif re.search(
+                r"\b(?:not|never|no|without|isn't|doesn't|don't|wasn't|weren't)\b"
+                r".{0,45}\b(?:resign|resignation|resigned|resigns)\b",
+                prefix, re.IGNORECASE,
+            ):
+                continue
+            return True
+    return False
+
+
+def validate_eosb_scenario_narrative(*, topic_id: str, scenario: str,
+                                      example_text: str, lang: str) -> None:
+    """Fail closed when the numeric Article 87 scenario and its explanation contradict each other."""
+    if topic_id != "eosb-full-entitlement" or scenario != "article87":
+        return
+    if _article87_ordinary_resignation_claim(example_text, lang=lang):
+        raise Reject(
+            "calculation_example.scenario: نص المثال يصف استقالة عادية بينما الحقول الحسابية تفترض استثناء المادة 87"
+        )
+    if not _article87_qualifying_basis(example_text):
+        raise Reject(
+            "calculation_example.scenario: نص المثال لا يذكر حالة مؤهلة وفق المادة 87"
+        )
+
+
 def validate_eosb_calculation_example(
     raw, *, topic, article_text: str, example_text: str,
     require_canonical_article85: bool = False,
@@ -1541,6 +1695,11 @@ def validate_eosb_calculation_example(
             f"مدة الخدمة بالنص ({rendered} سنة) لا تطابق بيانات الحساب "
             f"({expected_rendered} سنة)"
         )
+
+    validate_eosb_scenario_narrative(
+        topic_id=topic_id, scenario=scenario, example_text=example_text,
+        lang="ar" if has_arabic(example_text) else "en",
+    )
 
     normalized_text = _normalize_eosb_digits(article_text)
     claims = []
@@ -1957,6 +2116,8 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
         return False, None, "invalid_envelope_json"
     if not isinstance(envelope, dict):
         return False, None, "invalid_envelope_shape"
+    if request_budget is not None:
+        request_budget.record_usage(envelope.get("usage"))
     if envelope.get("error"):
         # خطأ أُعلن داخل جسم الاستجابة (بعض الأخطاء تصل بترميز 200) — بلا كشف أسرار.
         return False, None, "provider_error: " + redact(json.dumps(envelope.get("error"), ensure_ascii=False)[:200])
@@ -2154,6 +2315,38 @@ def is_article85_repairable_rejection(reason: str) -> bool:
     return (is_article85_legal_rejection(value) or short_section
             or overlong_excerpt or too_many_sections or unexpected_money
             or missing_money or unparseable_money or canonical_example or empty_section or boundary_conflict)
+
+
+def is_quality_repairable_rejection(reason: str, *, topic_id: str) -> bool:
+    """Allow one bounded model repair for safe structural defects and validated EOSB calculation mismatches."""
+    value = str(reason or "")
+    if re.fullmatch(r"sections\[\d+\]\.body: فارغ", value):
+        return True
+    if re.search(r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value):
+        return True
+    if re.fullmatch(r"excerpt: الطول \d+ خارج المدى 40-300", value):
+        return True
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    if section_count:
+        count = int(section_count.group(1))
+        return MAX_SECTIONS < count <= MAX_SECTIONS + 4
+
+    # The structured EOSB calculator remains authoritative. Only allow a rewrite
+    # when the validator identifies a known calculation/example mismatch.
+    if topic_id not in EOSB_TOPIC_IDS:
+        return False
+    if value.startswith("calculation_example.scenario: نص المثال"):
+        return True
+    return value.startswith((
+        "calculation_example.full_benefit: المتوقع ",
+        "calculation_example.payable_benefit: المتوقع ",
+        "مدة الخدمة بالنص (",
+        "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب",
+        "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق",
+        "المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة",
+        "calculation_example: عند استخدام سنوات كسرية",
+        "calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة",
+    ))
 
 
 def ensure_article85_notice_caveat(data, *, lang: str):
@@ -3096,6 +3289,371 @@ def repair_article85_unexpected_money_claims(data, *, lang: str):
     return fixed
 
 
+def repair_eosb_unexpected_money_claims(data, *, lang: str):
+    """Remove prose sentences with currency claims not matching an already-validated EOSB example.
+
+    Call only when validate_article has checked the calculation fields and the sole
+    rejection is an unexpected currency amount elsewhere in the article. The official
+    calculator fields are never modified; the complete article is validated again after
+    this narrowly scoped text repair.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("EOSB money repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    example = fixed.get("calculation_example")
+    if not isinstance(example, dict):
+        raise Reject("EOSB money repair: calculation example missing")
+
+    # The caller reaches this helper only after the validator has confirmed these
+    # values against the EOSB formula. Use dynamic values, never Article 85 constants.
+    allowed = set()
+    for field in ("monthly_wage", "full_benefit", "payable_benefit"):
+        amount = _parse_eosb_number(example.get(field), field)
+        allowed.add(amount.quantize(EOSB_CENT, rounding=ROUND_HALF_UP))
+
+    if lang == "ar":
+        safe_sentence = (
+            "يُحسب أي مبلغ فعلي من بيانات الحالة نفسها وفق الأحكام النظامية المنطبقة، "
+            "ويجب التحقق من أي مثال إضافي بصورة مستقلة."
+        )
+        safe_heading = "حساب المبلغ وفق بيانات الحالة"
+        safe_question = "كيف يُحسب المبلغ المستحق وفق بيانات الحالة؟"
+        safe_title = "حساب مكافأة نهاية الخدمة وفق بيانات الحالة"
+    else:
+        safe_sentence = (
+            "Any actual amount must be calculated from the case data under the applicable rules; "
+            "any additional example should be checked independently."
+        )
+        safe_heading = "Calculating the amount from case data"
+        safe_question = "How is the applicable benefit calculated from the case data?"
+        safe_title = "Calculating end-of-service benefits from case data"
+
+    changed = False
+
+    def contains_unexpected_money(value):
+        normalized = _normalize_eosb_digits(re.sub(r"\s+", " ", str(value or "")))
+        for match in EOSB_MONEY_CLAIM_RE.finditer(normalized):
+            token = next((group for group in match.groups() if group), "")
+            try:
+                amount = Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                )
+            except (InvalidOperation, ValueError):
+                return True
+            if amount not in allowed:
+                return True
+        return False
+
+    def repair_text(value, *, role="prose"):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+", value)
+        repaired = []
+        for part in parts:
+            if contains_unexpected_money(part):
+                if role == "question":
+                    replacement = safe_question
+                elif role == "heading":
+                    replacement = safe_heading
+                elif role == "title":
+                    replacement = safe_title
+                else:
+                    replacement = safe_sentence
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(
+                fixed[key], role="title" if key == "title" else "prose"
+            )
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        if "heading" in section:
+            section["heading"] = repair_text(section["heading"], role="heading")
+        if "body" in section:
+            section["body"] = repair_text(section["body"])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_text(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                if "q" in item:
+                    item["q"] = repair_text(item["q"], role="question")
+                if "a" in item:
+                    item["a"] = repair_text(item["a"])
+    if not changed:
+        raise Reject("EOSB money repair: no unexpected currency amount found")
+    return fixed
+
+
+def prepare_eosb_example_deterministically(data, *, topic, lang: str):
+    """Make the structured EOSB calculator authoritative before any model-repair request.
+
+    This does not relax validation. It corrects only derived benefit fields from the
+    topic's chosen wage/service/scenario, ensures the Example section states that same
+    duration, removes prose currency claims inconsistent with the validated calculator,
+    and re-adds missing calculator figures explicitly. The caller still runs every
+    existing validation gate after this deterministic preparation.
+    """
+    topic_id = topic.get("id", "") if isinstance(topic, dict) else ""
+    if topic_id not in EOSB_TOPIC_IDS or topic_id == "labor-art85":
+        raise Reject("EOSB deterministic example repair: unsupported topic")
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("EOSB deterministic example repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    example = fixed.get("calculation_example")
+    if not isinstance(example, dict) or set(example) != set(EOSB_CALCULATION_FIELDS):
+        raise Reject("EOSB deterministic example repair: calculation fields missing")
+    if any(not isinstance(example[field], str) or not example[field].strip()
+           for field in EOSB_CALCULATION_FIELDS):
+        raise Reject("EOSB deterministic example repair: calculation fields empty")
+
+    actions = []
+    required_scenario = EOSB_REQUIRED_SCENARIO.get(topic_id)
+    current_scenario = example["scenario"].strip().lower()
+    scenario = required_scenario or current_scenario
+    if scenario not in {"base", "resignation", "article81", "article87"}:
+        raise Reject("calculation_example.scenario: قيمة غير مدعومة")
+    if scenario != current_scenario:
+        example["scenario"] = scenario
+        actions.append("topic-specific calculation scenario enforced")
+
+    wage = _parse_eosb_number(example["monthly_wage"], "monthly_wage")
+    years = _parse_eosb_number(example["years"], "years")
+    months = _parse_eosb_number(example["months"], "months", integer=True)
+    days = _parse_eosb_number(example["days"], "days", integer=True)
+    if wage <= 0:
+        raise Reject("calculation_example.monthly_wage: يجب أن يكون الأجر أكبر من الصفر")
+    if years > 80 or months > 11 or days > 30:
+        raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
+    if years != years.to_integral_value() and (months != 0 or days != 0):
+        raise Reject("calculation_example: السنوات الكسرية لا يجوز جمعها مع أشهر أو أيام")
+
+    total_years = years + months / Decimal(12) + days / Decimal(365)
+    first_five = min(total_years, Decimal(5))
+    after_five = max(Decimal(0), total_years - Decimal(5))
+    full_raw = wage * first_five / Decimal(2) + wage * after_five
+    expected_full = full_raw.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    if scenario == "resignation":
+        if total_years < Decimal(2):
+            ratio = Decimal(0)
+        elif total_years <= Decimal(5):
+            ratio = Decimal(1) / Decimal(3)
+        elif total_years < Decimal(10):
+            ratio = Decimal(2) / Decimal(3)
+        else:
+            ratio = Decimal(1)
+    else:
+        ratio = Decimal(1)
+    expected_payable = (full_raw * ratio).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+
+    if _parse_eosb_number(example["full_benefit"], "full_benefit") != expected_full:
+        example["full_benefit"] = format(expected_full, "f")
+        actions.append("calculator-derived full benefit corrected")
+    if _parse_eosb_number(example["payable_benefit"], "payable_benefit") != expected_payable:
+        example["payable_benefit"] = format(expected_payable, "f")
+        actions.append("calculator-derived payable benefit corrected")
+
+    years_text = format(years.normalize(), "f")
+    months_int, days_int = int(months), int(days)
+    if lang == "ar":
+        duration_parts = []
+        if years:
+            duration_parts.append(f"{years_text} " + ("سنة" if years == 1 else "سنتان" if years == 2 else "سنوات"))
+        if months_int:
+            duration_parts.append(f"{months_int} " + ("شهر" if months_int == 1 else "شهران" if months_int == 2 else "أشهر"))
+        if days_int:
+            duration_parts.append(f"{days_int} " + ("يوم" if days_int == 1 else "يومان" if days_int == 2 else "أيام"))
+        duration_phrase = " و".join(duration_parts) if duration_parts else "0 يوم"
+        service_sentence = f"مدة الخدمة هي {duration_phrase}."
+    else:
+        duration_parts = []
+        if years:
+            duration_parts.append(f"{years_text} " + ("year" if years == 1 else "years"))
+        if months_int:
+            duration_parts.append(f"{months_int} " + ("month" if months_int == 1 else "months"))
+        if days_int:
+            duration_parts.append(f"{days_int} " + ("day" if days_int == 1 else "days"))
+        if len(duration_parts) > 1:
+            duration_phrase = ", ".join(duration_parts[:-1]) + " and " + duration_parts[-1]
+        else:
+            duration_phrase = duration_parts[0] if duration_parts else "0 days"
+        service_sentence = f"The example assumes {duration_phrase} of service."
+
+    example_sections = [
+        section for section in fixed["sections"]
+        if isinstance(section, dict)
+        and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+    ]
+    if not example_sections:
+        raise Reject("المثال الحسابي يجب أن يظهر داخل قسم عنوانه يتضمن مثالاً / Example")
+
+    def duration_claims(text):
+        return _extract_eosb_service_durations(str(text or ""))
+
+    def repair_duration_text(value):
+        pieces = re.split(r"(?<=[.!?؟])\s+", str(value or ""))
+        output = []
+        changed = False
+        for piece in pieces:
+            claims = duration_claims(piece)
+            if claims and any(claim != total_years for claim in claims):
+                output.append(service_sentence)
+                changed = True
+            else:
+                output.append(piece)
+        return " ".join(output), changed
+
+    changed_duration = False
+    for section in example_sections:
+        if isinstance(section.get("body"), str):
+            section["body"], changed = repair_duration_text(section["body"])
+            changed_duration = changed_duration or changed
+        if isinstance(section.get("bullets"), list):
+            bullets = []
+            for bullet in section["bullets"]:
+                if isinstance(bullet, str):
+                    bullet, changed = repair_duration_text(bullet)
+                    changed_duration = changed_duration or changed
+                bullets.append(bullet)
+            section["bullets"] = bullets
+
+    example_text = " ".join(
+        str(section.get("body", "")) + " " + " ".join(
+            item for item in section.get("bullets", []) if isinstance(item, str)
+        )
+        for section in example_sections
+    )
+    claims = duration_claims(example_text)
+    if not any(claim == total_years for claim in claims):
+        section = example_sections[0]
+        section["body"] = str(section.get("body", "")).rstrip() + "\n\n" + service_sentence
+        changed_duration = True
+    if changed_duration:
+        actions.append("example service duration made explicit and consistent")
+
+    if topic_id == "eosb-full-entitlement" and scenario == "article87":
+        example_text = " ".join(
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in example_sections
+        )
+        if not _article87_qualifying_basis(example_text):
+            if lang == "ar":
+                scenario_sentence = (
+                    "افتراض المثال وفق المادة 87: ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته، "
+                    "وليس استقالة عادية تخضع لنسب المادة 85."
+                )
+            else:
+                scenario_sentence = (
+                    "Article 87 assumption: the worker leaves work due to force majeure beyond their control, "
+                    "not an ordinary resignation under Article 85."
+                )
+            example_sections[0]["body"] = (
+                str(example_sections[0].get("body", "")).rstrip() + "\n\n" + scenario_sentence
+            )
+            actions.append("Article 87 qualifying scenario made explicit")
+
+    # The same gate used by validate_eosb_calculation_example disallows unsupported
+    # currency figures anywhere in article prose; remove those sentences, not the
+    # calculator data, then ensure all authoritative amounts appear with a currency.
+    normalized_article_text = " ".join([
+        str(fixed.get("title", "")),
+        str(fixed.get("meta_description", "")),
+        str(fixed.get("excerpt", "")),
+        *[
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in fixed["sections"] if isinstance(section, dict)
+        ],
+        *[
+            str(item.get("q", "")) + " " + str(item.get("a", ""))
+            for item in fixed.get("faq", []) if isinstance(item, dict)
+        ],
+    ])
+    allowed_amounts = {
+        wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP),
+        expected_full,
+        expected_payable,
+    }
+    claims_in_text = set()
+    normalized_article_text = _normalize_eosb_digits(normalized_article_text)
+    for match in EOSB_MONEY_CLAIM_RE.finditer(normalized_article_text):
+        token = next((group for group in match.groups() if group), "")
+        if token:
+            try:
+                claims_in_text.add(Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                ))
+            except InvalidOperation:
+                raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
+    if claims_in_text - allowed_amounts:
+        fixed = repair_eosb_unexpected_money_claims(fixed, lang=lang)
+        # The money repair deep-copies the article, so refresh section references before
+        # appending any missing authoritative figures.
+        example_sections = [
+            section for section in fixed["sections"]
+            if isinstance(section, dict)
+            and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+        ]
+        actions.append("unsupported currency claims removed from prose")
+
+    # Re-check after sanitizing; if one of the authoritative amounts is not named
+    # with a currency anywhere, add one compact, code-generated line to the Example.
+    normalized_article_text = " ".join([
+        str(fixed.get("title", "")),
+        str(fixed.get("meta_description", "")),
+        str(fixed.get("excerpt", "")),
+        *[
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in fixed["sections"] if isinstance(section, dict)
+        ],
+        *[
+            str(item.get("q", "")) + " " + str(item.get("a", ""))
+            for item in fixed.get("faq", []) if isinstance(item, dict)
+        ],
+    ])
+    claims_in_text = set()
+    normalized_article_text = _normalize_eosb_digits(normalized_article_text)
+    for match in EOSB_MONEY_CLAIM_RE.finditer(normalized_article_text):
+        token = next((group for group in match.groups() if group), "")
+        if token:
+            try:
+                claims_in_text.add(Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                ))
+            except InvalidOperation:
+                raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
+    if not allowed_amounts.issubset(claims_in_text):
+        wage_txt = format(wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP), ",.2f")
+        full_txt = format(expected_full, ",.2f")
+        payable_txt = format(expected_payable, ",.2f")
+        if lang == "ar":
+            amounts_sentence = (
+                f"الأرقام التوضيحية: الأجر الشهري {wage_txt} ريال، "
+                f"والمكافأة الأساسية {full_txt} ريال، والمبلغ المستحق {payable_txt} ريال."
+            )
+        else:
+            amounts_sentence = (
+                f"Illustrative figures: monthly wage SAR {wage_txt}, "
+                f"full base benefit SAR {full_txt}, and payable benefit SAR {payable_txt}."
+            )
+        example_sections[0]["body"] = str(example_sections[0].get("body", "")).rstrip() + "\n\n" + amounts_sentence
+        actions.append("authoritative currency figures made explicit")
+
+    return fixed, actions
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -3216,7 +3774,7 @@ def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
             "مرة واحدة بالضبط: title وmeta_description وexcerpt وsections وfaq وofficial_sources وcalculation_example. "
             "لا تحذف faq أو official_sources أو calculation_example مطلقاً. "
             "في calculation_example أدرج جميع المفاتيح السبعة: monthly_wage وyears وmonths وdays وscenario وfull_benefit وpayable_benefit. "
-            "لموضوع المادة 85 استخدم القيم الثابتة الصحيحة في البرومبت. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
+            "اتبع القواعد والبيانات الخاصة بالموضوع كما وردت في البرومبت الأصلي؛ لا تنقل أرقاماً أو قواعد من موضوع آخر. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
         )
     else:
         reminder = (
@@ -3224,7 +3782,7 @@ def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
             "exactly once: title, meta_description, excerpt, sections, faq, official_sources, and calculation_example. "
             "Never omit faq, official_sources, or calculation_example. "
             "calculation_example must contain all seven keys: monthly_wage, years, months, days, scenario, full_benefit, and payable_benefit. "
-            "For Article 85, use the fixed values given in the prompt. Keep the same strict JSON Schema response format; do not switch to JSON mode."
+            "Follow the topic-specific rules and calculation data from the original prompt; do not import figures or rules from another topic. Keep the same strict JSON Schema response format; do not switch to JSON mode."
         )
     return base_prompt + "\n\n" + reminder + "\n"
 
@@ -3378,6 +3936,120 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
             "and retain all existing validation gates:\n"
         )
     return base_prompt + "\n\n" + instructions + clause + "\n"
+
+
+def build_quality_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
+    """Create a single bounded repair instruction without borrowing Article 85-only example values."""
+    value = str(reason or "")
+    empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", value))
+    short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
+    ))
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    is_section_overflow = bool(
+        section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
+    )
+    is_excerpt_overflow = bool(re.fullmatch(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    scenario_mismatch = value.startswith("calculation_example.scenario: نص المثال")
+    calculation_mismatch = value.startswith((
+        "calculation_example.full_benefit: المتوقع ",
+        "calculation_example.payable_benefit: المتوقع ",
+        "مدة الخدمة بالنص (",
+        "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب",
+        "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق",
+        "المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة",
+        "calculation_example: عند استخدام سنوات كسرية",
+        "calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة",
+    ))
+
+    if lang == "ar":
+        if empty_section:
+            correction = (
+                "يوجد قسم ذو body فارغ. أصلح القسم بإضافة شرح فعلي ودقيق مرتبط بعنوانه، "
+                "أو ادمج مضمونه في قسم مجاور ثم أزل العنوان الفارغ، مع الحفاظ على جميع المعلومات القانونية "
+                "والحسابية والنقاط المفيدة. يجب أن يكون كل body غير فارغ وبطول صالح، وأعد JSON كاملاً."
+            )
+        elif short_section:
+            correction = (
+                "وسّع القسم القصير بمعلومات مفيدة ودقيقة ذات صلة بعنوانه حتى يقع body ضمن الطول المسموح. "
+                "لا تكرر الحشو ولا تحذف قواعد أو تحذيرات مهمة، وأعد JSON كاملاً."
+            )
+        elif is_section_overflow:
+            correction = (
+                "عدد الأقسام يتجاوز الحد المسموح بقليل. ادمج الأقسام المتقاربة مع حفظ كل النصوص والنقاط "
+                "والقواعد الجوهرية، واجعل العدد ضمن الحد المسموح دون إسقاط محتوى مهم، وأعد JSON كاملاً."
+            )
+        elif is_excerpt_overflow:
+            correction = (
+                "اختصر excerpt فقط ليقع ضمن 40 إلى 300 حرف مع الحفاظ على المعنى الأساسي، ثم أعد JSON كاملاً."
+            )
+        elif scenario_mismatch:
+            correction = (
+                "اجعل شرح المثال الحسابي متوافقاً مع سيناريو المادة 87 المحدد في البيانات: اذكر بوضوح أن العامل ترك "
+                "العمل بسبب قوة قاهرة خارجة عن إرادته، أو اشرح إحدى حالتي العاملة ضمن المدد النظامية الواردة في المادة 87. "
+                "لا تصف المثال نفسه بأنه استقالة عادية ولا تخلط بين نسب المادة 85 واستثناء المادة 87. حافظ على الأجر "
+                "ومدة الخدمة والأرقام التي يعتمدها المدقق الحتمي، وأعد JSON كاملاً."
+            )
+        elif calculation_mismatch:
+            correction = (
+                "أعد حساب المثال من حقول calculation_example المنظمة ومن القواعد الحسابية الواردة في الطلب الأصلي. "
+                "صحح الحقل الرقمي غير المطابق، واجعل المثال المكتوب والعناوين والملخص والأسئلة المتكررة متسقة مع النتيجة "
+                "المعاد حسابها. لا تستخدم أرقاماً ثابتة من موضوع آخر، ولا تخمّن أو تقرّب نتيجة تخالف الحساب، ولا تغيّر "
+                "الأجر أو مدة الخدمة أو السيناريو إلا إذا كان هناك خطأ مثبت فيها. أعد JSON كاملاً."
+            )
+        else:
+            correction = "صحح سبب الرفض المحدد فقط مع الحفاظ على صحة المحتوى، ثم أعد JSON كاملاً."
+        instructions = (
+            "محاولة إصلاح واحدة محدودة بعد رفض بوابة الجودة. لا تنسخ رسالة الخطأ أو هذه التعليمات داخل المقال. "
+            "حافظ على جميع القواعد القانونية والمعلومات والمصادر المفيدة، ولا تتجاوز أي بوابة تحقق:\n"
+        )
+    else:
+        if empty_section:
+            correction = (
+                "A section body is empty. Repair it by adding accurate, useful prose relevant to its heading, "
+                "or merge its substance into a neighboring section and then remove the empty heading. Preserve all "
+                "material legal rules, calculation details, and useful bullets. Every body must be non-empty and valid "
+                "in length. Return the complete JSON object."
+            )
+        elif short_section:
+            correction = (
+                "Expand the short section with accurate, useful information relevant to its heading until its body "
+                "is within the allowed length. Do not pad with repetition or remove important rules or caveats. "
+                "Return the complete JSON object."
+            )
+        elif is_section_overflow:
+            correction = (
+                "The section count exceeds the permitted limit by a small amount. Merge closely related sections "
+                "while preserving their prose, bullets, substantive legal rules, and caveats. Keep the count within "
+                "the allowed range without discarding material content. Return the complete JSON object."
+            )
+        elif is_excerpt_overflow:
+            correction = (
+                "Shorten only the excerpt to 40–300 characters while preserving its core meaning, then return the complete JSON object."
+            )
+        elif scenario_mismatch:
+            correction = (
+                "Align the worked-example prose with the structured Article 87 scenario: explicitly state that the worker left "
+                "work due to force majeure beyond their control, or explain one of the statutory female-worker cases within "
+                "the relevant marriage or childbirth period. Do not describe this same example as ordinary resignation or mix "
+                "Article 85 resignation ratios with the Article 87 exception. Preserve the wage, service duration, and amounts "
+                "controlled by the deterministic calculator. Return the complete JSON object."
+            )
+        elif calculation_mismatch:
+            correction = (
+                "Recalculate the worked example from the structured calculation_example fields and the rules in the original prompt. "
+                "Correct the mismatched numeric field, and make the worked-example prose, title, summary, and FAQs consistent with "
+                "the recalculated result. Do not borrow fixed figures from another topic, guess, or round to a value that fails the "
+                "calculation. Do not change the wage, service duration, or scenario unless it is itself demonstrably invalid. "
+                "Return the complete JSON object."
+            )
+        else:
+            correction = "Correct only the identified rejection while preserving content validity, then return the complete JSON object."
+        instructions = (
+            "One bounded repair attempt after a quality-gate rejection. Do not copy the error message or these instructions into the article. "
+            "Preserve all material legal rules, useful information, and sources, and do not bypass any validation gate:\n"
+        )
+    return base_prompt + "\n\n" + instructions + correction + "\n"
 
 
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
@@ -4424,6 +5096,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             "reason": redact(str(reason or ""))[:500],
             "http_requests": budget.used if budget is not None else None,
             "http_request_limit": budget.max_requests if budget is not None else None,
+            "token_usage_scope": "cumulative_per_language" if budget is not None else None,
+            "prompt_tokens": budget.prompt_tokens if budget is not None else None,
+            "completion_tokens": budget.completion_tokens if budget is not None else None,
+            "total_tokens": budget.total_tokens if budget is not None else None,
+            "usage_responses": budget.usage_responses if budget is not None else None,
+            "rate_limit_hits": budget.rate_limit_hits if budget is not None else None,
+            "rate_limit_limit_tokens": budget.last_rate_limit_limit_tokens if budget is not None else None,
+            "rate_limit_remaining_tokens": budget.last_rate_limit_remaining_tokens if budget is not None else None,
+            "rate_limit_reset_tokens": budget.last_rate_limit_reset_tokens if budget is not None else None,
             "reasoning_effort": (
                 requested_english_effort if provider == "groq" and lang == "en" else
                 "low" if provider == "groq" else None
@@ -4466,7 +5147,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 provider, prompt, api_key=api_key, model=model,
                 tries=GROQ_INITIAL_HTTP_TRIES if provider == "groq" else GEMINI_MAX_TRIES,
                 request_budget=request_budget, reasoning_effort=reasoning_effort)
-            if (not ok and provider == "groq" and topic["id"] == "labor-art85"
+            if (not ok and provider == "groq"
                     and is_groq_incomplete_schema_failure(msg)):
                 record_generation_result(lang, "retrying", "schema_incomplete", msg)
                 log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
@@ -4497,6 +5178,19 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 state["topics"][topic["id"]][lang] = "rejected"
                 record_generation_result(lang, "rejected", "deterministic_preflight", reason)
                 continue
+        elif topic["id"] in EOSB_TOPIC_IDS:
+            try:
+                data, eosb_fixes = prepare_eosb_example_deterministically(
+                    data, topic=topic, lang=lang
+                )
+                deterministic_actions.extend(eosb_fixes)
+                if eosb_fixes:
+                    log(f"[FIX] النسخة {lang}: صحّح المدقق الحسابي الحقول المشتقة ومثال الخدمة "
+                        f"دون طلب توليد إضافي ({', '.join(eosb_fixes)}).")
+            except Reject as prep_exc:
+                # Preserve the raw response for the standard validator and its fail-closed rejection.
+                log(f"[NOTE] النسخة {lang}: تعذّر الإصلاح الحسابي الحتمي ({redact(prep_exc)}); "
+                    "ستعمل بوابات التحقق المعتادة.")
         repaired = False
         rejection_history = []
         try:
@@ -4533,7 +5227,12 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         record_generation_result(lang, "repairing", "deterministic_repair_rejection", reason)
 
             if not deterministic_repair_done:
-                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
+                repairable = (
+                    is_article85_repairable_rejection(reason)
+                    if topic["id"] == "labor-art85"
+                    else is_quality_repairable_rejection(reason, topic_id=topic["id"])
+                )
+                if not repairable:
                     log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(reason)}")
                     state["topics"][topic["id"]][lang] = "rejected"
                     record_generation_result(lang, "rejected", "quality_gate", reason)
@@ -4543,14 +5242,37 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 if dry_run:
                     repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
                 else:
+                    repair_prompt = (
+                        build_article85_repair_prompt(prompt, lang=lang, reason=reason)
+                        if topic["id"] == "labor-art85"
+                        else build_quality_repair_prompt(prompt, lang=lang, reason=reason)
+                    )
                     repair_ok, repair_data, repair_msg = generate_json(
                         provider,
-                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                        repair_prompt,
                         api_key=api_key,
                         model=model,
                         # One content-repair attempt, with at most one bounded HTTP retry for 429/5xx.
                         # The shared request budget remains the hard ceiling, including this retry.
                         tries=2 if provider == "groq" else GEMINI_MAX_TRIES,
+                        request_budget=request_budget,
+                        reasoning_effort=reasoning_effort,
+                    )
+                # A quality-repair response may itself fail Groq required-key validation.
+                # Spend at most one remaining request on a schema reminder, retaining strict JSON
+                # Schema and the same per-language hard request budget.
+                if (not repair_ok and provider == "groq"
+                        and is_groq_incomplete_schema_failure(repair_msg)
+                        and request_budget is not None
+                        and request_budget.used < request_budget.max_requests):
+                    record_generation_result(lang, "repairing", "schema_incomplete_after_content_repair", repair_msg)
+                    log(f"[RETRY] النسخة {lang}: استجابة إصلاح المحتوى افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط الصارم.")
+                    repair_ok, repair_data, repair_msg = generate_json(
+                        provider,
+                        build_groq_schema_repair_prompt(repair_prompt, lang=lang),
+                        api_key=api_key,
+                        model=model,
+                        tries=1,
                         request_budget=request_budget,
                         reasoning_effort=reasoning_effort,
                     )
@@ -4575,11 +5297,53 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         state["topics"][topic["id"]][lang] = "rejected"
                         record_generation_result(lang, "rejected", "deterministic_repair", repair_failure)
                         continue
-                repair_data, article, post_repair_fixes, post_repair_reason = (
-                    repair_article85_deterministic_omissions(
-                        repair_data, topic=topic, lang=lang, published_at=today_iso()
+                if topic["id"] == "labor-art85":
+                    repair_data, article, post_repair_fixes, post_repair_reason = (
+                        repair_article85_deterministic_omissions(
+                            repair_data, topic=topic, lang=lang, published_at=today_iso()
+                        )
                     )
-                )
+                else:
+                    post_repair_fixes = []
+                    if topic["id"] in EOSB_TOPIC_IDS:
+                        try:
+                            repair_data, post_repair_fixes = prepare_eosb_example_deterministically(
+                                repair_data, topic=topic, lang=lang
+                            )
+                        except Reject as prep_repair_exc:
+                            log(f"[NOTE] النسخة {lang}: لم يكتمل الإصلاح الحسابي الحتمي بعد محاولة النموذج "
+                                f"({redact(prep_repair_exc)}); ستُحكم بوابات التحقق المعتادة.")
+                            post_repair_fixes = []
+                    try:
+                        article = validate_article(
+                            repair_data, topic=topic, lang=lang, published_at=today_iso(),
+                            require_canonical_article85=True,
+                        )
+                        post_repair_reason = ""
+                    except Reject as post_repair_exc:
+                        article = None
+                        post_repair_reason = str(post_repair_exc)
+                    # For non-Article-85 EOSB topics, remove only extra money-bearing
+                    # prose after the numeric calculation fields have passed validation.
+                    # Do not ask the model to invent a second calculation; re-run every gate.
+                    if (article is None and topic["id"] in EOSB_TOPIC_IDS
+                            and topic["id"] != "labor-art85"
+                            and post_repair_reason.startswith(
+                                "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")):
+                        try:
+                            repair_data = repair_eosb_unexpected_money_claims(
+                                repair_data, lang=lang
+                            )
+                            article = validate_article(
+                                repair_data, topic=topic, lang=lang,
+                                published_at=today_iso(),
+                                require_canonical_article85=True,
+                            )
+                            post_repair_reason = ""
+                            post_repair_fixes.append("unexpected non-calculator currency claim removed")
+                        except Reject as money_repair_exc:
+                            article = None
+                            post_repair_reason = str(money_repair_exc)
                 if article is None:
                     repair_failure = post_repair_reason or "تعذّر اجتياز التحقق النهائي بعد الإصلاح"
                     log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة الإصلاح: {redact(repair_failure)}")
@@ -4962,6 +5726,127 @@ def selftest() -> int:
           and "30,000 ريال" not in json.dumps(_money_repaired_data, ensure_ascii=False)
           and "unexpected currency amount removed" in _money_repair_actions)
 
+    _generic_money_topic = topic_by_id("eosb-full-entitlement")
+    _generic_money_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _generic_money_probe["sections"][0]["body"] += (
+        "\n\nوقد يذكر وصف غير معتمد مبلغ 30,000 ريال في مثال منفصل."
+    )
+    try:
+        validate_article(
+            _generic_money_probe, topic=_generic_money_topic, lang="ar",
+            published_at="2026-01-01", require_canonical_article85=True,
+        )
+        _generic_money_original_reason = ""
+    except Reject as _generic_money_original_exc:
+        _generic_money_original_reason = str(_generic_money_original_exc)
+    _generic_money_clean = repair_eosb_unexpected_money_claims(
+        _generic_money_probe, lang="ar"
+    )
+    _generic_money_article = validate_article(
+        _generic_money_clean, topic=_generic_money_topic, lang="ar",
+        published_at="2026-01-01", require_canonical_article85=True,
+    )
+    check("إصلاح EOSB عام: يزيل المبلغ النقدي الزائد دون تبديل قيم الحاسبة",
+          _generic_money_original_reason.startswith(
+              "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")
+          and _generic_money_article is not None
+          and "30,000 ريال" not in json.dumps(_generic_money_clean, ensure_ascii=False)
+          and _generic_money_clean["calculation_example"]
+              == _generic_money_probe["calculation_example"])
+
+    _eosb_deterministic_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _eosb_deterministic_example = next(
+        section for section in _eosb_deterministic_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _eosb_deterministic_example["body"] = (
+        _AR_BODY + " ويذكر النص مبلغاً زائداً قدره 12,500 ريال."
+    )
+    _eosb_deterministic_probe["calculation_example"]["full_benefit"] = "37900"
+    _eosb_deterministic_probe["calculation_example"]["payable_benefit"] = "5833.33"
+    _eosb_deterministic_probe["calculation_example"]["scenario"] = "resignation"
+    _eosb_deterministic_fixed, _eosb_deterministic_actions = (
+        prepare_eosb_example_deterministically(
+            _eosb_deterministic_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar",
+        )
+    )
+    _eosb_deterministic_article = validate_article(
+        _eosb_deterministic_fixed,
+        topic=topic_by_id("eosb-full-entitlement"),
+        lang="ar",
+        published_at="2026-01-01",
+        require_canonical_article85=True,
+    )
+    check("EOSB: إصلاح حتمي يجبر سيناريو الاستحقاق الكامل ويعيد حساب المبالغ دون API",
+          _eosb_deterministic_article is not None
+          and _eosb_deterministic_fixed["calculation_example"]["scenario"] == "article87"
+          and _eosb_deterministic_fixed["calculation_example"]["full_benefit"] == "42000.00"
+          and _eosb_deterministic_fixed["calculation_example"]["payable_benefit"] == "42000.00"
+          and "calculator-derived full benefit corrected" in _eosb_deterministic_actions
+          and "calculator-derived payable benefit corrected" in _eosb_deterministic_actions
+          and "topic-specific calculation scenario enforced" in _eosb_deterministic_actions
+          and "Article 87 qualifying scenario made explicit" in _eosb_deterministic_actions)
+
+    _article87_conflict_probe = fixture_data("en", topic_id="eosb-full-entitlement")
+    _article87_example = next(
+        section for section in _article87_conflict_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _article87_example["body"] += (
+        " This example assumes an ordinary resignation after six years."
+    )
+    _article87_conflict_reason = ""
+    try:
+        validate_article(
+            _article87_conflict_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="en", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject as exc:
+        _article87_conflict_reason = str(exc)
+    check("Article 87: رفض تناقض وصف المثال مع سيناريو الحساب حتى عند ذكر القوة القاهرة",
+          _article87_conflict_reason.startswith(
+              "calculation_example.scenario: نص المثال يصف استقالة عادية"
+          ))
+
+    _article87_missing_basis_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _article87_missing_example = next(
+        section for section in _article87_missing_basis_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _article87_missing_example["body"] = re.sub(
+        r"يفترض هذا المثال ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته وفق المادة 87، "
+        r"وليس استقالة عادية تخضع لنسب المادة 85؛\s*",
+        "", _article87_missing_example["body"]
+    )
+    _article87_missing_reason = ""
+    try:
+        validate_article(
+            _article87_missing_basis_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject as exc:
+        _article87_missing_reason = str(exc)
+    check("Article 87: رفض مثال لا يذكر أي حالة استحقاق مؤهلة",
+          _article87_missing_reason.startswith(
+              "calculation_example.scenario: نص المثال لا يذكر حالة مؤهلة وفق المادة 87"
+          ))
+
+    check("EOSB: يضمن ذكر مدة الخدمة والقيم المحسوبة ويزيل مبلغاً زائداً ثم يعيد كل البوابات",
+          _eosb_deterministic_article is not None
+          and "12,500 ريال" not in json.dumps(_eosb_deterministic_fixed, ensure_ascii=False)
+          and _extract_eosb_service_durations(
+              " ".join(section["body"] for section in _eosb_deterministic_fixed["sections"]
+                       if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE))
+          ) == [Decimal("6")]
+          and "unsupported currency claims removed from prose" in _eosb_deterministic_actions
+          and "authoritative currency figures made explicit" in _eosb_deterministic_actions)
+
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
               "عدم الالتزام قد يؤدي إلى فقدان جزء من المكافأة أو تعويضات أخرى. "
@@ -5069,6 +5954,39 @@ def selftest() -> int:
           fractional_article["calculation_example"]["years"] == "6.5"
           and fractional_article["calculation_example"]["full_benefit"] == "48000.00"
           and fractional_article["calculation_example"]["payable_benefit"] == "32000.00")
+
+    eosb_article87_fraction_ar = fixture_data("ar", topic_id="eosb-full-entitlement")
+    eosb_article87_fraction_ar["calculation_example"].update({
+        "years": "4.5", "months": "0", "days": "0",
+        "full_benefit": "27000", "payable_benefit": "27000",
+    })
+    eosb_article87_fraction_ar["sections"][3]["body"] = (
+        eosb_article87_fraction_ar["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 4.5 سنوات")
+        .replace("42,000 ريال", "27,000 ريال")
+    )
+    article87_fraction_ar = validate_article(
+        eosb_article87_fraction_ar, topic=topic_by_id("eosb-full-entitlement"),
+        lang="ar", published_at="2026-01-01")
+    eosb_article87_fraction_en = fixture_data("en", topic_id="eosb-full-entitlement")
+    eosb_article87_fraction_en["calculation_example"].update({
+        "years": "4.5", "months": "0", "days": "0",
+        "full_benefit": "27000", "payable_benefit": "27000",
+    })
+    eosb_article87_fraction_en["sections"][3]["body"] = (
+        eosb_article87_fraction_en["sections"][3]["body"]
+        .replace("six years of service", "4.5 years of service")
+        .replace("42,000", "27,000")
+    )
+    article87_fraction_en = validate_article(
+        eosb_article87_fraction_en, topic=topic_by_id("eosb-full-entitlement"),
+        lang="en", published_at="2026-01-01")
+    check("المادة 87: يقبل 4.5 سنوات في اللغتين ويحسب المكافأة كاملة تناسبياً دون نسبة الاستقالة",
+          article87_fraction_ar["calculation_example"]["full_benefit"] == "27000.00"
+          and article87_fraction_ar["calculation_example"]["payable_benefit"] == "27000.00"
+          and article87_fraction_en["calculation_example"]["full_benefit"] == "27000.00"
+          and article87_fraction_en["calculation_example"]["payable_benefit"] == "27000.00"
+          and not validate_eosb_translation_pair(article87_fraction_ar, article87_fraction_en))
 
     eosb_components = fixture_data("ar", topic_id="labor-art85")
     eosb_components["calculation_example"].update({
@@ -6033,6 +6951,74 @@ def selftest() -> int:
               and _repair_calls == {"ar": 1, "en": 0}
               and "Article 86 rule enforced" in _repair_out)
 
+        # Regression: quality repair also covers non-Article-85 EOSB topics, without
+        # importing Article 85's canonical example numbers or bypassing validation.
+        check("الإصلاح العام: يقبل عيوب البنية والحساب المعروفة فقط",
+              is_quality_repairable_rejection("sections[7].body: فارغ",
+                                              topic_id="eosb-full-entitlement")
+              and is_quality_repairable_rejection(
+                  "calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00",
+                  topic_id="eosb-full-entitlement")
+              and not is_quality_repairable_rejection(
+                  "calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00",
+                  topic_id="salary-net-gosi-guide")
+              and not is_quality_repairable_rejection(
+                  "sections: العدد 18 خارج المدى 3-12",
+                  topic_id="eosb-full-entitlement"))
+        _generic_calc_prompt_ar = build_quality_repair_prompt(
+            build_prompt(topic_by_id("eosb-full-entitlement"), "ar"), lang="ar",
+            reason="calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00")
+        _generic_empty_prompt_en = build_quality_repair_prompt(
+            build_prompt(topic_by_id("eosb-full-entitlement"), "en"), lang="en",
+            reason="sections[7].body: فارغ")
+        check("الإصلاح العام: تعليمات ثنائية اللغة لا تفرض أرقام المادة 85 الثابتة",
+              "أعد حساب المثال من حقول calculation_example المنظمة" in _generic_calc_prompt_ar
+              and "A section body is empty" in _generic_empty_prompt_en
+              and "42,000 ريال" not in _generic_calc_prompt_ar
+              and "SAR 42,000" not in _generic_empty_prompt_en)
+
+        _sandbox()
+        _generic_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _generic_calls, _generic_requests = {"ar": 0, "en": 0}, []
+
+        def _generic_quality_repair_http(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _generic_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            _generic_lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _generic_calls[_generic_lang] += 1
+            generated = fixture_data(_generic_lang, topic_id="eosb-full-entitlement")
+            if _generic_calls[_generic_lang] == 1:
+                if _generic_lang == "ar":
+                    generated["calculation_example"]["full_benefit"] = "41900"
+                else:
+                    generated["sections"][0]["body"] = ""
+            return _groq_envelope(content=json.dumps(generated, ensure_ascii=False)) + (url,)
+
+        globals()["http_request_full"] = _generic_quality_repair_http
+        _generic_rc, _generic_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="eosb-full-entitlement")
+        _generic_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        _generic_state = load_state()["topics"]["eosb-full-entitlement"]
+        _generic_repair_prompts = [
+            req["messages"][-1]["content"] for req in _generic_requests
+            if isinstance(req.get("messages"), list) and req["messages"]
+        ]
+        check("الإصلاح العام: الحساب يُصحّح دون طلب API إضافي، والقسم الفارغ يحتاج إصلاحاً واحداً",
+              _generic_rc == 0 and _generic_calls == {"ar": 1, "en": 2}
+              and len(_generic_drafts) == 2
+              and _generic_state.get("ar") == "draft" and _generic_state.get("en") == "draft"
+              and "calculator-derived full benefit corrected" in _generic_out
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
+        check("الإصلاح العام: لا يرسل طلب إصلاح حسابي إلى النموذج ولا يفرض مبالغ المادة 85",
+              len(_generic_requests) == 3
+              and any("A section body is empty" in p for p in _generic_repair_prompts)
+              and not any("SAR 42,000" in p or "42,000 ريال" in p
+                          for p in _generic_repair_prompts))
+
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
         _sandbox()
         globals()["http_request_full"] = _no_network
@@ -6177,15 +7163,43 @@ def selftest() -> int:
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _sleeps == [9.7425])
 
+        # A short/zero Retry-After header must not override a longer TPM delay in the body.
+        _sleeps.clear()
+        _tpm_header_short_body = (
+            b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
+            b'Limit 8000, Used 6718, Requested 2581. Please try again in 9.7425s."}}'
+        )
+        fake, calls = _fake_http([
+            (429, {"Retry-After": "1"}, _tpm_header_short_body),
+            _groq_envelope(lang="ar"),
+        ])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json(
+            "p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            sleep=_sleeps.append,
+        )
+        check("Groq: مهلة TPM في الجسم تتقدّم على Retry-After أقصر",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [9.7425])
+
         # Content repair uses a single model-repair pass but allows one HTTP retry after transient TPM 429.
         _sleeps.clear()
         _repair_tpm_body = (
             b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
             b'Limit 8000, Used 6327, Requested 2477. Please try again in 6.03s."}}'
         )
+        _repair_success = _groq_envelope(lang="en")
         fake, calls = _fake_http([
-            (429, {}, _repair_tpm_body),
-            _groq_envelope(lang="en"),
+            (429, {
+                "x-ratelimit-limit-tokens": "8000",
+                "x-ratelimit-remaining-tokens": "0",
+                "x-ratelimit-reset-tokens": "6.03s",
+            }, _repair_tpm_body),
+            (200, {
+                "x-ratelimit-limit-tokens": "8000",
+                "x-ratelimit-remaining-tokens": "7300",
+                "x-ratelimit-reset-tokens": "0.3s",
+            }, _repair_success[2]),
         ])
         globals()["http_request_full"] = fake
         _repair_budget = RequestBudget(2)
@@ -6195,6 +7209,15 @@ def selftest() -> int:
         check("Groq repair: يعيد 429 المؤقت مرة واحدة بعد مهلة الخادم ضمن سقف الطلبات",
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _repair_budget.used == 2 and _sleeps == [6.03])
+        check("Groq: يسجّل الاستخدام الفعلي ورأس TPM دون حفظ نص المقال أو البرومبت",
+              _repair_budget.prompt_tokens == 10
+              and _repair_budget.completion_tokens == 20
+              and _repair_budget.total_tokens == 30
+              and _repair_budget.usage_responses == 1
+              and _repair_budget.rate_limit_hits == 1
+              and _repair_budget.last_rate_limit_limit_tokens == "8000"
+              and _repair_budget.last_rate_limit_remaining_tokens == "7300"
+              and _repair_budget.last_rate_limit_reset_tokens == "0.3s")
 
         # (ي-2) Retry-After الرقمي يتقدّم على تلميحات فوترة عامة، لكن الحصة اليومية أدناه تبقى استثناءً.
         _sleeps.clear()
@@ -7278,7 +8301,12 @@ def selftest() -> int:
               and len(_report_data.get("results", [])) == 2
               and all("http_requests" in row and "stage" in row and "status" in row
                       and "reason" in row for row in _report_data["results"])
-              and all(row.get("http_requests") == 1 for row in _report_data["results"]))
+              and all(row.get("http_requests") == 1 for row in _report_data["results"])
+              and all(row.get("token_usage_scope") == "cumulative_per_language"
+                      and row.get("prompt_tokens") == 10 and row.get("completion_tokens") == 20
+                      and row.get("total_tokens") == 30 and row.get("usage_responses") == 1
+                      and row.get("rate_limit_hits") == 0
+                      for row in _report_data["results"]))
 
         # (ظ-4) main() يمرّر --article-lang إلى run_once فعلاً (بمفتاح وهمي واستجابة محاكاة).
         _sandbox()
