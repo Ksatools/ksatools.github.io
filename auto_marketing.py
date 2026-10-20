@@ -282,7 +282,8 @@ QUOTA_STOP_HINTS = ("check your plan", "billing")
 TEMPORARY_RATE_LIMIT_HINTS = ("tokens per minute", "requests per minute")
 RETRY_DELAY_RE = re.compile(
     r"\b(?:try again|retry(?: after)?)\s+(?:in\s+)?"
-    r"(?P<seconds>\d+(?:\.\d+)?)\s*(?:s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\b",
+    r"(?P<seconds>\d+(?:\.\d+)?)\s*"
+    r"(?P<unit>s|sec(?:ond|onds)?|m|min(?:ute|utes)?)\b",
     re.IGNORECASE,
 )
 
@@ -691,10 +692,11 @@ _EN_BODY = (
 def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
     """نموذج اختباري داخلي؛ يتضمن مثال مكافأة مضبوطاً للموضوعات القانونية فقط."""
     is_eosb = topic_id in EOSB_TOPIC_IDS
-    scenario = (
+    scenario = EOSB_REQUIRED_SCENARIO.get(
+        topic_id,
         "resignation" if topic_id in {"labor-art85", "eosb-resignation", "contract-end-vs-resignation"}
         else "article81" if topic_id == "labor-art81"
-        else "base"
+        else "base",
     )
     calculation_example = ({
         "monthly_wage": "12000", "years": "6", "months": "0", "days": "0",
@@ -1053,13 +1055,23 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
         retry_after = header_get(resp_headers, "Retry-After")
         retryable, _code, _note = classify_failure(status, raw, retry_after=retry_after)
         if retryable and attempt + 1 < tries:
-            # بعض استجابات Groq تذكر مهلة في نص الخطأ من دون ترويسة Retry-After.
-            if not retry_after:
-                response_text = raw.decode("utf-8", "replace") if isinstance(
-                    raw, (bytes, bytearray)) else str(raw or "")
-                wait_match = RETRY_DELAY_RE.search(response_text)
-                if wait_match:
-                    retry_after = wait_match.group("seconds")
+            # Respect whichever server hint asks us to wait longer. Some gateways set
+            # Retry-After=0/1 while the body gives the real TPM window (e.g. 9.7425s).
+            response_text = raw.decode("utf-8", "replace") if isinstance(
+                raw, (bytes, bytearray)) else str(raw or "")
+            wait_match = RETRY_DELAY_RE.search(response_text)
+            body_delay = None
+            if wait_match:
+                try:
+                    body_delay = float(wait_match.group("seconds"))
+                    if wait_match.group("unit").lower().startswith(("m", "min")):
+                        body_delay *= 60.0
+                except (TypeError, ValueError):
+                    body_delay = None
+            header_delay = retry_after_seconds(retry_after)
+            if body_delay is not None and (
+                    header_delay is None or body_delay > header_delay):
+                retry_after = str(body_delay)
             delay = backoff_delay(attempt, retry_after=retry_after)
             log(f"[RETRY] {provider}: استجابة مؤقّتة http_{status} — "
                 f"المحاولة {attempt + 2}/{tries} بعد {delay:.1f}s")
@@ -1329,6 +1341,9 @@ EOSB_REQUIRED_SCENARIO = {
     "eosb-resignation": "resignation",
     "contract-end-vs-resignation": "resignation",
     "labor-art81": "article81",
+    # This topic specifically covers full-entitlement exceptions; the worked
+    # example is code-owned as Article 87 so AR/EN cannot drift into resignation.
+    "eosb-full-entitlement": "article87",
 }
 EOSB_MONEY_CLAIM_RE = re.compile(
     r"\bSAR\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)"
@@ -3229,6 +3244,238 @@ def repair_eosb_unexpected_money_claims(data, *, lang: str):
     return fixed
 
 
+def prepare_eosb_example_deterministically(data, *, topic, lang: str):
+    """Make the structured EOSB calculator authoritative before any model-repair request.
+
+    This does not relax validation. It corrects only derived benefit fields from the
+    topic's chosen wage/service/scenario, ensures the Example section states that same
+    duration, removes prose currency claims inconsistent with the validated calculator,
+    and re-adds missing calculator figures explicitly. The caller still runs every
+    existing validation gate after this deterministic preparation.
+    """
+    topic_id = topic.get("id", "") if isinstance(topic, dict) else ""
+    if topic_id not in EOSB_TOPIC_IDS or topic_id == "labor-art85":
+        raise Reject("EOSB deterministic example repair: unsupported topic")
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("EOSB deterministic example repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    example = fixed.get("calculation_example")
+    if not isinstance(example, dict) or set(example) != set(EOSB_CALCULATION_FIELDS):
+        raise Reject("EOSB deterministic example repair: calculation fields missing")
+    if any(not isinstance(example[field], str) or not example[field].strip()
+           for field in EOSB_CALCULATION_FIELDS):
+        raise Reject("EOSB deterministic example repair: calculation fields empty")
+
+    actions = []
+    required_scenario = EOSB_REQUIRED_SCENARIO.get(topic_id)
+    current_scenario = example["scenario"].strip().lower()
+    scenario = required_scenario or current_scenario
+    if scenario not in {"base", "resignation", "article81", "article87"}:
+        raise Reject("calculation_example.scenario: قيمة غير مدعومة")
+    if scenario != current_scenario:
+        example["scenario"] = scenario
+        actions.append("topic-specific calculation scenario enforced")
+
+    wage = _parse_eosb_number(example["monthly_wage"], "monthly_wage")
+    years = _parse_eosb_number(example["years"], "years")
+    months = _parse_eosb_number(example["months"], "months", integer=True)
+    days = _parse_eosb_number(example["days"], "days", integer=True)
+    if wage <= 0:
+        raise Reject("calculation_example.monthly_wage: يجب أن يكون الأجر أكبر من الصفر")
+    if years > 80 or months > 11 or days > 30:
+        raise Reject("calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة")
+    if years != years.to_integral_value() and (months != 0 or days != 0):
+        raise Reject("calculation_example: السنوات الكسرية لا يجوز جمعها مع أشهر أو أيام")
+
+    total_years = years + months / Decimal(12) + days / Decimal(365)
+    first_five = min(total_years, Decimal(5))
+    after_five = max(Decimal(0), total_years - Decimal(5))
+    full_raw = wage * first_five / Decimal(2) + wage * after_five
+    expected_full = full_raw.quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+    if scenario == "resignation":
+        if total_years < Decimal(2):
+            ratio = Decimal(0)
+        elif total_years <= Decimal(5):
+            ratio = Decimal(1) / Decimal(3)
+        elif total_years < Decimal(10):
+            ratio = Decimal(2) / Decimal(3)
+        else:
+            ratio = Decimal(1)
+    else:
+        ratio = Decimal(1)
+    expected_payable = (full_raw * ratio).quantize(EOSB_CENT, rounding=ROUND_HALF_UP)
+
+    if _parse_eosb_number(example["full_benefit"], "full_benefit") != expected_full:
+        example["full_benefit"] = format(expected_full, "f")
+        actions.append("calculator-derived full benefit corrected")
+    if _parse_eosb_number(example["payable_benefit"], "payable_benefit") != expected_payable:
+        example["payable_benefit"] = format(expected_payable, "f")
+        actions.append("calculator-derived payable benefit corrected")
+
+    years_text = format(years.normalize(), "f")
+    months_int, days_int = int(months), int(days)
+    if lang == "ar":
+        duration_parts = []
+        if years:
+            duration_parts.append(f"{years_text} " + ("سنة" if years == 1 else "سنتان" if years == 2 else "سنوات"))
+        if months_int:
+            duration_parts.append(f"{months_int} " + ("شهر" if months_int == 1 else "شهران" if months_int == 2 else "أشهر"))
+        if days_int:
+            duration_parts.append(f"{days_int} " + ("يوم" if days_int == 1 else "يومان" if days_int == 2 else "أيام"))
+        duration_phrase = " و".join(duration_parts) if duration_parts else "0 يوم"
+        service_sentence = f"مدة الخدمة في هذا المثال هي {duration_phrase}."
+    else:
+        duration_parts = []
+        if years:
+            duration_parts.append(f"{years_text} " + ("year" if years == 1 else "years"))
+        if months_int:
+            duration_parts.append(f"{months_int} " + ("month" if months_int == 1 else "months"))
+        if days_int:
+            duration_parts.append(f"{days_int} " + ("day" if days_int == 1 else "days"))
+        if len(duration_parts) > 1:
+            duration_phrase = ", ".join(duration_parts[:-1]) + " and " + duration_parts[-1]
+        else:
+            duration_phrase = duration_parts[0] if duration_parts else "0 days"
+        service_sentence = f"The example assumes {duration_phrase} of service."
+
+    example_sections = [
+        section for section in fixed["sections"]
+        if isinstance(section, dict)
+        and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+    ]
+    if not example_sections:
+        raise Reject("المثال الحسابي يجب أن يظهر داخل قسم عنوانه يتضمن مثالاً / Example")
+
+    def duration_claims(text):
+        return _extract_eosb_service_durations(str(text or ""))
+
+    def repair_duration_text(value):
+        pieces = re.split(r"(?<=[.!?؟])\s+", str(value or ""))
+        output = []
+        changed = False
+        for piece in pieces:
+            claims = duration_claims(piece)
+            if claims and any(claim != total_years for claim in claims):
+                output.append(service_sentence)
+                changed = True
+            else:
+                output.append(piece)
+        return " ".join(output), changed
+
+    changed_duration = False
+    for section in example_sections:
+        if isinstance(section.get("body"), str):
+            section["body"], changed = repair_duration_text(section["body"])
+            changed_duration = changed_duration or changed
+        if isinstance(section.get("bullets"), list):
+            bullets = []
+            for bullet in section["bullets"]:
+                if isinstance(bullet, str):
+                    bullet, changed = repair_duration_text(bullet)
+                    changed_duration = changed_duration or changed
+                bullets.append(bullet)
+            section["bullets"] = bullets
+
+    example_text = " ".join(
+        str(section.get("body", "")) + " " + " ".join(
+            item for item in section.get("bullets", []) if isinstance(item, str)
+        )
+        for section in example_sections
+    )
+    claims = duration_claims(example_text)
+    if not any(claim == total_years for claim in claims):
+        section = example_sections[0]
+        section["body"] = str(section.get("body", "")).rstrip() + "\n\n" + service_sentence
+        changed_duration = True
+    if changed_duration:
+        actions.append("example service duration made explicit and consistent")
+
+    # The same gate used by validate_eosb_calculation_example disallows unsupported
+    # currency figures anywhere in article prose; remove those sentences, not the
+    # calculator data, then ensure all authoritative amounts appear with a currency.
+    normalized_article_text = " ".join([
+        str(fixed.get("title", "")),
+        str(fixed.get("meta_description", "")),
+        str(fixed.get("excerpt", "")),
+        *[
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in fixed["sections"] if isinstance(section, dict)
+        ],
+        *[
+            str(item.get("q", "")) + " " + str(item.get("a", ""))
+            for item in fixed.get("faq", []) if isinstance(item, dict)
+        ],
+    ])
+    allowed_amounts = {
+        wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP),
+        expected_full,
+        expected_payable,
+    }
+    claims_in_text = set()
+    normalized_article_text = _normalize_eosb_digits(normalized_article_text)
+    for match in EOSB_MONEY_CLAIM_RE.finditer(normalized_article_text):
+        token = next((group for group in match.groups() if group), "")
+        if token:
+            try:
+                claims_in_text.add(Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                ))
+            except InvalidOperation:
+                raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
+    if claims_in_text - allowed_amounts:
+        fixed = repair_eosb_unexpected_money_claims(fixed, lang=lang)
+        actions.append("unsupported currency claims removed from prose")
+
+    # Re-check after sanitizing; if one of the authoritative amounts is not named
+    # with a currency anywhere, add one compact, code-generated line to the Example.
+    normalized_article_text = " ".join([
+        str(fixed.get("title", "")),
+        str(fixed.get("meta_description", "")),
+        str(fixed.get("excerpt", "")),
+        *[
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in fixed["sections"] if isinstance(section, dict)
+        ],
+        *[
+            str(item.get("q", "")) + " " + str(item.get("a", ""))
+            for item in fixed.get("faq", []) if isinstance(item, dict)
+        ],
+    ])
+    claims_in_text = set()
+    normalized_article_text = _normalize_eosb_digits(normalized_article_text)
+    for match in EOSB_MONEY_CLAIM_RE.finditer(normalized_article_text):
+        token = next((group for group in match.groups() if group), "")
+        if token:
+            try:
+                claims_in_text.add(Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                ))
+            except InvalidOperation:
+                raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
+    if not allowed_amounts.issubset(claims_in_text):
+        wage_txt = format(wage.quantize(EOSB_CENT, rounding=ROUND_HALF_UP), ",.2f")
+        full_txt = format(expected_full, ",.2f")
+        payable_txt = format(expected_payable, ",.2f")
+        if lang == "ar":
+            amounts_sentence = (
+                f"الأرقام التوضيحية: الأجر الشهري {wage_txt} ريال، "
+                f"والمكافأة الأساسية {full_txt} ريال، والمبلغ المستحق {payable_txt} ريال."
+            )
+        else:
+            amounts_sentence = (
+                f"Illustrative figures: monthly wage SAR {wage_txt}, "
+                f"full base benefit SAR {full_txt}, and payable benefit SAR {payable_txt}."
+            )
+        example_sections[0]["body"] = str(example_sections[0].get("body", "")).rstrip() + "\n\n" + amounts_sentence
+        actions.append("authoritative currency figures made explicit")
+
+    return fixed, actions
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -4728,6 +4975,19 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 state["topics"][topic["id"]][lang] = "rejected"
                 record_generation_result(lang, "rejected", "deterministic_preflight", reason)
                 continue
+        elif topic["id"] in EOSB_TOPIC_IDS:
+            try:
+                data, eosb_fixes = prepare_eosb_example_deterministically(
+                    data, topic=topic, lang=lang
+                )
+                deterministic_actions.extend(eosb_fixes)
+                if eosb_fixes:
+                    log(f"[FIX] النسخة {lang}: صحّح المدقق الحسابي الحقول المشتقة ومثال الخدمة "
+                        f"دون طلب توليد إضافي ({', '.join(eosb_fixes)}).")
+            except Reject as prep_exc:
+                # Preserve the raw response for the standard validator and its fail-closed rejection.
+                log(f"[NOTE] النسخة {lang}: تعذّر الإصلاح الحسابي الحتمي ({redact(prep_exc)}); "
+                    "ستعمل بوابات التحقق المعتادة.")
         repaired = False
         rejection_history = []
         try:
@@ -4842,6 +5102,15 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     )
                 else:
                     post_repair_fixes = []
+                    if topic["id"] in EOSB_TOPIC_IDS:
+                        try:
+                            repair_data, post_repair_fixes = prepare_eosb_example_deterministically(
+                                repair_data, topic=topic, lang=lang
+                            )
+                        except Reject as prep_repair_exc:
+                            log(f"[NOTE] النسخة {lang}: لم يكتمل الإصلاح الحسابي الحتمي بعد محاولة النموذج "
+                                f"({redact(prep_repair_exc)}); ستُحكم بوابات التحقق المعتادة.")
+                            post_repair_fixes = []
                     try:
                         article = validate_article(
                             repair_data, topic=topic, lang=lang, published_at=today_iso(),
@@ -5281,6 +5550,49 @@ def selftest() -> int:
           and "30,000 ريال" not in json.dumps(_generic_money_clean, ensure_ascii=False)
           and _generic_money_clean["calculation_example"]
               == _generic_money_probe["calculation_example"])
+
+    _eosb_deterministic_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _eosb_deterministic_example = next(
+        section for section in _eosb_deterministic_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _eosb_deterministic_example["body"] = (
+        _AR_BODY + " ويذكر النص مبلغاً زائداً قدره 12,500 ريال."
+    )
+    _eosb_deterministic_probe["calculation_example"]["full_benefit"] = "37900"
+    _eosb_deterministic_probe["calculation_example"]["payable_benefit"] = "5833.33"
+    _eosb_deterministic_probe["calculation_example"]["scenario"] = "resignation"
+    _eosb_deterministic_fixed, _eosb_deterministic_actions = (
+        prepare_eosb_example_deterministically(
+            _eosb_deterministic_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar",
+        )
+    )
+    _eosb_deterministic_article = validate_article(
+        _eosb_deterministic_fixed,
+        topic=topic_by_id("eosb-full-entitlement"),
+        lang="ar",
+        published_at="2026-01-01",
+        require_canonical_article85=True,
+    )
+    check("EOSB: إصلاح حتمي يجبر سيناريو الاستحقاق الكامل ويعيد حساب المبالغ دون API",
+          _eosb_deterministic_article is not None
+          and _eosb_deterministic_fixed["calculation_example"]["scenario"] == "article87"
+          and _eosb_deterministic_fixed["calculation_example"]["full_benefit"] == "42000.00"
+          and _eosb_deterministic_fixed["calculation_example"]["payable_benefit"] == "42000.00"
+          and "calculator-derived full benefit corrected" in _eosb_deterministic_actions
+          and "calculator-derived payable benefit corrected" in _eosb_deterministic_actions
+          and "topic-specific calculation scenario enforced" in _eosb_deterministic_actions)
+    check("EOSB: يضمن ذكر مدة الخدمة والقيم المحسوبة ويزيل مبلغاً زائداً ثم يعيد كل البوابات",
+          _eosb_deterministic_article is not None
+          and "12,500 ريال" not in json.dumps(_eosb_deterministic_fixed, ensure_ascii=False)
+          and _extract_eosb_service_durations(
+              " ".join(section["body"] for section in _eosb_deterministic_fixed["sections"]
+                       if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE))
+          ) == [Decimal("6")]
+          and "unsupported currency claims removed from prose" in _eosb_deterministic_actions
+          and "authoritative currency figures made explicit" in _eosb_deterministic_actions)
 
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
