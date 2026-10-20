@@ -2364,6 +2364,172 @@ ARTICLE85_CANONICAL_VALUES = {
 }
 
 
+def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
+    """Apply bounded, deterministic editorial repairs to Article 85 reader-facing copy."""
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("Article 85 editorial normalization: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if lang == "ar":
+        scope_replacement = (
+            "تتناول المادة 85 نسبة مكافأة نهاية الخدمة عند انتهاء علاقة العمل بسبب استقالة العامل، "
+            "في الحالات التي ينطبق عليها نظام العمل."
+        )
+        notice_body = (
+            "مدة الإشعار منفصلة عن نسبة مكافأة الاستقالة. راجع عقد العمل والأحكام النظامية المنطبقة "
+            "لتحديد مهلة الإشعار وإجراءات الاستقالة في حالتك؛ فقد تختلف المتطلبات بحسب العقد والوقائع."
+        )
+        article86_clause = (
+            "وفق المادة 86، يجوز الاتفاق على استبعاد كل أو بعض العمولات ونسب المبيعات والعناصر المشابهة "
+            "من أساس حساب المكافأة إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يمتد ذلك إلى الأجر الأساسي."
+        )
+        generic_scope = re.compile(
+            r"تُ?طبق هذه المادة على العاملين في القطاعين العام والخاص", re.I
+        )
+        minimum_tail = re.compile(
+            r"لا\s*يُ?ستثنى\s+أي\s+حد\s+أدنى\s+آخر(?:\s+وفقاً?\s+للنظام)?\.?", re.I
+        )
+        article86_sentence = re.compile(
+            r"(?:المادة\s*86|العمولات|نسب المبيعات|عناصر الأجر).{0,300}"
+            r"(?:اتفاق|زيادة|نقص|قابل)", re.I
+        )
+        bad_notice_claim = re.compile(r"$^")
+        article81_claim = re.compile(r"$^")
+    else:
+        scope_replacement = (
+            "Article 85 addresses the resignation-benefit ratio when employment ends by resignation, "
+            "where the Saudi Labour Law applies."
+        )
+        notice_body = (
+            "Notice requirements are separate from the Article 85 benefit ratio. Check the employment contract "
+            "and applicable law to determine the notice period and resignation procedure for the specific case; "
+            "do not assume that one notice period applies in every situation."
+        )
+        article86_clause = (
+            "Under Article 86, the employer and worker may agree to exclude all or some commissions, sales "
+            "percentages, and similar wage components from the calculation basis when those components are "
+            "naturally subject to increase and decrease. This does not allow the basic wage itself to be excluded."
+        )
+        generic_scope = re.compile(
+            r"(?:this article|article\s*85).{0,100}\b(?:applies to|covers)\s+(?:all\s+)?"
+            r"(?:public and private|public/private)\s+sector", re.I
+        )
+        minimum_tail = re.compile(r"$^")
+        article86_sentence = re.compile(
+            r"(?:article\s*86|commissions?|sales percentages?|similar wage components).{0,300}"
+            r"(?:agreement|increase|decrease|variable)", re.I
+        )
+        bad_notice_claim = re.compile(
+            r"(?:employer\s+may|employer\s+can).{0,120}"
+            r"(?:pursue|bring|file).{0,100}(?:claim|case).{0,100}"
+            r"(?:notice period|notice requirements)", re.I
+        )
+        article81_claim = re.compile(r"\barticle\s*81\b", re.I)
+
+    def transform(value: str, *, section_heading: str = "", is_example: bool = False) -> str:
+        if not isinstance(value, str) or not value:
+            return value
+        parts = [p.strip() for p in re.split(r"(?<=[.!?؟])\s+|\n+", value) if p.strip()]
+        out = []
+        article86_added = False
+        for part in parts:
+            part = re.sub(r"\s+([.,;:!?؟،؛])", r"\1", part).strip()
+            if not part:
+                continue
+            if generic_scope.search(part):
+                part = scope_replacement
+            if lang == "ar" and minimum_tail.search(part):
+                continue
+            if lang == "en" and bad_notice_claim.search(part):
+                # Article 81 provides a right to leave without notice in specified cases;
+                # do not append an unsupported statement about a separate employer claim.
+                if article81_claim.search(part):
+                    part = (
+                        "Article 81 lists specific statutory cases in which a worker may leave without notice "
+                        "while retaining statutory rights."
+                    )
+                else:
+                    continue
+            if is_example and article86_sentence.search(part):
+                continue
+            if not is_example and article86_sentence.search(part):
+                if not article86_added:
+                    out.append(article86_clause)
+                    article86_added = True
+                continue
+            out.append(part)
+        return " ".join(out).strip()
+
+    # Normalize headings and all reader-facing summary fields first.
+    for key in ("title", "meta_description", "excerpt"):
+        if isinstance(fixed.get(key), str):
+            fixed[key] = transform(fixed[key])
+    for item in fixed.get("faq", []) if isinstance(fixed.get("faq"), list) else []:
+        if isinstance(item, dict):
+            for key in ("q", "a"):
+                if isinstance(item.get(key), str):
+                    item[key] = transform(item[key])
+
+    # Preserve a single fixed example; keep notice guidance in its own section instead of
+    # repeating the complete ratio table there.
+    seen = set()
+    for sec in fixed["sections"]:
+        if not isinstance(sec, dict):
+            continue
+        heading = str(sec.get("heading") or "")
+        lower_heading = heading.casefold()
+        is_example = bool(re.search(r"(?:مثال|example)", heading, re.I))
+        is_notice = bool(re.search(r"(?:إشعار|الإشعار|notice)", heading, re.I))
+        if is_example:
+            sec["body"] = example_text
+            sec["bullets"] = []
+            continue
+        if is_notice:
+            sec["body"] = notice_body
+            # The body is deliberately concise and unique; filter ratio bullets that duplicate the
+            # earlier Article 85 explanation while retaining any other useful notice-specific point.
+            bullets = sec.get("bullets") or []
+            if isinstance(bullets, list):
+                sec["bullets"] = [
+                    transform(item, section_heading=heading)
+                    for item in bullets if isinstance(item, str)
+                    and not re.search(
+                        r"(?:ثلث|ثلثي|ثلثان|two[ -]thirds|one third|1/3|2/3|five years|ten years|خمس سنوات|عشر سنوات)",
+                        item, re.I
+                    )
+                ]
+            continue
+
+        body = transform(str(sec.get("body") or ""), section_heading=heading)
+        # Exact duplicate sentences add no value. Keep the first occurrence across sections.
+        sentences = [x.strip() for x in re.split(r"(?<=[.!?؟])\s+", body) if x.strip()]
+        unique = []
+        local_seen = set()
+        for sentence in sentences:
+            key = re.sub(r"[^\w]+", " ", sentence.casefold()).strip()
+            if not key or key in local_seen or key in seen:
+                continue
+            local_seen.add(key)
+            unique.append(sentence)
+        candidate = " ".join(unique).strip()
+        # Do not shrink a section below the schema's minimum just to remove repetition.
+        if len(candidate) >= 120:
+            body = candidate
+            seen.update(local_seen)
+        else:
+            seen.update(
+                re.sub(r"[^\w]+", " ", sentence.casefold()).strip()
+                for sentence in sentences
+            )
+        sec["body"] = body
+        if isinstance(sec.get("bullets"), list):
+            sec["bullets"] = [
+                transform(item, section_heading=heading)
+                for item in sec["bullets"] if isinstance(item, str)
+            ]
+
+    return fixed
+
+
 def ensure_article85_critical_content(data, *, lang: str):
     """Inject canonical Article 85 boundary and worked-example text before any content gate."""
     if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
@@ -2464,7 +2630,21 @@ def ensure_article85_critical_content(data, *, lang: str):
         str(sec.get("heading", "")) + " " + str(sec.get("body", ""))
         for sec in sections if isinstance(sec, dict)
     )
-    if boundary not in all_text:
+    if lang == "ar":
+        has_boundary = (
+            ("أكثر من خمس" in all_text or "زادت مدة خدمته على خمس" in all_text
+             or "بعد تجاوز خمس" in all_text)
+            and ("أقل من عشر" in all_text or "لم تبلغ عشر" in all_text
+                 or "قبل بلوغ عشر" in all_text)
+            and ("ثلثي" in all_text or "الثلثين" in all_text or "الثلثان" in all_text)
+        )
+    else:
+        has_boundary = (
+            bool(re.search(r"\\b(?:more than|above|exceeds?) five\\b", all_text, re.I))
+            and bool(re.search(r"\\b(?:less than|below|not reach(?:es|ed)?) ten\\b", all_text, re.I))
+            and bool(re.search(r"\\b(?:two[\\s-]+thirds|2\\s*/\\s*3)\\b", all_text, re.I))
+        )
+    if boundary not in all_text and not has_boundary:
         candidates = [
             i for i, sec in enumerate(sections)
             if isinstance(sec, dict) and not re.search(r"(?:مثال|example)", str(sec.get("heading", "")), re.I)
@@ -2514,6 +2694,11 @@ def ensure_article85_critical_content(data, *, lang: str):
     fixed = ensure_article85_article86_clause(fixed, lang=lang)
     if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_article86:
         actions.append("Article 86 rule enforced")
+
+    before_editorial = json.dumps(fixed, ensure_ascii=False, sort_keys=True)
+    fixed = normalize_article85_editorial_copy(fixed, lang=lang, example_text=example_text)
+    if json.dumps(fixed, ensure_ascii=False, sort_keys=True) != before_editorial:
+        actions.append("repetitive and unsupported editorial copy normalized")
 
     return fixed, actions
 
@@ -2756,16 +2941,32 @@ def ensure_article85_article86_clause(data, *, lang: str):
             ]
         )
     )
-    if clause not in combined:
+    if lang == "ar":
+        article86_already_covered = (
+            bool(re.search(r"المادة\\s*86", combined, re.I))
+            and bool(re.search(r"العمولات|نسب المبيعات|عناصر الأجر", combined))
+            and bool(re.search(r"زيادة", combined) and re.search(r"نقص", combined))
+            and bool(re.search(r"اتفاق\\s+صريح", combined))
+            and "الأجر الأساسي" in combined
+        )
+    else:
+        article86_already_covered = (
+            bool(re.search(r"article\\s*86", combined, re.I))
+            and bool(re.search(r"commissions?|sales percentages?|similar wage elements", combined, re.I))
+            and "increase" in combined.lower() and "decrease" in combined.lower()
+            and "agreement" in combined.lower() and "basic wage" in combined.lower()
+        )
+    if clause not in combined and not article86_already_covered:
         candidates = [
             index for index, section in enumerate(fixed["sections"])
             if isinstance(section, dict)
         ]
         candidates.sort(key=lambda index: (
+            bool(re.search(r"(?:مثال|example)", str(fixed["sections"][index].get("heading", "")), re.I)),
             not bool(re.search(
                 heading_pattern,
                 str(fixed["sections"][index].get("heading", "")) + " "
-                + str(fixed["sections"][index].get("body", "")),
+                + str(fixed["sections"][index].get("body", ""),
                 re.IGNORECASE,
             )),
             len(str(fixed["sections"][index].get("body") or "")),
@@ -5969,6 +6170,63 @@ def selftest() -> int:
               and "30,000" not in _critical_ar_text and "30,000" not in _critical_en_text
               and "canonical example prose enforced" in _critical_ar_fixes
               and "canonical calculation values enforced" in _critical_en_fixes)
+
+        # Regression from the real generated draft: avoid repeating fixed legal clauses,
+        # unsupported sector generalization, and Article 86 content inside the example.
+        _editorial_ar = fixture_data("ar", topic_id="labor-art85")
+        _editorial_ar["sections"][0]["body"] += (
+            " تُطبق هذه المادة على العاملين في القطاعين العام والخاص."
+            " عند الاستقالة وفق المادة 85، يستحق العامل ثلث المكافأة بعد سنتين متتاليتين من الخدمة وحتى خمس سنوات شاملةً خمس سنوات؛ "
+            "ولا تنطبق نسبة الثلثين إلا إذا كانت مدة الخدمة أكثر من خمس سنوات وأقل من عشر سنوات؛ "
+            "وتستحق المكافأة كاملة إذا بلغت مدة الخدمة عشر سنوات فأكثر."
+        )
+        _editorial_ar["sections"][1]["heading"] = "الاستثناءات والخصومات المحتملة"
+        _editorial_ar["sections"][1]["body"] = (
+            "المادة 86 تنص على جواز استبعاد العمولات ونسب المبيعات والعناصر المشابهة باتفاق صريح إذا كانت قابلة للزيادة والنقص. "
+            "لا تُستبعد الأجر الأساسي. وفق المادة 86 يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "من أساس حساب المكافأة إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يمتد ذلك إلى الأجر الأساسي. "
+            "المادة 81 تعطي العامل الحق في ترك العمل دون إشعار في الحالات النظامية مع احتفاظه بحقوقه."
+        )
+        _editorial_ar["sections"][3]["body"] += (
+            " وفق المادة 86 يجوز بالاتفاق الصريح استبعاد العمولات والعناصر المتغيرة من أساس حساب المكافأة."
+        )
+        _editorial_ar["sections"].append({
+            "heading": "أهمية الالتزام بمدة إشعار الاستقالة",
+            "body": ("المادة 85 لا تحدد مدة إشعار الاستقالة، بل تعطي حقوقاً في المكافأة. " * 4),
+            "bullets": [],
+        })
+        _editorial_ar["faq"][0] = {
+            "q": "ما الحد الأدنى لاستحقاق مكافأة الاستقالة؟",
+            "a": "تتطلب المادة 85 سنتين متتاليتين. لا يُستثنى أي حد أدنى آخر وفقاً للنظام."
+        }
+        _editorial_fixed, _editorial_actions = ensure_article85_critical_content(
+            _editorial_ar, lang="ar")
+        _editorial_section_text = " ".join(
+            sec["heading"] + " " + sec["body"] for sec in _editorial_fixed["sections"])
+        _editorial_example = next(
+            sec["body"] for sec in _editorial_fixed["sections"]
+            if re.search(r"(?:مثال|example)", sec["heading"], re.I))
+        _editorial_notice = next(
+            sec["body"] for sec in _editorial_fixed["sections"]
+            if re.search(r"(?:إشعار|الإشعار|notice)", sec["heading"], re.I))
+        check("Article 85: التنقيح التحريري يمنع ادعاء نطاق عام وتكرار النسب ويعزل المثال",
+              "تُطبق هذه المادة على العاملين في القطاعين العام والخاص" not in _editorial_section_text
+              and _editorial_fixed["faq"][0]["a"].find("لا يُستثنى أي حد أدنى آخر") == -1
+              and "المادة 86" not in _editorial_example
+              and len(_editorial_notice) >= 120
+              and _editorial_actions.count("canonical two-thirds boundary enforced") == 0
+              and "repetitive and unsupported editorial copy normalized" in _editorial_actions)
+        _editorial_en = fixture_data("en", topic_id="labor-art85")
+        _editorial_en["sections"][2]["body"] += (
+            " Article 81 protects workers in defined cases, while the employer may pursue a claim for the notice period separately."
+        )
+        _editorial_fixed_en, _editorial_actions_en = ensure_article85_critical_content(
+            _editorial_en, lang="en")
+        _editorial_en_text = " ".join(
+            sec["heading"] + " " + sec["body"] for sec in _editorial_fixed_en["sections"])
+        check("Article 85: the English copy removes unsupported notice-claim wording",
+              "employer may pursue a claim for the notice period separately" not in _editorial_en_text
+              and "Article 81 lists specific statutory cases" in _editorial_en_text)
 
         _overflow_data = fixture_data("en", topic_id="labor-art85")
         for _n in range(10):
