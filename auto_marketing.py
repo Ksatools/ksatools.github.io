@@ -6727,16 +6727,16 @@ def selftest() -> int:
             req["messages"][-1]["content"] for req in _generic_requests
             if isinstance(req.get("messages"), list) and req["messages"]
         ]
-        check("الإصلاح العام: يصلح خطأ الحساب والقسم الفارغ بالعربية والإنجليزية في محاولة محدودة",
-              _generic_rc == 0 and _generic_calls == {"ar": 2, "en": 2}
+        check("الإصلاح العام: الحساب يُصحّح دون طلب API إضافي، والقسم الفارغ يحتاج إصلاحاً واحداً",
+              _generic_rc == 0 and _generic_calls == {"ar": 1, "en": 2}
               and len(_generic_drafts) == 2
               and _generic_state.get("ar") == "draft" and _generic_state.get("en") == "draft"
+              and "calculator-derived full benefit corrected" in _generic_out
+              and "topic-specific calculation scenario enforced" in _generic_out
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
-        check("الإصلاح العام: التوليد التصحيحي يحافظ على المخطط الكامل ولا يستورد مبالغ المادة 85",
-              len(_generic_requests) == 4
-              and any("أعد حساب المثال من حقول calculation_example المنظمة"
-                      in p for p in _generic_repair_prompts)
+        check("الإصلاح العام: لا يرسل طلب إصلاح حسابي إلى النموذج ولا يفرض مبالغ المادة 85",
+              len(_generic_requests) == 3
               and any("A section body is empty" in p for p in _generic_repair_prompts)
               and not any("SAR 42,000" in p or "42,000 ريال" in p
                           for p in _generic_repair_prompts))
