@@ -3323,7 +3323,7 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
         if days_int:
             duration_parts.append(f"{days_int} " + ("يوم" if days_int == 1 else "يومان" if days_int == 2 else "أيام"))
         duration_phrase = " و".join(duration_parts) if duration_parts else "0 يوم"
-        service_sentence = f"مدة الخدمة في هذا المثال هي {duration_phrase}."
+        service_sentence = f"مدة الخدمة هي {duration_phrase}."
     else:
         duration_parts = []
         if years:
@@ -6875,6 +6875,25 @@ def selftest() -> int:
         globals()["http_request_full"] = fake
         ok, data, msg = groq_generate_json("p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL)
         check("Groq: TPM 429 مع مهلة نصية يتجاوز عبارات plan/billing ويُعاد في الوقت المطلوب",
+              bool(ok) and isinstance(data, dict) and msg == "ok"
+              and len(calls) == 2 and _sleeps == [9.7425])
+
+        # A short/zero Retry-After header must not override a longer TPM delay in the body.
+        _sleeps.clear()
+        _tpm_header_short_body = (
+            b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
+            b'Limit 8000, Used 6718, Requested 2581. Please try again in 9.7425s."}}'
+        )
+        fake, calls = _fake_http([
+            (429, {"Retry-After": "1"}, _tpm_header_short_body),
+            _groq_envelope(lang="ar"),
+        ])
+        globals()["http_request_full"] = fake
+        ok, data, msg = groq_generate_json(
+            "p", api_key=_FAKE_GROQ_KEY, model=DEFAULT_GROQ_MODEL,
+            sleep=_sleeps.append,
+        )
+        check("Groq: مهلة TPM في الجسم تتقدّم على Retry-After أقصر",
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _sleeps == [9.7425])
 
