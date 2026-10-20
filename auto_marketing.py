@@ -236,13 +236,13 @@ MAX_ATTEMPTS = 3
 #   408/425 = انتهاء مهلة أو طلب مبكّر، 429 = تجاوز المعدّل، 5xx = خلل مؤقّت عند المزوّد.
 #   503 (UNAVAILABLE) هو الأكثر وقوعاً: «النموذج يواجه طلباً مرتفعاً حالياً».
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
-# حدّ أعلى صريح: المحاولة الأولى + 3 إعادات = 4 محاولات كحدّ أقصى لكل نسخة لغوية.
+# حدّ أعلى صريح لإعادات Groq المؤقّتة، مع سقف مستقل لكل نسخة لغوية.
 # الإعادة الداخلية ليست محاولة موضوع جديدة ولا دورة تسويق جديدة: عدّاد `attempts`
 # يُزاد مرة واحدة لكل دورة في run_once، لا لكل نداء شبكة.
 GEMINI_MAX_TRIES = 4
 GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
 GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار التصاعدي العادي بين محاولتين
-GROQ_INITIAL_HTTP_TRIES = 3
+GROQ_INITIAL_HTTP_TRIES = 4
 GROQ_MAX_REQUESTS_PER_LANGUAGE = 5  # hard cap including retries/schema and content repair; allows one bounded retry after transient repair 429
 GROQ_LANGUAGE_GAP_SECONDS = 12.0  # cool-down between Arabic and English requests
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
@@ -3126,6 +3126,109 @@ def repair_article85_unexpected_money_claims(data, *, lang: str):
     return fixed
 
 
+def repair_eosb_unexpected_money_claims(data, *, lang: str):
+    """Remove prose sentences with currency claims not matching an already-validated EOSB example.
+
+    Call only when validate_article has checked the calculation fields and the sole
+    rejection is an unexpected currency amount elsewhere in the article. The official
+    calculator fields are never modified; the complete article is validated again after
+    this narrowly scoped text repair.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
+        raise Reject("EOSB money repair: invalid article structure")
+    fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    example = fixed.get("calculation_example")
+    if not isinstance(example, dict):
+        raise Reject("EOSB money repair: calculation example missing")
+
+    # The caller reaches this helper only after the validator has confirmed these
+    # values against the EOSB formula. Use dynamic values, never Article 85 constants.
+    allowed = set()
+    for field in ("monthly_wage", "full_benefit", "payable_benefit"):
+        amount = _parse_eosb_number(example.get(field), field)
+        allowed.add(amount.quantize(EOSB_CENT, rounding=ROUND_HALF_UP))
+
+    if lang == "ar":
+        safe_sentence = (
+            "يُحسب أي مبلغ فعلي من بيانات الحالة نفسها وفق الأحكام النظامية المنطبقة، "
+            "ويجب التحقق من أي مثال إضافي بصورة مستقلة."
+        )
+        safe_heading = "حساب المبلغ وفق بيانات الحالة"
+        safe_question = "كيف يُحسب المبلغ المستحق وفق بيانات الحالة؟"
+        safe_title = "حساب مكافأة نهاية الخدمة وفق بيانات الحالة"
+    else:
+        safe_sentence = (
+            "Any actual amount must be calculated from the case data under the applicable rules; "
+            "any additional example should be checked independently."
+        )
+        safe_heading = "Calculating the amount from case data"
+        safe_question = "How is the applicable benefit calculated from the case data?"
+        safe_title = "Calculating end-of-service benefits from case data"
+
+    changed = False
+
+    def contains_unexpected_money(value):
+        normalized = _normalize_eosb_digits(re.sub(r"\s+", " ", str(value or "")))
+        for match in EOSB_MONEY_CLAIM_RE.finditer(normalized):
+            token = next((group for group in match.groups() if group), "")
+            try:
+                amount = Decimal(token.replace(",", "")).quantize(
+                    EOSB_CENT, rounding=ROUND_HALF_UP
+                )
+            except (InvalidOperation, ValueError):
+                return True
+            if amount not in allowed:
+                return True
+        return False
+
+    def repair_text(value, *, role="prose"):
+        nonlocal changed
+        if not isinstance(value, str) or not value:
+            return value
+        parts = re.split(r"(?<=[.!?؟])\s+", value)
+        repaired = []
+        for part in parts:
+            if contains_unexpected_money(part):
+                if role == "question":
+                    replacement = safe_question
+                elif role == "heading":
+                    replacement = safe_heading
+                elif role == "title":
+                    replacement = safe_title
+                else:
+                    replacement = safe_sentence
+                repaired.append(replacement)
+                changed = True
+            else:
+                repaired.append(part)
+        return " ".join(repaired)
+
+    for key in ("title", "meta_description", "excerpt"):
+        if key in fixed:
+            fixed[key] = repair_text(
+                fixed[key], role="title" if key == "title" else "prose"
+            )
+    for section in fixed["sections"]:
+        if not isinstance(section, dict):
+            continue
+        if "heading" in section:
+            section["heading"] = repair_text(section["heading"], role="heading")
+        if "body" in section:
+            section["body"] = repair_text(section["body"])
+        if isinstance(section.get("bullets"), list):
+            section["bullets"] = [repair_text(item) for item in section["bullets"]]
+    if isinstance(fixed.get("faq"), list):
+        for item in fixed["faq"]:
+            if isinstance(item, dict):
+                if "q" in item:
+                    item["q"] = repair_text(item["q"], role="question")
+                if "a" in item:
+                    item["a"] = repair_text(item["a"])
+    if not changed:
+        raise Reject("EOSB money repair: no unexpected currency amount found")
+    return fixed
+
+
 def repair_article85_deterministic_omissions(data, *, topic, lang: str, published_at: str):
     """Apply only known deterministic Article 85 fixes sequentially, validating after each one."""
     working = json.loads(json.dumps(data, ensure_ascii=False))
@@ -4748,6 +4851,27 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     except Reject as post_repair_exc:
                         article = None
                         post_repair_reason = str(post_repair_exc)
+                    # For non-Article-85 EOSB topics, remove only extra money-bearing
+                    # prose after the numeric calculation fields have passed validation.
+                    # Do not ask the model to invent a second calculation; re-run every gate.
+                    if (article is None and topic["id"] in EOSB_TOPIC_IDS
+                            and topic["id"] != "labor-art85"
+                            and post_repair_reason.startswith(
+                                "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")):
+                        try:
+                            repair_data = repair_eosb_unexpected_money_claims(
+                                repair_data, lang=lang
+                            )
+                            article = validate_article(
+                                repair_data, topic=topic, lang=lang,
+                                published_at=today_iso(),
+                                require_canonical_article85=True,
+                            )
+                            post_repair_reason = ""
+                            post_repair_fixes.append("unexpected non-calculator currency claim removed")
+                        except Reject as money_repair_exc:
+                            article = None
+                            post_repair_reason = str(money_repair_exc)
                 if article is None:
                     repair_failure = post_repair_reason or "تعذّر اجتياز التحقق النهائي بعد الإصلاح"
                     log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة الإصلاح: {redact(repair_failure)}")
@@ -5129,6 +5253,34 @@ def selftest() -> int:
           _money_repaired_article is not None
           and "30,000 ريال" not in json.dumps(_money_repaired_data, ensure_ascii=False)
           and "unexpected currency amount removed" in _money_repair_actions)
+
+    _generic_money_topic = topic_by_id("eosb-full-entitlement")
+    _generic_money_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _generic_money_probe["sections"][0]["body"] += (
+        "\n\nوقد يذكر وصف غير معتمد مبلغ 30,000 ريال في مثال منفصل."
+    )
+    try:
+        validate_article(
+            _generic_money_probe, topic=_generic_money_topic, lang="ar",
+            published_at="2026-01-01", require_canonical_article85=True,
+        )
+        _generic_money_original_reason = ""
+    except Reject as _generic_money_original_exc:
+        _generic_money_original_reason = str(_generic_money_original_exc)
+    _generic_money_clean = repair_eosb_unexpected_money_claims(
+        _generic_money_probe, lang="ar"
+    )
+    _generic_money_article = validate_article(
+        _generic_money_clean, topic=_generic_money_topic, lang="ar",
+        published_at="2026-01-01", require_canonical_article85=True,
+    )
+    check("إصلاح EOSB عام: يزيل المبلغ النقدي الزائد دون تبديل قيم الحاسبة",
+          _generic_money_original_reason.startswith(
+              "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب")
+          and _generic_money_article is not None
+          and "30,000 ريال" not in json.dumps(_generic_money_clean, ensure_ascii=False)
+          and _generic_money_clean["calculation_example"]
+              == _generic_money_probe["calculation_example"])
 
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
