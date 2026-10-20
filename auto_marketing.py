@@ -243,7 +243,7 @@ GEMINI_MAX_TRIES = 4
 GEMINI_BACKOFF_BASE = 2.0   # ثانية — الانتظار يتضاعف: 2s, 4s, 8s …
 GEMINI_BACKOFF_MAX = 30.0   # سقف الانتظار التصاعدي العادي بين محاولتين
 GROQ_INITIAL_HTTP_TRIES = 3
-GROQ_MAX_REQUESTS_PER_LANGUAGE = 4  # hard cap including retries/schema and content repair
+GROQ_MAX_REQUESTS_PER_LANGUAGE = 5  # hard cap including retries/schema and content repair; allows one bounded retry after transient repair 429
 GROQ_LANGUAGE_GAP_SECONDS = 12.0  # cool-down between Arabic and English requests
 # رمز خروج مميّز لفشل توليد المحتوى (لا نجاح مضلّل)، ويوقف كل خطوات النشر بعده.
 EXIT_GENERATION_FAILED = 2
@@ -3246,7 +3246,7 @@ def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
             "مرة واحدة بالضبط: title وmeta_description وexcerpt وsections وfaq وofficial_sources وcalculation_example. "
             "لا تحذف faq أو official_sources أو calculation_example مطلقاً. "
             "في calculation_example أدرج جميع المفاتيح السبعة: monthly_wage وyears وmonths وdays وscenario وfull_benefit وpayable_benefit. "
-            "لموضوع المادة 85 استخدم القيم الثابتة الصحيحة في البرومبت. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
+            "اتبع القواعد والبيانات الخاصة بالموضوع كما وردت في البرومبت الأصلي؛ لا تنقل أرقاماً أو قواعد من موضوع آخر. التزم بمخطط JSON الصارم نفسه؛ لا تغيّر صيغة الإخراج ولا تستخدم JSON mode."
         )
     else:
         reminder = (
@@ -3254,7 +3254,7 @@ def build_groq_schema_repair_prompt(base_prompt: str, *, lang: str) -> str:
             "exactly once: title, meta_description, excerpt, sections, faq, official_sources, and calculation_example. "
             "Never omit faq, official_sources, or calculation_example. "
             "calculation_example must contain all seven keys: monthly_wage, years, months, days, scenario, full_benefit, and payable_benefit. "
-            "For Article 85, use the fixed values given in the prompt. Keep the same strict JSON Schema response format; do not switch to JSON mode."
+            "Follow the topic-specific rules and calculation data from the original prompt; do not import figures or rules from another topic. Keep the same strict JSON Schema response format; do not switch to JSON mode."
         )
     return base_prompt + "\n\n" + reminder + "\n"
 
@@ -4594,7 +4594,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 provider, prompt, api_key=api_key, model=model,
                 tries=GROQ_INITIAL_HTTP_TRIES if provider == "groq" else GEMINI_MAX_TRIES,
                 request_budget=request_budget, reasoning_effort=reasoning_effort)
-            if (not ok and provider == "groq" and topic["id"] == "labor-art85"
+            if (not ok and provider == "groq"
                     and is_groq_incomplete_schema_failure(msg)):
                 record_generation_result(lang, "retrying", "schema_incomplete", msg)
                 log(f"[RETRY] النسخة {lang}: استجابة Groq افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط مع بقاء strict=true.")
@@ -4689,6 +4689,24 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         # One content-repair attempt, with at most one bounded HTTP retry for 429/5xx.
                         # The shared request budget remains the hard ceiling, including this retry.
                         tries=2 if provider == "groq" else GEMINI_MAX_TRIES,
+                        request_budget=request_budget,
+                        reasoning_effort=reasoning_effort,
+                    )
+                # A quality-repair response may itself fail Groq required-key validation.
+                # Spend at most one remaining request on a schema reminder, retaining strict JSON
+                # Schema and the same per-language hard request budget.
+                if (not repair_ok and provider == "groq"
+                        and is_groq_incomplete_schema_failure(repair_msg)
+                        and request_budget is not None
+                        and request_budget.used < request_budget.max_requests):
+                    record_generation_result(lang, "repairing", "schema_incomplete_after_content_repair", repair_msg)
+                    log(f"[RETRY] النسخة {lang}: استجابة إصلاح المحتوى افتقدت حقولاً مطلوبة؛ محاولة واحدة بتذكير المخطط الصارم.")
+                    repair_ok, repair_data, repair_msg = generate_json(
+                        provider,
+                        build_groq_schema_repair_prompt(repair_prompt, lang=lang),
+                        api_key=api_key,
+                        model=model,
+                        tries=1,
                         request_budget=request_budget,
                         reasoning_effort=reasoning_effort,
                     )
