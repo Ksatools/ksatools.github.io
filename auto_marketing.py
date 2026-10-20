@@ -2376,7 +2376,7 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
         )
         notice_body = (
             "مدة الإشعار منفصلة عن نسبة مكافأة الاستقالة. راجع عقد العمل والأحكام النظامية المنطبقة "
-            "لتحديد مهلة الإشعار وإجراءات الاستقالة في حالتك؛ فقد تختلف المتطلبات بحسب العقد والوقائع."
+            "لتحديد مهلة الإشعار وإجراءات الاستقالة في حالتك؛ وقد تبقى متطلبات الإشعار واجبة بحسب نوع العقد والوقائع."
         )
         article86_clause = (
             "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
@@ -2402,7 +2402,7 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
         notice_body = (
             "Notice requirements are separate from the Article 85 benefit ratio. Check the employment contract "
             "and applicable law to determine the notice period and resignation procedure for the specific case; "
-            "do not assume that one notice period applies in every situation."
+            "notice requirements may still apply depending on the contract and its terms."
         )
         article86_clause = (
             "Under Article 86, commissions, sales percentages, and similar wage elements naturally subject to "
@@ -2438,6 +2438,9 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
             if generic_scope.search(part):
                 part = scope_replacement
             if lang == "ar" and minimum_tail.search(part):
+                continue
+            if lang == "ar" and re.search(r"لا\\s*تُ?ستبعد\\s+الأجر الأساسي", part):
+                # The canonical Article 86 sentence immediately below preserves this qualification.
                 continue
             if lang == "en" and bad_notice_claim.search(part):
                 # Article 81 provides a right to leave without notice in specified cases;
