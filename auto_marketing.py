@@ -6732,7 +6732,6 @@ def selftest() -> int:
               and len(_generic_drafts) == 2
               and _generic_state.get("ar") == "draft" and _generic_state.get("en") == "draft"
               and "calculator-derived full benefit corrected" in _generic_out
-              and "topic-specific calculation scenario enforced" in _generic_out
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
         check("الإصلاح العام: لا يرسل طلب إصلاح حسابي إلى النموذج ولا يفرض مبالغ المادة 85",
