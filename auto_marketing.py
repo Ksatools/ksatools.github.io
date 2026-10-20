@@ -718,6 +718,12 @@ def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
                 " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
                 "المكافأة الأساسية والمبلغ المستحق في هذا المثال 42,000 ريال."
             )
+        elif is_eosb and scenario == "article87":
+            example = (
+                " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
+                "يفترض هذا المثال ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته وفق المادة 87، "
+                "وليس استقالة عادية تخضع لنسب المادة 85؛ المكافأة الأساسية والمبلغ المستحق 42,000 ريال."
+            )
         elif is_eosb:
             example = (
                 " مثال اختباري توضيحي: الأجر الشهري 12,000 ريال ومدة الخدمة 6 سنوات؛ "
@@ -753,6 +759,12 @@ def fixture_data(lang: str, topic_id: str = "eosb-basics") -> dict:
         example = (
             " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
             "the base benefit and payable amount in this example are SAR 42,000."
+        )
+    elif is_eosb and scenario == "article87":
+        example = (
+            " Internal illustrative test example: monthly wage SAR 12,000 and six years of service; "
+            "this scenario assumes the worker left work due to force majeure beyond their control under Article 87, "
+            "not an ordinary resignation under Article 85; the base benefit and payable amount are SAR 42,000."
         )
     elif is_eosb:
         example = (
@@ -1464,6 +1476,91 @@ def _parse_eosb_number(value, field: str, *, integer: bool = False) -> Decimal:
     return number
 
 
+def _article87_qualifying_basis(example_text: str) -> bool:
+    """Return whether an Article 87 worked example states a recognized qualifying circumstance."""
+    value = _normalize_eosb_digits(str(example_text or ""))
+    lower = value.lower()
+    if re.search(r"\bforce\s+majeure\b", lower) or re.search(r"قوة\s+قاهرة", value):
+        return True
+    female_worker = bool(re.search(
+        r"\b(?:female worker|woman worker|working woman)\b|المرأة العاملة|العاملة|عاملة",
+        value, re.IGNORECASE,
+    ))
+    if not female_worker:
+        return False
+    marriage = bool(re.search(r"\bmarriage\b|\bmarried\b|زواج|الزواج", lower))
+    childbirth = bool(re.search(
+        r"\b(?:childbirth|giving birth|delivery)\b|ولادة|الوضع|الولادة", lower
+    ))
+    six_months = bool(re.search(r"\b(?:six|6) months\b|ستة أشهر|٦ أشهر|6 أشهر", lower))
+    three_months = bool(re.search(r"\b(?:three|3) months\b|ثلاثة أشهر|٣ أشهر|3 أشهر", lower))
+    return (marriage and six_months) or (childbirth and three_months)
+
+
+def _article87_ordinary_resignation_claim(example_text: str, *, lang: str) -> bool:
+    """Detect explicit prose that defines the Article 87 numeric example as ordinary resignation."""
+    patterns = (
+        [
+            re.compile(
+                r"\b(?:this|the)\s+(?:worked\s+)?example\s+"
+                r"(?:assumes|is|describes|covers|shows)\s+"
+                r"(?:(?:an?|the)\s+)?(?:ordinary\s+)?resignation\b",
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r"\b(?:the\s+)?(?:worker|employee)\s+"
+                r"(?:resigned|resigns|is\s+resigning)\b.{0,70}"
+                r"\b(?:in|for)\s+(?:this|the)\s+example\b",
+                re.IGNORECASE,
+            ),
+        ]
+        if lang != "ar"
+        else [
+            re.compile(
+                r"(?:هذا المثال|المثال|هذا السيناريو|سيناريو المثال).{0,30}"
+                r"(?:يفترض|يصف|يعرض|يتناول|هو).{0,40}"
+                r"(?:استقالة عادية|الاستقالة العادية|استقالة|الاستقالة|استقال|استقالت)"
+            ),
+            re.compile(
+                r"(?:العامل|العاملة)\s+(?:استقال|استقالت|يستقيل|تستقيل)"
+                r".{0,50}(?:في هذا المثال|في المثال)"
+            ),
+        ]
+    )
+    for sentence in re.split(r"(?<=[.!?؟])\s+", str(example_text or "")):
+        for pattern in patterns:
+            match = pattern.search(sentence)
+            if not match:
+                continue
+            prefix = sentence[:match.end()].lower()
+            if lang == "ar":
+                if re.search(r"(?:ليس|ليست|لا|لم|لن|غير|بدون|وليس|وليست).{0,35}(?:استقال|الاستقالة)", prefix):
+                    continue
+            elif re.search(
+                r"\b(?:not|never|no|without|isn't|doesn't|don't|wasn't|weren't)\b"
+                r".{0,45}\b(?:resign|resignation|resigned|resigns)\b",
+                prefix, re.IGNORECASE,
+            ):
+                continue
+            return True
+    return False
+
+
+def validate_eosb_scenario_narrative(*, topic_id: str, scenario: str,
+                                      example_text: str, lang: str) -> None:
+    """Fail closed when the numeric Article 87 scenario and its explanation contradict each other."""
+    if topic_id != "eosb-full-entitlement" or scenario != "article87":
+        return
+    if _article87_ordinary_resignation_claim(example_text, lang=lang):
+        raise Reject(
+            "calculation_example.scenario: نص المثال يصف استقالة عادية بينما الحقول الحسابية تفترض استثناء المادة 87"
+        )
+    if not _article87_qualifying_basis(example_text):
+        raise Reject(
+            "calculation_example.scenario: نص المثال لا يذكر حالة مؤهلة وفق المادة 87"
+        )
+
+
 def validate_eosb_calculation_example(
     raw, *, topic, article_text: str, example_text: str,
     require_canonical_article85: bool = False,
@@ -1556,6 +1653,11 @@ def validate_eosb_calculation_example(
             f"مدة الخدمة بالنص ({rendered} سنة) لا تطابق بيانات الحساب "
             f"({expected_rendered} سنة)"
         )
+
+    validate_eosb_scenario_narrative(
+        topic_id=topic_id, scenario=scenario, example_text=example_text,
+        lang="ar" if has_arabic(example_text) else "en",
+    )
 
     normalized_text = _normalize_eosb_digits(article_text)
     claims = []
@@ -2189,6 +2291,8 @@ def is_quality_repairable_rejection(reason: str, *, topic_id: str) -> bool:
     # when the validator identifies a known calculation/example mismatch.
     if topic_id not in EOSB_TOPIC_IDS:
         return False
+    if value.startswith("calculation_example.scenario: نص المثال"):
+        return True
     return value.startswith((
         "calculation_example.full_benefit: المتوقع ",
         "calculation_example.payable_benefit: المتوقع ",
@@ -3390,6 +3494,29 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
     if changed_duration:
         actions.append("example service duration made explicit and consistent")
 
+    if topic_id == "eosb-full-entitlement" and scenario == "article87":
+        example_text = " ".join(
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in example_sections
+        )
+        if not _article87_qualifying_basis(example_text):
+            if lang == "ar":
+                scenario_sentence = (
+                    "افتراض المثال وفق المادة 87: ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته، "
+                    "وليس استقالة عادية تخضع لنسب المادة 85."
+                )
+            else:
+                scenario_sentence = (
+                    "Article 87 assumption: the worker leaves work due to force majeure beyond their control, "
+                    "not an ordinary resignation under Article 85."
+                )
+            example_sections[0]["body"] = (
+                str(example_sections[0].get("body", "")).rstrip() + "\n\n" + scenario_sentence
+            )
+            actions.append("Article 87 qualifying scenario made explicit")
+
     # The same gate used by validate_eosb_calculation_example disallows unsupported
     # currency figures anywhere in article prose; remove those sentences, not the
     # calculator data, then ensure all authoritative amounts appear with a currency.
@@ -3779,6 +3906,7 @@ def build_quality_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> 
         section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
     )
     is_excerpt_overflow = bool(re.fullmatch(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    scenario_mismatch = value.startswith("calculation_example.scenario: نص المثال")
     calculation_mismatch = value.startswith((
         "calculation_example.full_benefit: المتوقع ",
         "calculation_example.payable_benefit: المتوقع ",
@@ -3810,6 +3938,13 @@ def build_quality_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> 
         elif is_excerpt_overflow:
             correction = (
                 "اختصر excerpt فقط ليقع ضمن 40 إلى 300 حرف مع الحفاظ على المعنى الأساسي، ثم أعد JSON كاملاً."
+            )
+        elif scenario_mismatch:
+            correction = (
+                "اجعل شرح المثال الحسابي متوافقاً مع سيناريو المادة 87 المحدد في البيانات: اذكر بوضوح أن العامل ترك "
+                "العمل بسبب قوة قاهرة خارجة عن إرادته، أو اشرح إحدى حالتي العاملة ضمن المدد النظامية الواردة في المادة 87. "
+                "لا تصف المثال نفسه بأنه استقالة عادية ولا تخلط بين نسب المادة 85 واستثناء المادة 87. حافظ على الأجر "
+                "ومدة الخدمة والأرقام التي يعتمدها المدقق الحتمي، وأعد JSON كاملاً."
             )
         elif calculation_mismatch:
             correction = (
@@ -3847,6 +3982,14 @@ def build_quality_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> 
         elif is_excerpt_overflow:
             correction = (
                 "Shorten only the excerpt to 40–300 characters while preserving its core meaning, then return the complete JSON object."
+            )
+        elif scenario_mismatch:
+            correction = (
+                "Align the worked-example prose with the structured Article 87 scenario: explicitly state that the worker left "
+                "work due to force majeure beyond their control, or explain one of the statutory female-worker cases within "
+                "the relevant marriage or childbirth period. Do not describe this same example as ordinary resignation or mix "
+                "Article 85 resignation ratios with the Article 87 exception. Preserve the wage, service duration, and amounts "
+                "controlled by the deterministic calculator. Return the complete JSON object."
             )
         elif calculation_mismatch:
             correction = (
@@ -5590,7 +5733,57 @@ def selftest() -> int:
           and _eosb_deterministic_fixed["calculation_example"]["payable_benefit"] == "42000.00"
           and "calculator-derived full benefit corrected" in _eosb_deterministic_actions
           and "calculator-derived payable benefit corrected" in _eosb_deterministic_actions
-          and "topic-specific calculation scenario enforced" in _eosb_deterministic_actions)
+          and "topic-specific calculation scenario enforced" in _eosb_deterministic_actions
+          and "Article 87 qualifying scenario made explicit" in _eosb_deterministic_actions)
+
+    _article87_conflict_probe = fixture_data("en", topic_id="eosb-full-entitlement")
+    _article87_example = next(
+        section for section in _article87_conflict_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _article87_example["body"] += (
+        " This example assumes an ordinary resignation after six years."
+    )
+    _article87_conflict_reason = ""
+    try:
+        validate_article(
+            _article87_conflict_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="en", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject as exc:
+        _article87_conflict_reason = str(exc)
+    check("Article 87: رفض تناقض وصف المثال مع سيناريو الحساب حتى عند ذكر القوة القاهرة",
+          _article87_conflict_reason.startswith(
+              "calculation_example.scenario: نص المثال يصف استقالة عادية"
+          ))
+
+    _article87_missing_basis_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _article87_missing_example = next(
+        section for section in _article87_missing_basis_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _article87_missing_example["body"] = re.sub(
+        r"يفترض هذا المثال ترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته وفق المادة 87، "
+        r"وليس استقالة عادية تخضع لنسب المادة 85؛\s*",
+        "", _article87_missing_example["body"]
+    )
+    _article87_missing_reason = ""
+    try:
+        validate_article(
+            _article87_missing_basis_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject as exc:
+        _article87_missing_reason = str(exc)
+    check("Article 87: رفض مثال لا يذكر أي حالة استحقاق مؤهلة",
+          _article87_missing_reason.startswith(
+              "calculation_example.scenario: نص المثال لا يذكر حالة مؤهلة وفق المادة 87"
+          ))
+
     check("EOSB: يضمن ذكر مدة الخدمة والقيم المحسوبة ويزيل مبلغاً زائداً ثم يعيد كل البوابات",
           _eosb_deterministic_article is not None
           and "12,500 ريال" not in json.dumps(_eosb_deterministic_fixed, ensure_ascii=False)
