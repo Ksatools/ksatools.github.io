@@ -2156,6 +2156,36 @@ def is_article85_repairable_rejection(reason: str) -> bool:
             or missing_money or unparseable_money or canonical_example or empty_section or boundary_conflict)
 
 
+def is_quality_repairable_rejection(reason: str, *, topic_id: str) -> bool:
+    """Allow one bounded model repair for safe structural defects and validated EOSB calculation mismatches."""
+    value = str(reason or "")
+    if re.fullmatch(r"sections\[\d+\]\.body: فارغ", value):
+        return True
+    if re.search(r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value):
+        return True
+    if re.fullmatch(r"excerpt: الطول \d+ خارج المدى 40-300", value):
+        return True
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    if section_count:
+        count = int(section_count.group(1))
+        return MAX_SECTIONS < count <= MAX_SECTIONS + 4
+
+    # The structured EOSB calculator remains authoritative. Only allow a rewrite
+    # when the validator identifies a known calculation/example mismatch.
+    if topic_id not in EOSB_TOPIC_IDS:
+        return False
+    return value.startswith((
+        "calculation_example.full_benefit: المتوقع ",
+        "calculation_example.payable_benefit: المتوقع ",
+        "مدة الخدمة بالنص (",
+        "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب",
+        "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق",
+        "المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة",
+        "calculation_example: عند استخدام سنوات كسرية",
+        "calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة",
+    ))
+
+
 def ensure_article85_notice_caveat(data, *, lang: str):
     """Copy an article and add only the standard notice caveat when that specific caveat is missing."""
     if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
@@ -3380,6 +3410,104 @@ def build_article85_repair_prompt(base_prompt: str, *, lang: str, reason: str) -
     return base_prompt + "\n\n" + instructions + clause + "\n"
 
 
+def build_quality_repair_prompt(base_prompt: str, *, lang: str, reason: str) -> str:
+    """Create a single bounded repair instruction without borrowing Article 85-only example values."""
+    value = str(reason or "")
+    empty_section = bool(re.fullmatch(r"sections\[\d+\]\.body: فارغ", value))
+    short_section = bool(re.search(
+        r"sections\[\d+\]\.body: الطول \d+ خارج المدى 120-8000", value
+    ))
+    section_count = re.fullmatch(r"sections: العدد (\d+) خارج المدى \d+-\d+", value)
+    is_section_overflow = bool(
+        section_count and MAX_SECTIONS < int(section_count.group(1)) <= MAX_SECTIONS + 4
+    )
+    is_excerpt_overflow = bool(re.fullmatch(r"excerpt: الطول \d+ خارج المدى 40-300", value))
+    calculation_mismatch = value.startswith((
+        "calculation_example.full_benefit: المتوقع ",
+        "calculation_example.payable_benefit: المتوقع ",
+        "مدة الخدمة بالنص (",
+        "المثال الرقمي في النص يتضمن مبلغاً لا يطابق بيانات الحساب",
+        "المثال الرقمي في النص يجب أن يذكر الأجر والمكافأة الأساسية والمبلغ المستحق",
+        "المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة",
+        "calculation_example: عند استخدام سنوات كسرية",
+        "calculation_example: سنوات الخدمة أو الأشهر أو الأيام خارج الحدود المقبولة",
+    ))
+
+    if lang == "ar":
+        if empty_section:
+            correction = (
+                "يوجد قسم ذو body فارغ. أصلح القسم بإضافة شرح فعلي ودقيق مرتبط بعنوانه، "
+                "أو ادمج مضمونه في قسم مجاور ثم أزل العنوان الفارغ، مع الحفاظ على جميع المعلومات القانونية "
+                "والحسابية والنقاط المفيدة. يجب أن يكون كل body غير فارغ وبطول صالح، وأعد JSON كاملاً."
+            )
+        elif short_section:
+            correction = (
+                "وسّع القسم القصير بمعلومات مفيدة ودقيقة ذات صلة بعنوانه حتى يقع body ضمن الطول المسموح. "
+                "لا تكرر الحشو ولا تحذف قواعد أو تحذيرات مهمة، وأعد JSON كاملاً."
+            )
+        elif is_section_overflow:
+            correction = (
+                "عدد الأقسام يتجاوز الحد المسموح بقليل. ادمج الأقسام المتقاربة مع حفظ كل النصوص والنقاط "
+                "والقواعد الجوهرية، واجعل العدد ضمن الحد المسموح دون إسقاط محتوى مهم، وأعد JSON كاملاً."
+            )
+        elif is_excerpt_overflow:
+            correction = (
+                "اختصر excerpt فقط ليقع ضمن 40 إلى 300 حرف مع الحفاظ على المعنى الأساسي، ثم أعد JSON كاملاً."
+            )
+        elif calculation_mismatch:
+            correction = (
+                "أعد حساب المثال من حقول calculation_example المنظمة ومن القواعد الحسابية الواردة في الطلب الأصلي. "
+                "صحح الحقل الرقمي غير المطابق، واجعل المثال المكتوب والعناوين والملخص والأسئلة المتكررة متسقة مع النتيجة "
+                "المعاد حسابها. لا تستخدم أرقاماً ثابتة من موضوع آخر، ولا تخمّن أو تقرّب نتيجة تخالف الحساب، ولا تغيّر "
+                "الأجر أو مدة الخدمة أو السيناريو إلا إذا كان هناك خطأ مثبت فيها. أعد JSON كاملاً."
+            )
+        else:
+            correction = "صحح سبب الرفض المحدد فقط مع الحفاظ على صحة المحتوى، ثم أعد JSON كاملاً."
+        instructions = (
+            "محاولة إصلاح واحدة محدودة بعد رفض بوابة الجودة. لا تنسخ رسالة الخطأ أو هذه التعليمات داخل المقال. "
+            "حافظ على جميع القواعد القانونية والمعلومات والمصادر المفيدة، ولا تتجاوز أي بوابة تحقق:\n"
+        )
+    else:
+        if empty_section:
+            correction = (
+                "A section body is empty. Repair it by adding accurate, useful prose relevant to its heading, "
+                "or merge its substance into a neighboring section and then remove the empty heading. Preserve all "
+                "material legal rules, calculation details, and useful bullets. Every body must be non-empty and valid "
+                "in length. Return the complete JSON object."
+            )
+        elif short_section:
+            correction = (
+                "Expand the short section with accurate, useful information relevant to its heading until its body "
+                "is within the allowed length. Do not pad with repetition or remove important rules or caveats. "
+                "Return the complete JSON object."
+            )
+        elif is_section_overflow:
+            correction = (
+                "The section count exceeds the permitted limit by a small amount. Merge closely related sections "
+                "while preserving their prose, bullets, substantive legal rules, and caveats. Keep the count within "
+                "the allowed range without discarding material content. Return the complete JSON object."
+            )
+        elif is_excerpt_overflow:
+            correction = (
+                "Shorten only the excerpt to 40–300 characters while preserving its core meaning, then return the complete JSON object."
+            )
+        elif calculation_mismatch:
+            correction = (
+                "Recalculate the worked example from the structured calculation_example fields and the rules in the original prompt. "
+                "Correct the mismatched numeric field, and make the worked-example prose, title, summary, and FAQs consistent with "
+                "the recalculated result. Do not borrow fixed figures from another topic, guess, or round to a value that fails the "
+                "calculation. Do not change the wage, service duration, or scenario unless it is itself demonstrably invalid. "
+                "Return the complete JSON object."
+            )
+        else:
+            correction = "Correct only the identified rejection while preserving content validity, then return the complete JSON object."
+        instructions = (
+            "One bounded repair attempt after a quality-gate rejection. Do not copy the error message or these instructions into the article. "
+            "Preserve all material legal rules, useful information, and sources, and do not bypass any validation gate:\n"
+        )
+    return base_prompt + "\n\n" + instructions + correction + "\n"
+
+
 def validate_article85_legal_claims(article_text: str, *, lang: str) -> None:
     """Reject material wording errors in generated Article 85 articles before any draft is saved."""
     text_norm = re.sub(r"\s+", " ", str(article_text or "")).strip().lower()
@@ -4533,7 +4661,12 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         record_generation_result(lang, "repairing", "deterministic_repair_rejection", reason)
 
             if not deterministic_repair_done:
-                if topic["id"] != "labor-art85" or not is_article85_repairable_rejection(reason):
+                repairable = (
+                    is_article85_repairable_rejection(reason)
+                    if topic["id"] == "labor-art85"
+                    else is_quality_repairable_rejection(reason, topic_id=topic["id"])
+                )
+                if not repairable:
                     log(f"[REJECT] النسخة {lang} لم تجتز بوابة الجودة: {redact(reason)}")
                     state["topics"][topic["id"]][lang] = "rejected"
                     record_generation_result(lang, "rejected", "quality_gate", reason)
@@ -4543,9 +4676,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 if dry_run:
                     repair_ok, repair_data, repair_msg = True, fixture_data(lang, topic_id=topic["id"]), "fixture"
                 else:
+                    repair_prompt = (
+                        build_article85_repair_prompt(prompt, lang=lang, reason=reason)
+                        if topic["id"] == "labor-art85"
+                        else build_quality_repair_prompt(prompt, lang=lang, reason=reason)
+                    )
                     repair_ok, repair_data, repair_msg = generate_json(
                         provider,
-                        build_article85_repair_prompt(prompt, lang=lang, reason=reason),
+                        repair_prompt,
                         api_key=api_key,
                         model=model,
                         # One content-repair attempt, with at most one bounded HTTP retry for 429/5xx.
@@ -4575,11 +4713,23 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                         state["topics"][topic["id"]][lang] = "rejected"
                         record_generation_result(lang, "rejected", "deterministic_repair", repair_failure)
                         continue
-                repair_data, article, post_repair_fixes, post_repair_reason = (
-                    repair_article85_deterministic_omissions(
-                        repair_data, topic=topic, lang=lang, published_at=today_iso()
+                if topic["id"] == "labor-art85":
+                    repair_data, article, post_repair_fixes, post_repair_reason = (
+                        repair_article85_deterministic_omissions(
+                            repair_data, topic=topic, lang=lang, published_at=today_iso()
+                        )
                     )
-                )
+                else:
+                    post_repair_fixes = []
+                    try:
+                        article = validate_article(
+                            repair_data, topic=topic, lang=lang, published_at=today_iso(),
+                            require_canonical_article85=True,
+                        )
+                        post_repair_reason = ""
+                    except Reject as post_repair_exc:
+                        article = None
+                        post_repair_reason = str(post_repair_exc)
                 if article is None:
                     repair_failure = post_repair_reason or "تعذّر اجتياز التحقق النهائي بعد الإصلاح"
                     log(f"[REJECT] النسخة {lang} بقيت مرفوضة بعد محاولة الإصلاح: {redact(repair_failure)}")
@@ -6032,6 +6182,75 @@ def selftest() -> int:
               len(_repair_requests) == 1
               and _repair_calls == {"ar": 1, "en": 0}
               and "Article 86 rule enforced" in _repair_out)
+
+        # Regression: quality repair also covers non-Article-85 EOSB topics, without
+        # importing Article 85's canonical example numbers or bypassing validation.
+        check("الإصلاح العام: يقبل عيوب البنية والحساب المعروفة فقط",
+              is_quality_repairable_rejection("sections[7].body: فارغ",
+                                              topic_id="eosb-full-entitlement")
+              and is_quality_repairable_rejection(
+                  "calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00",
+                  topic_id="eosb-full-entitlement")
+              and not is_quality_repairable_rejection(
+                  "calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00",
+                  topic_id="salary-net-gosi-guide")
+              and not is_quality_repairable_rejection(
+                  "sections: العدد 18 خارج المدى 3-12",
+                  topic_id="eosb-full-entitlement"))
+        _generic_calc_prompt_ar = build_quality_repair_prompt(
+            build_prompt(topic_by_id("eosb-full-entitlement"), "ar"), lang="ar",
+            reason="calculation_example.full_benefit: المتوقع 42000.00 وليس 41900.00")
+        _generic_empty_prompt_en = build_quality_repair_prompt(
+            build_prompt(topic_by_id("eosb-full-entitlement"), "en"), lang="en",
+            reason="sections[7].body: فارغ")
+        check("الإصلاح العام: تعليمات ثنائية اللغة لا تفرض أرقام المادة 85 الثابتة",
+              "أعد حساب المثال من حقول calculation_example المنظمة" in _generic_calc_prompt_ar
+              and "Recalculate the worked example from the structured calculation_example fields" in _generic_empty_prompt_en
+              and "42,000 ريال" not in _generic_calc_prompt_ar
+              and "SAR 42,000" not in _generic_empty_prompt_en)
+
+        _sandbox()
+        _generic_before = (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes())
+        _generic_calls, _generic_requests = {"ar": 0, "en": 0}, []
+
+        def _generic_quality_repair_http(url, **kwargs):
+            request = json.loads(kwargs["data"].decode("utf-8"))
+            _generic_requests.append(request)
+            request_prompt = _request_prompt(kwargs)
+            _generic_lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
+            _generic_calls[_generic_lang] += 1
+            generated = fixture_data(_generic_lang, topic_id="eosb-full-entitlement")
+            if _generic_calls[_generic_lang] == 1:
+                if _generic_lang == "ar":
+                    generated["calculation_example"]["full_benefit"] = "41900"
+                else:
+                    generated["sections"][0]["body"] = ""
+            return _groq_envelope(content=json.dumps(generated, ensure_ascii=False)) + (url,)
+
+        globals()["http_request_full"] = _generic_quality_repair_http
+        _generic_rc, _generic_out = _capture_run(
+            mode="draft", provider="groq", api_key=_FAKE_GROQ_KEY,
+            model=DEFAULT_GROQ_MODEL, skip_source_check=True,
+            topic_id="eosb-full-entitlement")
+        _generic_drafts = list(DRAFTS_DIR.glob("**/*.html"))
+        _generic_state = load_state()["topics"]["eosb-full-entitlement"]
+        _generic_repair_prompts = [
+            req["messages"][-1]["content"] for req in _generic_requests
+            if isinstance(req.get("messages"), list) and req["messages"]
+        ]
+        check("الإصلاح العام: يصلح خطأ الحساب والقسم الفارغ بالعربية والإنجليزية في محاولة محدودة",
+              _generic_rc == 0 and _generic_calls == {"ar": 2, "en": 2}
+              and len(_generic_drafts) == 2
+              and _generic_state.get("ar") == "draft" and _generic_state.get("en") == "draft"
+              and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
+              and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
+        check("الإصلاح العام: التوليد التصحيحي يحافظ على المخطط الكامل ولا يستورد مبالغ المادة 85",
+              len(_generic_requests) == 4
+              and any("Recalculate the worked example from the structured calculation_example fields"
+                      in p for p in _generic_repair_prompts)
+              and any("A section body is empty" in p for p in _generic_repair_prompts)
+              and not any("SAR 42,000" in p or "42,000 ريال" in p
+                          for p in _generic_repair_prompts))
 
         # أعد عزل مساحة الاختبار حتى لا تؤثر المسودة السابقة على اختبارات الإعداد.
         _sandbox()
