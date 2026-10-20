@@ -1023,6 +1023,46 @@ class RequestBudget:
     def __init__(self, max_requests):
         self.max_requests = max(1, int(max_requests))
         self.used = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+        self.usage_responses = 0
+        self.rate_limit_hits = 0
+        self.last_rate_limit_limit_tokens = None
+        self.last_rate_limit_remaining_tokens = None
+        self.last_rate_limit_reset_tokens = None
+
+    def record_usage(self, usage):
+        if not isinstance(usage, dict):
+            return
+        def token_count(name):
+            value = usage.get(name)
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError, OverflowError):
+                return 0
+            return max(0, parsed)
+        prompt = token_count("prompt_tokens")
+        completion = token_count("completion_tokens")
+        total = token_count("total_tokens")
+        if not any(name in usage for name in ("prompt_tokens", "completion_tokens", "total_tokens")):
+            return
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
+        self.total_tokens += total if "total_tokens" in usage else prompt + completion
+        self.usage_responses += 1
+
+    def record_response(self, status, headers):
+        if status == 429:
+            self.rate_limit_hits += 1
+        for field, header_name in (
+            ("last_rate_limit_limit_tokens", "x-ratelimit-limit-tokens"),
+            ("last_rate_limit_remaining_tokens", "x-ratelimit-remaining-tokens"),
+            ("last_rate_limit_reset_tokens", "x-ratelimit-reset-tokens"),
+        ):
+            value = header_get(headers, header_name)
+            if value is not None:
+                setattr(self, field, value)
 
     def consume(self):
         if self.used >= self.max_requests:
@@ -1054,6 +1094,8 @@ def provider_request(url, body, headers, *, provider, timeout=90, tries=GEMINI_M
                 timeout=timeout,
                 retries=0,
             )
+            if request_budget is not None:
+                request_budget.record_response(status, resp_headers)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last_exc = exc
             if attempt + 1 >= tries:
@@ -2074,6 +2116,8 @@ def groq_generate_json(prompt, *, api_key, model, timeout=90, tries=GEMINI_MAX_T
         return False, None, "invalid_envelope_json"
     if not isinstance(envelope, dict):
         return False, None, "invalid_envelope_shape"
+    if request_budget is not None:
+        request_budget.record_usage(envelope.get("usage"))
     if envelope.get("error"):
         # خطأ أُعلن داخل جسم الاستجابة (بعض الأخطاء تصل بترميز 200) — بلا كشف أسرار.
         return False, None, "provider_error: " + redact(json.dumps(envelope.get("error"), ensure_ascii=False)[:200])
@@ -5052,6 +5096,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             "reason": redact(str(reason or ""))[:500],
             "http_requests": budget.used if budget is not None else None,
             "http_request_limit": budget.max_requests if budget is not None else None,
+            "prompt_tokens": budget.prompt_tokens if budget is not None else None,
+            "completion_tokens": budget.completion_tokens if budget is not None else None,
+            "total_tokens": budget.total_tokens if budget is not None else None,
+            "usage_responses": budget.usage_responses if budget is not None else None,
+            "rate_limit_hits": budget.rate_limit_hits if budget is not None else None,
+            "rate_limit_limit_tokens": budget.last_rate_limit_limit_tokens if budget is not None else None,
+            "rate_limit_remaining_tokens": budget.last_rate_limit_remaining_tokens if budget is not None else None,
+            "rate_limit_reset_tokens": budget.last_rate_limit_reset_tokens if budget is not None else None,
             "reasoning_effort": (
                 requested_english_effort if provider == "groq" and lang == "en" else
                 "low" if provider == "groq" else None
@@ -5901,6 +5953,39 @@ def selftest() -> int:
           fractional_article["calculation_example"]["years"] == "6.5"
           and fractional_article["calculation_example"]["full_benefit"] == "48000.00"
           and fractional_article["calculation_example"]["payable_benefit"] == "32000.00")
+
+    eosb_article87_fraction_ar = fixture_data("ar", topic_id="eosb-full-entitlement")
+    eosb_article87_fraction_ar["calculation_example"].update({
+        "years": "4.5", "months": "0", "days": "0",
+        "full_benefit": "27000", "payable_benefit": "27000",
+    })
+    eosb_article87_fraction_ar["sections"][3]["body"] = (
+        eosb_article87_fraction_ar["sections"][3]["body"]
+        .replace("مدة الخدمة 6 سنوات", "مدة الخدمة 4.5 سنوات")
+        .replace("42,000 ريال", "27,000 ريال")
+    )
+    article87_fraction_ar = validate_article(
+        eosb_article87_fraction_ar, topic=topic_by_id("eosb-full-entitlement"),
+        lang="ar", published_at="2026-01-01")
+    eosb_article87_fraction_en = fixture_data("en", topic_id="eosb-full-entitlement")
+    eosb_article87_fraction_en["calculation_example"].update({
+        "years": "4.5", "months": "0", "days": "0",
+        "full_benefit": "27000", "payable_benefit": "27000",
+    })
+    eosb_article87_fraction_en["sections"][3]["body"] = (
+        eosb_article87_fraction_en["sections"][3]["body"]
+        .replace("six years of service", "4.5 years of service")
+        .replace("42,000", "27,000")
+    )
+    article87_fraction_en = validate_article(
+        eosb_article87_fraction_en, topic=topic_by_id("eosb-full-entitlement"),
+        lang="en", published_at="2026-01-01")
+    check("المادة 87: يقبل 4.5 سنوات في اللغتين ويحسب المكافأة كاملة تناسبياً دون نسبة الاستقالة",
+          article87_fraction_ar["calculation_example"]["full_benefit"] == "27000.00"
+          and article87_fraction_ar["calculation_example"]["payable_benefit"] == "27000.00"
+          and article87_fraction_en["calculation_example"]["full_benefit"] == "27000.00"
+          and article87_fraction_en["calculation_example"]["payable_benefit"] == "27000.00"
+          and not validate_eosb_translation_pair(article87_fraction_ar, article87_fraction_en))
 
     eosb_components = fixture_data("ar", topic_id="labor-art85")
     eosb_components["calculation_example"].update({
@@ -7102,9 +7187,18 @@ def selftest() -> int:
             b'{"error":{"message":"Rate limit reached on tokens per minute (TPM): '
             b'Limit 8000, Used 6327, Requested 2477. Please try again in 6.03s."}}'
         )
+        _repair_success = _groq_envelope(lang="en")
         fake, calls = _fake_http([
-            (429, {}, _repair_tpm_body),
-            _groq_envelope(lang="en"),
+            (429, {
+                "x-ratelimit-limit-tokens": "8000",
+                "x-ratelimit-remaining-tokens": "0",
+                "x-ratelimit-reset-tokens": "6.03s",
+            }, _repair_tpm_body),
+            (200, {
+                "x-ratelimit-limit-tokens": "8000",
+                "x-ratelimit-remaining-tokens": "7300",
+                "x-ratelimit-reset-tokens": "0.3s",
+            }, _repair_success[2]),
         ])
         globals()["http_request_full"] = fake
         _repair_budget = RequestBudget(2)
@@ -7114,6 +7208,15 @@ def selftest() -> int:
         check("Groq repair: يعيد 429 المؤقت مرة واحدة بعد مهلة الخادم ضمن سقف الطلبات",
               bool(ok) and isinstance(data, dict) and msg == "ok"
               and len(calls) == 2 and _repair_budget.used == 2 and _sleeps == [6.03])
+        check("Groq: يسجّل الاستخدام الفعلي ورأس TPM دون حفظ نص المقال أو البرومبت",
+              _repair_budget.prompt_tokens == 10
+              and _repair_budget.completion_tokens == 20
+              and _repair_budget.total_tokens == 30
+              and _repair_budget.usage_responses == 1
+              and _repair_budget.rate_limit_hits == 1
+              and _repair_budget.last_rate_limit_limit_tokens == "8000"
+              and _repair_budget.last_rate_limit_remaining_tokens == "7300"
+              and _repair_budget.last_rate_limit_reset_tokens == "0.3s")
 
         # (ي-2) Retry-After الرقمي يتقدّم على تلميحات فوترة عامة، لكن الحصة اليومية أدناه تبقى استثناءً.
         _sleeps.clear()
@@ -8197,7 +8300,11 @@ def selftest() -> int:
               and len(_report_data.get("results", [])) == 2
               and all("http_requests" in row and "stage" in row and "status" in row
                       and "reason" in row for row in _report_data["results"])
-              and all(row.get("http_requests") == 1 for row in _report_data["results"]))
+              and all(row.get("http_requests") == 1 for row in _report_data["results"])
+              and all(row.get("prompt_tokens") == 10 and row.get("completion_tokens") == 20
+                      and row.get("total_tokens") == 30 and row.get("usage_responses") == 1
+                      and row.get("rate_limit_hits") == 0
+                      for row in _report_data["results"]))
 
         # (ظ-4) main() يمرّر --article-lang إلى run_once فعلاً (بمفتاح وهمي واستجابة محاكاة).
         _sandbox()
