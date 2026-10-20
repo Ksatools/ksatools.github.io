@@ -5096,6 +5096,7 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
             "reason": redact(str(reason or ""))[:500],
             "http_requests": budget.used if budget is not None else None,
             "http_request_limit": budget.max_requests if budget is not None else None,
+            "token_usage_scope": "cumulative_per_language" if budget is not None else None,
             "prompt_tokens": budget.prompt_tokens if budget is not None else None,
             "completion_tokens": budget.completion_tokens if budget is not None else None,
             "total_tokens": budget.total_tokens if budget is not None else None,
@@ -8301,7 +8302,8 @@ def selftest() -> int:
               and all("http_requests" in row and "stage" in row and "status" in row
                       and "reason" in row for row in _report_data["results"])
               and all(row.get("http_requests") == 1 for row in _report_data["results"])
-              and all(row.get("prompt_tokens") == 10 and row.get("completion_tokens") == 20
+              and all(row.get("token_usage_scope") == "cumulative_per_language"
+                      and row.get("prompt_tokens") == 10 and row.get("completion_tokens") == 20
                       and row.get("total_tokens") == 30 and row.get("usage_responses") == 1
                       and row.get("rate_limit_hits") == 0
                       for row in _report_data["results"]))
