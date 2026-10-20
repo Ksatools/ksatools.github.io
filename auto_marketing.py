@@ -2943,15 +2943,15 @@ def ensure_article85_article86_clause(data, *, lang: str):
     )
     if lang == "ar":
         article86_already_covered = (
-            bool(re.search(r"المادة\\s*86", combined, re.I))
+            bool(re.search(r"المادة\s*86", combined, re.I))
             and bool(re.search(r"العمولات|نسب المبيعات|عناصر الأجر", combined))
             and bool(re.search(r"زيادة", combined) and re.search(r"نقص", combined))
-            and bool(re.search(r"اتفاق\\s+صريح", combined))
+            and bool(re.search(r"اتفاق\s+صريح", combined))
             and "الأجر الأساسي" in combined
         )
     else:
         article86_already_covered = (
-            bool(re.search(r"article\\s*86", combined, re.I))
+            bool(re.search(r"article\s*86", combined, re.I))
             and bool(re.search(r"commissions?|sales percentages?|similar wage elements", combined, re.I))
             and "increase" in combined.lower() and "decrease" in combined.lower()
             and "agreement" in combined.lower() and "basic wage" in combined.lower()
@@ -2966,7 +2966,7 @@ def ensure_article85_article86_clause(data, *, lang: str):
             not bool(re.search(
                 heading_pattern,
                 str(fixed["sections"][index].get("heading", "")) + " "
-                + str(fixed["sections"][index].get("body", ""),
+                + str(fixed["sections"][index].get("body", "")),
                 re.IGNORECASE,
             )),
             len(str(fixed["sections"][index].get("body") or "")),
