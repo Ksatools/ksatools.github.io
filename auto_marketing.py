@@ -2439,7 +2439,7 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
                 part = scope_replacement
             if lang == "ar" and minimum_tail.search(part):
                 continue
-            if lang == "ar" and re.search(r"لا\\s*تُ?ستبعد\\s+الأجر الأساسي", part):
+            if lang == "ar" and re.search(r"لا\s*تُ?ستبعد\s+الأجر الأساسي", part):
                 # The canonical Article 86 sentence immediately below preserves this qualification.
                 continue
             if lang == "en" and bad_notice_claim.search(part):
