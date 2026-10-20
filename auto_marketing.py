@@ -3426,6 +3426,13 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
                 raise Reject("المثال الرقمي: تعذّر تحليل مبلغ مذكور بجانب العملة")
     if claims_in_text - allowed_amounts:
         fixed = repair_eosb_unexpected_money_claims(fixed, lang=lang)
+        # The money repair deep-copies the article, so refresh section references before
+        # appending any missing authoritative figures.
+        example_sections = [
+            section for section in fixed["sections"]
+            if isinstance(section, dict)
+            and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+        ]
         actions.append("unsupported currency claims removed from prose")
 
     # Re-check after sanitizing; if one of the authoritative amounts is not named
