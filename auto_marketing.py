@@ -2379,8 +2379,8 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
             "لتحديد مهلة الإشعار وإجراءات الاستقالة في حالتك؛ فقد تختلف المتطلبات بحسب العقد والوقائع."
         )
         article86_clause = (
-            "وفق المادة 86، يجوز الاتفاق على استبعاد كل أو بعض العمولات ونسب المبيعات والعناصر المشابهة "
-            "من أساس حساب المكافأة إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يمتد ذلك إلى الأجر الأساسي."
+            "وفق المادة 86، يجوز بالاتفاق الصريح استبعاد العمولات ونسب المبيعات والعناصر المشابهة "
+            "من الأجر المحتسب للمكافأة فقط إذا كانت بطبيعتها قابلة للزيادة والنقص؛ ولا يعني ذلك استبعاد الأجر الأساسي."
         )
         generic_scope = re.compile(
             r"تُ?طبق هذه المادة على العاملين في القطاعين العام والخاص", re.I
@@ -2405,9 +2405,9 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
             "do not assume that one notice period applies in every situation."
         )
         article86_clause = (
-            "Under Article 86, the employer and worker may agree to exclude all or some commissions, sales "
-            "percentages, and similar wage components from the calculation basis when those components are "
-            "naturally subject to increase and decrease. This does not allow the basic wage itself to be excluded."
+            "Under Article 86, commissions, sales percentages, and similar wage elements naturally subject to "
+            "increase and decrease may be excluded from the benefit calculation only by explicit agreement; "
+            "this does not exclude basic wage."
         )
         generic_scope = re.compile(
             r"(?:this article|article\s*85).{0,100}\b(?:applies to|covers)\s+(?:all\s+)?"
@@ -2526,6 +2526,33 @@ def normalize_article85_editorial_copy(data, *, lang: str, example_text: str):
                 transform(item, section_heading=heading)
                 for item in sec["bullets"] if isinstance(item, str)
             ]
+
+    # Some internal fixtures and generated drafts lack a dedicated notice section. Keep the
+    # caveat visible without repeating the full Article 85 ratio table in another section.
+    has_notice_section = any(
+        isinstance(sec, dict)
+        and re.search(r"(?:إشعار|الإشعار|notice)", str(sec.get("heading") or ""), re.I)
+        for sec in fixed["sections"]
+    )
+    if not has_notice_section:
+        new_section = {
+            "heading": "متطلبات الإشعار" if lang == "ar" else "Notice requirements",
+            "body": notice_body,
+            "bullets": [],
+        }
+        if len(fixed["sections"]) < MAX_SECTIONS:
+            fixed["sections"].append(new_section)
+        else:
+            candidates = [
+                sec for sec in fixed["sections"]
+                if isinstance(sec, dict)
+                and not re.search(r"(?:مثال|example)", str(sec.get("heading") or ""), re.I)
+                and len(str(sec.get("body") or "").strip()) + len(notice_body) + 2 <= 8000
+            ]
+            if not candidates:
+                raise Reject("Article 85 editorial normalization: no room for notice caveat")
+            target = min(candidates, key=lambda sec: len(str(sec.get("body") or "")))
+            target["body"] = str(target.get("body") or "").strip() + "\n\n" + notice_body
 
     return fixed
 
