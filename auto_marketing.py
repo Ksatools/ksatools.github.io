@@ -6205,7 +6205,7 @@ def selftest() -> int:
             reason="sections[7].body: فارغ")
         check("الإصلاح العام: تعليمات ثنائية اللغة لا تفرض أرقام المادة 85 الثابتة",
               "أعد حساب المثال من حقول calculation_example المنظمة" in _generic_calc_prompt_ar
-              and "Recalculate the worked example from the structured calculation_example fields" in _generic_empty_prompt_en
+              and "A section body is empty" in _generic_empty_prompt_en
               and "42,000 ريال" not in _generic_calc_prompt_ar
               and "SAR 42,000" not in _generic_empty_prompt_en)
 
@@ -6246,7 +6246,7 @@ def selftest() -> int:
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
         check("الإصلاح العام: التوليد التصحيحي يحافظ على المخطط الكامل ولا يستورد مبالغ المادة 85",
               len(_generic_requests) == 4
-              and any("Recalculate the worked example from the structured calculation_example fields"
+              and any("أعد حساب المثال من حقول calculation_example المنظمة"
                       in p for p in _generic_repair_prompts)
               and any("A section body is empty" in p for p in _generic_repair_prompts)
               and not any("SAR 42,000" in p or "42,000 ريال" in p
