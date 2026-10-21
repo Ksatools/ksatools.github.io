@@ -3348,7 +3348,10 @@ def repair_eosb_unexpected_money_claims(data, *, lang: str):
         nonlocal changed
         if not isinstance(value, str) or not value:
             return value
-        parts = re.split(r"(?<=[.!?؟])\s+", value)
+        # Keep blank-line paragraphs independent even when the preceding generated
+        # sentence lacks terminal punctuation, so a safe duration line is not dropped
+        # with a neighboring unsupported currency claim.
+        parts = re.split(r"(?<=[.!?؟])\s+|\n[ \t]*\n+", value)
         repaired = []
         for part in parts:
             if contains_unexpected_money(part):
@@ -3498,7 +3501,9 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
         return _extract_eosb_service_durations(str(text or ""))
 
     def repair_duration_text(value):
-        pieces = re.split(r"(?<=[.!?؟])\s+", str(value or ""))
+        # Paragraph breaks are boundaries too; generated text may omit punctuation
+        # immediately before the deterministic service-duration paragraph.
+        pieces = re.split(r"(?<=[.!?؟])\s+|\n[ \t]*\n+", str(value or ""))
         output = []
         changed = False
         for piece in pieces:
@@ -3650,6 +3655,48 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
             )
         example_sections[0]["body"] = str(example_sections[0].get("body", "")).rstrip() + "\n\n" + amounts_sentence
         actions.append("authoritative currency figures made explicit")
+
+    # Reassert the service-duration invariant after all currency cleanup. The cleanup
+    # above works on a deep copy and may rewrite a whole sentence/paragraph; a generated
+    # paragraph without terminal punctuation must never erase the calculator-aligned
+    # service duration. Keep this as a fail-closed gate rather than relaxing validation.
+    example_sections = [
+        section for section in fixed["sections"]
+        if isinstance(section, dict)
+        and re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+    ]
+    if not example_sections:
+        raise Reject("EOSB deterministic example repair: worked-example section missing after cleanup")
+
+    def final_example_text():
+        return " ".join(
+            str(section.get("body", "")) + " " + " ".join(
+                item for item in section.get("bullets", []) if isinstance(item, str)
+            )
+            for section in example_sections
+        )
+
+    final_claims = duration_claims(final_example_text())
+    if any(claim != total_years for claim in final_claims):
+        for section in example_sections:
+            if isinstance(section.get("body"), str):
+                section["body"], _ = repair_duration_text(section["body"])
+            if isinstance(section.get("bullets"), list):
+                section["bullets"] = [
+                    repair_duration_text(item)[0] if isinstance(item, str) else item
+                    for item in section["bullets"]
+                ]
+        final_claims = duration_claims(final_example_text())
+
+    if not any(claim == total_years for claim in final_claims):
+        example_sections[0]["body"] = (
+            str(example_sections[0].get("body", "")).rstrip() + "\n\n" + service_sentence
+        )
+        final_claims = duration_claims(final_example_text())
+        actions.append("post-sanitization service duration enforced")
+
+    if not final_claims or any(claim != total_years for claim in final_claims):
+        raise Reject("EOSB deterministic example repair: service duration invariant could not be enforced")
 
     return fixed, actions
 
@@ -5846,6 +5893,45 @@ def selftest() -> int:
           ) == [Decimal("6")]
           and "unsupported currency claims removed from prose" in _eosb_deterministic_actions
           and "authoritative currency figures made explicit" in _eosb_deterministic_actions)
+
+    # Regression for the production failure: the generated paragraph ends with an
+    # unsupported amount but no punctuation, then the service sentence is appended as
+    # a separate paragraph. Currency cleanup must preserve the safe duration sentence.
+    _eosb_paragraph_money_probe = fixture_data("ar", topic_id="eosb-full-entitlement")
+    _eosb_paragraph_money_example = next(
+        section for section in _eosb_paragraph_money_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _eosb_paragraph_money_example["body"] = (
+        _AR_BODY + " ويذكر النص مبلغاً زائداً قدره 12,500 ريال"
+    )
+    _eosb_paragraph_money_example["bullets"] = []
+    _eosb_paragraph_money_fixed, _eosb_paragraph_money_actions = (
+        prepare_eosb_example_deterministically(
+            _eosb_paragraph_money_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar",
+        )
+    )
+    _eosb_paragraph_money_article = None
+    try:
+        _eosb_paragraph_money_article = validate_article(
+            _eosb_paragraph_money_fixed,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="ar", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject:
+        pass
+    _eosb_paragraph_money_text = " ".join(
+        str(section["body"]) + " " + " ".join(section.get("bullets", []))
+        for section in _eosb_paragraph_money_fixed["sections"]
+        if re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+    )
+    check("EOSB: لا يحذف تنظيف العملة مدة الخدمة عند غياب النقطة قبل فقرة جديدة",
+          _eosb_paragraph_money_article is not None
+          and "12,500 ريال" not in json.dumps(_eosb_paragraph_money_fixed, ensure_ascii=False)
+          and Decimal("6") in _extract_eosb_service_durations(_eosb_paragraph_money_text))
 
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
