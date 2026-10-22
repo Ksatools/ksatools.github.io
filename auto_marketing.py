@@ -3737,7 +3737,7 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str, canonical_
                     "beyond their control; this is an exceptional circumstance, not an ordinary resignation."
                 )
             example_sections[0]["body"] = (
-                str(example_sections[0].get("body", "")).rstrip() + "\\n\\n" + scenario_sentence
+                str(example_sections[0].get("body", "")).rstrip() + "\n\n" + scenario_sentence
             )
             actions.append("Article 87 qualifying scenario reasserted after currency cleanup")
 
