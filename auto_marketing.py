@@ -3395,7 +3395,7 @@ def repair_eosb_unexpected_money_claims(data, *, lang: str):
     return fixed
 
 
-def prepare_eosb_example_deterministically(data, *, topic, lang: str):
+def prepare_eosb_example_deterministically(data, *, topic, lang: str, canonical_example=None):
     """Make the structured EOSB calculator authoritative before any model-repair request.
 
     This does not relax validation. It corrects only derived benefit fields from the
@@ -3410,6 +3410,21 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
     if not isinstance(data, dict) or not isinstance(data.get("sections"), list):
         raise Reject("EOSB deterministic example repair: invalid article structure")
     fixed = json.loads(json.dumps(data, ensure_ascii=False))
+    if canonical_example is not None:
+        if (not isinstance(canonical_example, dict)
+                or set(canonical_example) != set(EOSB_CALCULATION_FIELDS)
+                or any(not isinstance(canonical_example[field], str)
+                       or not canonical_example[field].strip()
+                       for field in EOSB_CALCULATION_FIELDS)):
+            raise Reject("EOSB deterministic example repair: invalid canonical bilingual example")
+        # The Arabic version is validated first in a both-language run. Treat its
+        # calculator inputs as the shared pair source, then repair/revalidate English
+        # prose against those same values instead of accepting independently invented
+        # wage/service inputs in each translation.
+        fixed["calculation_example"] = {
+            field: canonical_example[field].strip()
+            for field in EOSB_CALCULATION_FIELDS
+        }
     example = fixed.get("calculation_example")
     if not isinstance(example, dict) or set(example) != set(EOSB_CALCULATION_FIELDS):
         raise Reject("EOSB deterministic example repair: calculation fields missing")
@@ -3418,6 +3433,8 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str):
         raise Reject("EOSB deterministic example repair: calculation fields empty")
 
     actions = []
+    if canonical_example is not None:
+        actions.append("bilingual calculation example synchronized from Arabic version")
     required_scenario = EOSB_REQUIRED_SCENARIO.get(topic_id)
     current_scenario = example["scenario"].strip().lower()
     scenario = required_scenario or current_scenario
@@ -5227,8 +5244,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                 continue
         elif topic["id"] in EOSB_TOPIC_IDS:
             try:
+                canonical_example = (
+                    results["ar"].get("calculation_example")
+                    if lang == "en" and results.get("ar") is not None
+                    else None
+                )
                 data, eosb_fixes = prepare_eosb_example_deterministically(
-                    data, topic=topic, lang=lang
+                    data, topic=topic, lang=lang,
+                    canonical_example=canonical_example,
                 )
                 deterministic_actions.extend(eosb_fixes)
                 if eosb_fixes:
@@ -7074,6 +7097,19 @@ def selftest() -> int:
             _generic_lang = "en" if "لغة المخرجات: English" in request_prompt else "ar"
             _generic_calls[_generic_lang] += 1
             generated = fixture_data(_generic_lang, topic_id="eosb-full-entitlement")
+            if _generic_lang == "en":
+                # Simulate a fluent but inconsistent second translation: its own
+                # numbers and prose are valid in isolation, but differ from Arabic.
+                generated["calculation_example"].update({
+                    "monthly_wage": "15000", "years": "4", "months": "0", "days": "0",
+                    "scenario": "article87", "full_benefit": "30000", "payable_benefit": "30000",
+                })
+                _example = generated["sections"][3]
+                _example["body"] = (
+                    _example["body"].replace("12,000", "15,000")
+                    .replace("six years", "four years")
+                    .replace("42,000", "30,000")
+                )
             if _generic_calls[_generic_lang] == 1:
                 if _generic_lang == "ar":
                     generated["calculation_example"]["full_benefit"] = "41900"
@@ -7097,6 +7133,8 @@ def selftest() -> int:
               and len(_generic_drafts) == 2
               and _generic_state.get("ar") == "draft" and _generic_state.get("en") == "draft"
               and "calculator-derived full benefit corrected" in _generic_out
+              and "bilingual calculation example synchronized from Arabic version" in _generic_out
+              and "[REJECT] مثال المكافأة مختلف بين النسختين" not in _generic_out
               and not ARTICLES_DIR.exists() and not SOCIAL_TXT.exists()
               and (ARTICLES_JSON.read_bytes(), SITEMAP_XML.read_bytes()) == _generic_before)
         check("الإصلاح العام: لا يرسل طلب إصلاح حسابي إلى النموذج ولا يفرض مبالغ المادة 85",
