@@ -5377,8 +5377,14 @@ def run_once(*, mode, topic_id=None, social_lang="both", article_lang="both", dr
                     post_repair_fixes = []
                     if topic["id"] in EOSB_TOPIC_IDS:
                         try:
+                            canonical_example = (
+                                results["ar"].get("calculation_example")
+                                if lang == "en" and results.get("ar") is not None
+                                else None
+                            )
                             repair_data, post_repair_fixes = prepare_eosb_example_deterministically(
-                                repair_data, topic=topic, lang=lang
+                                repair_data, topic=topic, lang=lang,
+                                canonical_example=canonical_example,
                             )
                         except Reject as prep_repair_exc:
                             log(f"[NOTE] النسخة {lang}: لم يكتمل الإصلاح الحسابي الحتمي بعد محاولة النموذج "
