@@ -3715,6 +3715,32 @@ def prepare_eosb_example_deterministically(data, *, topic, lang: str, canonical_
     if not final_claims or any(claim != total_years for claim in final_claims):
         raise Reject("EOSB deterministic example repair: service duration invariant could not be enforced")
 
+    # Currency sanitization can remove an entire sentence that contains both an
+    # unsupported amount and the only qualifying Article 87 circumstance. Reassert
+    # that legal basis after all prose cleanup, then let the normal validator reject
+    # any remaining contradictory ordinary-resignation claim.
+    if topic_id == "eosb-full-entitlement" and scenario == "article87":
+        cleaned_example_text = final_example_text()
+        if not _article87_qualifying_basis(cleaned_example_text):
+            if _article87_ordinary_resignation_claim(cleaned_example_text, lang=lang):
+                raise Reject(
+                    "EOSB deterministic example repair: Article 87 prose conflicts with ordinary resignation"
+                )
+            if lang == "ar":
+                scenario_sentence = (
+                    "افتراض المادة 87 في هذا المثال: يترك العامل العمل بسبب قوة قاهرة خارجة عن إرادته، "
+                    "وهي حالة استثنائية وليست استقالة عادية."
+                )
+            else:
+                scenario_sentence = (
+                    "Article 87 assumption for this example: the worker leaves work due to force majeure "
+                    "beyond their control; this is an exceptional circumstance, not an ordinary resignation."
+                )
+            example_sections[0]["body"] = (
+                str(example_sections[0].get("body", "")).rstrip() + "\\n\\n" + scenario_sentence
+            )
+            actions.append("Article 87 qualifying scenario reasserted after currency cleanup")
+
     return fixed, actions
 
 
@@ -5961,6 +5987,47 @@ def selftest() -> int:
           _eosb_paragraph_money_article is not None
           and "12,500 ريال" not in json.dumps(_eosb_paragraph_money_fixed, ensure_ascii=False)
           and Decimal("6") in _extract_eosb_service_durations(_eosb_paragraph_money_text))
+
+    # Regression: an unsupported currency claim shares the sentence carrying the
+    # only Article 87 qualifying basis. Cleanup must remove the amount, then restore
+    # the qualifying circumstance deterministically without a second model request.
+    _article87_money_probe = fixture_data("en", topic_id="eosb-full-entitlement")
+    _article87_money_example = next(
+        section for section in _article87_money_probe["sections"]
+        if re.search(r"(?:مثال|example)", section["heading"], re.IGNORECASE)
+    )
+    _article87_money_example["body"] = (
+        "This worked example assumes force majeure beyond the worker's control and includes "
+        "an unsupported amount of SAR 12,500."
+    )
+    _article87_money_fixed, _article87_money_actions = (
+        prepare_eosb_example_deterministically(
+            _article87_money_probe,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="en",
+        )
+    )
+    _article87_money_article = None
+    try:
+        _article87_money_article = validate_article(
+            _article87_money_fixed,
+            topic=topic_by_id("eosb-full-entitlement"),
+            lang="en", published_at="2026-01-01",
+            require_canonical_article85=True,
+        )
+    except Reject:
+        pass
+    _article87_money_text = " ".join(
+        str(section.get("body", "")) + " " + " ".join(section.get("bullets", []))
+        for section in _article87_money_fixed["sections"]
+        if re.search(r"(?:مثال|example)", str(section.get("heading", "")), re.IGNORECASE)
+    )
+    check("Article 87: restores qualifying circumstance after currency cleanup",
+          _article87_money_article is not None
+          and "force majeure" in _article87_money_text.lower()
+          and "12,500" not in json.dumps(_article87_money_fixed, ensure_ascii=False)
+          and "Article 87 qualifying scenario reasserted after currency cleanup"
+              in _article87_money_actions)
 
     check("بوابة قانونية: ترفض الادعاء بأن مخالفة الإشعار تفقد العامل جزءاً من المكافأة (عربي)",
           _rejects(lambda: validate_article85_legal_claims(
