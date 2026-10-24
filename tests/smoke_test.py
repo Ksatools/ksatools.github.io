@@ -724,7 +724,7 @@ def browser_checks(headless):
               pg.evaluate("document.getElementById('theme-color-dark').media === 'all' && document.getElementById('theme-color-light').media === 'not all'"))
         pg.evaluate("applyTheme('light')")
         check("دعم تقليل الحركة موجود",
-              pg.evaluate("document.querySelector('style').textContent.includes('prefers-reduced-motion: reduce')"))
+              pg.evaluate("Array.from(document.querySelectorAll('style')).some(el => el.textContent.includes('prefers-reduced-motion: reduce'))"))
         check("يوجد data-i18n-html لنصوص الإخلاء",
               pg.evaluate("document.querySelectorAll('[data-i18n-html]').length") >= 1)
         check("رابط مشاركة X يستخدم x.com intent",

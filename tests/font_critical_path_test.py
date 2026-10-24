@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Protect the CLS-safe critical path from deferred font CSS regressions.
+"""Synthetic critical-path comparison of inline WOFF2 faces vs remote font CSS.
 
-Locally serves the production markup with a simulated slow Google Fonts CSS
-response. Compares the stable blocking link to an injected deferred version
-representing the published PR #52 regression. No external requests or edits.
-The synthetic fixture does not replace production PageSpeed measurement.
+Compares the actual current page against a reconstructed former blocking
+Google Fonts stylesheet (served with controlled 750 ms latency). This measures
+DOM readiness, not production Lighthouse LCP. No external network is used.
 """
 from __future__ import annotations
 
@@ -15,16 +14,13 @@ import time
 import unittest
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import sync_playwright
 
-
 ROOT = Path(__file__).resolve().parents[1]
-SLOW_CSS = 1.8
-FONT_FILE = Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf")
-FONT_PATTERN = r"https://fonts\.googleapis\.com/css2\?[^\"<]+"
-STYLESHEET_PATTERN = r'<link\b[^>]*href="https://fonts\.googleapis\.com/css2\?[^"]+"[^>]*>'
+REMOTE_CSS = "https://fonts.googleapis.com/css2?family=Cairo&display=optional"
+DELAY_MS = 750
 
 
 class FixtureHandler(SimpleHTTPRequestHandler):
@@ -32,43 +28,23 @@ class FixtureHandler(SimpleHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        path = urlsplit(self.path).path
-        if path in ("/", "/index.html") and "font-test" in self.path:
+        parsed = urlsplit(self.path)
+        mode = parse_qs(parsed.query).get("font-test", [""])[0]
+        if parsed.path in ("/", "/index.html") and mode in ("remote", "local"):
             markup = (ROOT / "index.html").read_text(encoding="utf-8")
-            mode = "blocking" if "font-test=blocking" in self.path else "nonblocking"
-            if mode == "nonblocking":
-                # Regression control: PR #52 deferred the font CSS and
-                # allowed it to change font metrics after first paint.
-                old = ' rel="stylesheet" />'
-                deferred = ' rel="stylesheet" media="print" onload="this.media=\'all\'" />'
-                if markup.count(old) != 1:
-                    raise AssertionError("Expected exactly one font stylesheet")
-                markup = markup.replace(old, deferred, 1)
-            markup, replaced = re.subn(FONT_PATTERN, "/__slow_font_css", markup)
-            if replaced != 1:
-                raise AssertionError(f"Expected one font stylesheet, found {replaced}")
+            if mode == "remote":
+                # A/B control: previous blocking Google CSS fetch, not a
+                # candidate production modification.
+                markup, count = re.subn(
+                    r'<style id="local-web-fonts">[\s\S]*?</style>',
+                    f'<link rel="stylesheet" href="{REMOTE_CSS}" />',
+                    markup,
+                )
+                if count != 1:
+                    raise AssertionError("Missing current inline web fonts")
             body = markup.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        elif path == "/__slow_font_css":
-            time.sleep(SLOW_CSS)
-            css = (
-                '@font-face{font-family:"Cairo";'
-                'src:url("/__fixture_font.ttf") format("truetype");'
-                'font-weight:400 900;font-display:optional;}'
-            ).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/css")
-            self.send_header("Content-Length", str(len(css)))
-            self.end_headers()
-            self.wfile.write(css)
-        elif path == "/__fixture_font.ttf":
-            body = FONT_FILE.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "font/ttf")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -76,15 +52,11 @@ class FixtureHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
 
-class FontCriticalPathTests(unittest.TestCase):
+class LocalFontCriticalPathTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not FONT_FILE.is_file():
-            raise RuntimeError(f"Runner missing deterministic font fixture: {FONT_FILE}")
-        cls.http = ThreadingHTTPServer(
-            ("127.0.0.1", 0),
-            functools.partial(FixtureHandler, directory=str(ROOT)),
-        )
+        handler = functools.partial(FixtureHandler, directory=str(ROOT))
+        cls.http = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         cls.thread = threading.Thread(target=cls.http.serve_forever, daemon=True)
         cls.thread.start()
         cls.origin = f"http://127.0.0.1:{cls.http.server_port}"
@@ -99,86 +71,84 @@ class FontCriticalPathTests(unittest.TestCase):
         cls.http.server_close()
         cls.thread.join(timeout=5)
 
-    def create_context(self):
-        ctx = self.browser.new_context(
-            viewport={"width": 390, "height": 844},
-            is_mobile=True,
-            has_touch=True,
-            device_scale_factor=1,
-        )
-
-        def block_external(route):
-            if route.request.url.startswith(self.origin + "/"):
-                route.continue_()
-            else:
-                route.fulfill(status=200, body="", content_type="text/plain")
-
-        ctx.route("**/*", block_external)
-        return ctx
-
-    def test_stylesheet_is_blocking_with_optional_font_display(self):
+    def test_inline_font_faces_leave_no_external_stylesheet_dependency(self):
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        tags = re.findall(STYLESHEET_PATTERN, html)
-        self.assertEqual(len(tags), 1, tags)
-        self.assertIn("display=optional", tags[0])
-        self.assertIn('rel="stylesheet"', tags[0])
-        self.assertNotIn('media="print"', tags[0])
-        self.assertNotIn("onload=", tags[0])
-        self.assertNotIn("<noscript><link href=\"https://fonts.googleapis.com", html)
+        self.assertEqual(html.count('<style id="local-web-fonts">'), 1)
+        self.assertNotIn('fonts.googleapis.com', html)
+        self.assertNotIn('fonts.gstatic.com', html)
+        self.assertNotIn('media="print" onload=', html)
+        self.assertIn('font-display: optional', html)
 
     def navigate(self, mode, language):
-        ctx = self.create_context()
-        page = ctx.new_page()
-        page.add_init_script("""{
-          window.__fontCriticalShifts = [];
-          new PerformanceObserver(entries => {
-            for (const entry of entries.getEntries()) {
-              if (!entry.hadRecentInput) window.__fontCriticalShifts.push(entry.value);
-            }
-          }).observe({type: 'layout-shift', buffered: true});
-        }""")
-        start = time.perf_counter()
-        page.goto(
-            self.origin + f"/?font-test={mode}&lang={language}",
-            wait_until="domcontentloaded",
-            timeout=15000,
+        ctx = self.browser.new_context(
+            viewport={"width": 390, "height": 844},
+            is_mobile=True, has_touch=True, device_scale_factor=1,
         )
-        dcl = (time.perf_counter() - start) * 1000
-        page.locator("#eos-tool").wait_for(timeout=10000)
-        before = page.locator("main").bounding_box()["y"]
-        # Leave enough time for the slow CSS and fixture font to finish.
-        page.wait_for_timeout(int(SLOW_CSS * 1000 + 350))
-        after = page.locator("main").bounding_box()["y"]
-        cls = page.evaluate(
-            "() => (window.__fontCriticalShifts || []).reduce((a,b)=>a+b,0)"
-        )
-        media = page.locator('link[href="/__slow_font_css"]').first.get_attribute("media")
-        print(f"[FONT-PATH] {mode} lang={language} DCL={dcl:.0f}ms "
-              f"main_shift={after-before:.2f}px CLS={cls:.5f} media={media}",
-              flush=True)
-        ctx.close()
-        return dcl, cls, abs(after - before), media
+        remote_requests = []
 
-    def test_delayed_stylesheet_finishes_before_main_is_visible(self):
-        # Reproduce the network dependency that PR #52 moved after the
-        # first paint. Stable CSS deliberately delays DCL, so any font
-        # metrics are known by the time the page is first displayed.
-        for lang in ("ar", "en"):
-            with self.subTest(language=lang):
-                blocking_dcl, blocking_cls, blocking_jump, media = self.navigate(
-                    "blocking", lang
+        def isolate(route):
+            if route.request.url.startswith(self.origin + "/"):
+                return route.continue_()
+            if route.request.url.startswith("https://fonts.googleapis.com/"):
+                remote_requests.append(route.request.url)
+                time.sleep(DELAY_MS / 1000)
+                return route.fulfill(
+                    status=200,
+                    body="/* simulated 750 ms remote stylesheet */",
+                    content_type="text/css",
                 )
-                deferred_dcl, _, _, deferred_media = self.navigate(
-                    "nonblocking", lang
+            return route.fulfill(status=200, body="", content_type="text/plain")
+
+        try:
+            ctx.route("**/*", isolate)
+            page = ctx.new_page()
+            page.add_init_script("""{
+              window.__fontPathShifts = [];
+              new PerformanceObserver(list => {
+                for (const item of list.getEntries()) {
+                  if (!item.hadRecentInput) window.__fontPathShifts.push(item.value);
+                }
+              }).observe({type: 'layout-shift', buffered: true});
+            }""")
+            start = time.perf_counter()
+            page.goto(
+                self.origin + f"/?font-test={mode}&lang={language}",
+                wait_until="domcontentloaded",
+                timeout=20000,
+            )
+            dcl = (time.perf_counter() - start) * 1000
+            page.locator("#eos-tool").wait_for(timeout=10000)
+            before = page.locator("main").bounding_box()["y"]
+            page.wait_for_timeout(400)
+            after = page.locator("main").bounding_box()["y"]
+            cls = page.evaluate(
+                "() => (window.__fontPathShifts || []).reduce((a,b)=>a+b,0)"
+            )
+            print(
+                f"[LOCAL-CSS] mode={mode} lang={language} "
+                f"DCL={dcl:.0f}ms CLS={cls:.5f} "
+                f"shift={after-before:.2f}px remote={len(remote_requests)}",
+                flush=True,
+            )
+            return dcl, cls, abs(after-before), remote_requests
+        finally:
+            ctx.close()
+
+    def test_inline_faces_remove_remote_css_wait_without_late_layout_shift(self):
+        for language in ("ar", "en"):
+            with self.subTest(language=language):
+                remote_dcl, _, _, remote = self.navigate("remote", language)
+                local_dcl, local_cls, jump, actual_remote = self.navigate(
+                    "local", language
                 )
+                self.assertEqual(len(remote), 1)
+                self.assertEqual(actual_remote, [])
                 self.assertGreater(
-                    blocking_dcl - deferred_dcl, 850,
-                    f"Blocking {blocking_dcl:.0f}ms, deferred {deferred_dcl:.0f}ms",
+                    remote_dcl - local_dcl, 400,
+                    f"remote {remote_dcl:.0f}ms local {local_dcl:.0f}ms",
                 )
-                self.assertIsNone(media)
-                self.assertEqual(deferred_media, "all")
-                self.assertLessEqual(blocking_jump, 2.0)
-                self.assertLess(blocking_cls, 0.03)
+                self.assertLess(local_cls, 0.10)
+                self.assertLessEqual(jump, 2.0)
 
 
 if __name__ == "__main__":
