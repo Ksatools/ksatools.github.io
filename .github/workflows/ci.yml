@@ -55,7 +55,7 @@ jobs:
       - name: فحوص Python (compile + selftest + verify)
         run: |
           set -euo pipefail
-          python -m py_compile auto_marketing.py
+          python -m py_compile auto_marketing.py tests/production_smoke_test.py tests/browser_regression_test.py
           python auto_marketing.py --selftest
           python auto_marketing.py --verify
 
@@ -108,6 +108,7 @@ jobs:
             echo "::warning::Google Chrome غير موجود في الـrunner — قد يُتخطّى فحص المتصفّح."
           fi
           python tests/smoke_test.py
+          python tests/browser_regression_test.py
 
       - name: مقارنة PDF قبل/بعد عند تغيير قواعد الطباعة
         id: print_compare
