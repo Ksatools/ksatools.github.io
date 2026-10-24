@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Compare critical-path timing with blocking and non-blocking font CSS.
+"""Protect the CLS-safe critical path from deferred font CSS regressions.
 
-Serves the current index.html from localhost. The only edited response is
-the font URL, replaced with a deterministic slow local fixture. No requests
-leave the browser test, and the actual site files are not modified.
+Locally serves the production markup with a simulated slow Google Fonts CSS
+response. Compares the stable blocking link to an injected deferred version
+representing the published PR #52 regression. No external requests or edits.
+The synthetic fixture does not replace production PageSpeed measurement.
 """
 from __future__ import annotations
 
@@ -35,17 +36,17 @@ class FixtureHandler(SimpleHTTPRequestHandler):
         if path in ("/", "/index.html") and "font-test" in self.path:
             markup = (ROOT / "index.html").read_text(encoding="utf-8")
             mode = "blocking" if "font-test=blocking" in self.path else "nonblocking"
-            if mode == "blocking":
-                # A/B control: same current markup but use the original
-                # render-blocking stylesheet attributes from the prior release.
-                markup = markup.replace(
-                    ' rel="stylesheet" media="print" onload="this.media=\'all\'"',
-                    ' rel="stylesheet"',
-                    1,
-                )
+            if mode == "nonblocking":
+                # Regression control: PR #52 deferred the font CSS and
+                # allowed it to change font metrics after first paint.
+                old = ' rel="stylesheet" />'
+                deferred = ' rel="stylesheet" media="print" onload="this.media=\'all\'" />'
+                if markup.count(old) != 1:
+                    raise AssertionError("Expected exactly one font stylesheet")
+                markup = markup.replace(old, deferred, 1)
             markup, replaced = re.subn(FONT_PATTERN, "/__slow_font_css", markup)
-            if replaced != 2:
-                raise AssertionError(f"Expected active + noscript fonts, found {replaced}")
+            if replaced != 1:
+                raise AssertionError(f"Expected one font stylesheet, found {replaced}")
             body = markup.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -115,16 +116,15 @@ class FontCriticalPathTests(unittest.TestCase):
         ctx.route("**/*", block_external)
         return ctx
 
-    def test_stylesheet_is_nonblocking_with_noscript_fallback(self):
+    def test_stylesheet_is_blocking_with_optional_font_display(self):
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        active = re.findall(STYLESHEET_PATTERN, html)
-        self.assertEqual(len(active), 2)
-        self.assertIn('display=optional', active[0])
-        self.assertIn('media="print"', active[0])
-        self.assertIn('onload="this.media=\'all\'"', active[0])
-        self.assertIn('<noscript>', html)
-        self.assertIn(active[1], html.split("<noscript>", 1)[1])
-        self.assertNotIn("onload=", active[1])
+        tags = re.findall(STYLESHEET_PATTERN, html)
+        self.assertEqual(len(tags), 1, tags)
+        self.assertIn("display=optional", tags[0])
+        self.assertIn('rel="stylesheet"', tags[0])
+        self.assertNotIn('media="print"', tags[0])
+        self.assertNotIn("onload=", tags[0])
+        self.assertNotIn("<noscript><link href=\"https://fonts.googleapis.com", html)
 
     def navigate(self, mode, language):
         ctx = self.create_context()
@@ -159,20 +159,26 @@ class FontCriticalPathTests(unittest.TestCase):
         ctx.close()
         return dcl, cls, abs(after - before), media
 
-    def test_slow_css_is_removed_from_first_paint_path_without_cls_regression(self):
-        before, _, _, _ = self.navigate("blocking", "ar")
-        arabic, arabic_cls, arabic_jump, media_ar = self.navigate("nonblocking", "ar")
-        english, english_cls, english_jump, media_en = self.navigate("nonblocking", "en")
-        self.assertGreater(before - arabic, 850,
-                           f"Blocking {before:.0f}ms, nonblocking {arabic:.0f}ms")
-        self.assertLess(english, before - 850)
-        self.assertEqual((media_ar, media_en), ("all", "all"))
-        for language, cls, jump in (
-            ("ar", arabic_cls, arabic_jump), ("en", english_cls, english_jump)
-        ):
-            with self.subTest(language=language):
-                self.assertLessEqual(jump, 2.0)
-                self.assertLess(cls, 0.03)
+    def test_delayed_stylesheet_finishes_before_main_is_visible(self):
+        # Reproduce the network dependency that PR #52 moved after the
+        # first paint. Stable CSS deliberately delays DCL, so any font
+        # metrics are known by the time the page is first displayed.
+        for lang in ("ar", "en"):
+            with self.subTest(language=lang):
+                blocking_dcl, blocking_cls, blocking_jump, media = self.navigate(
+                    "blocking", lang
+                )
+                deferred_dcl, _, _, deferred_media = self.navigate(
+                    "nonblocking", lang
+                )
+                self.assertGreater(
+                    blocking_dcl - deferred_dcl, 850,
+                    f"Blocking {blocking_dcl:.0f}ms, deferred {deferred_dcl:.0f}ms",
+                )
+                self.assertIsNone(media)
+                self.assertEqual(deferred_media, "all")
+                self.assertLessEqual(blocking_jump, 2.0)
+                self.assertLess(blocking_cls, 0.03)
 
 
 if __name__ == "__main__":
