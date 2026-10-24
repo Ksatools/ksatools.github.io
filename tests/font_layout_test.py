@@ -59,12 +59,18 @@ class MobileFontLayoutTests(unittest.TestCase):
         markup = (ROOT / "index.html").read_text(encoding="utf-8")
         links = re.findall(r'<link\b[^>]*href="([^"]+)"[^>]*>', markup)
         font_links = [v for v in links if v.startswith("https://fonts.googleapis.com/css2?")]
-        # One non-blocking active link plus a noscript fallback using the
-        # same optional-font setting. Neither may reintroduce display=swap.
-        self.assertEqual(len(font_links), 2, font_links)
-        self.assertEqual(font_links[0], font_links[1])
-        for font_url in font_links:
-            self.assertEqual(parse_qs(urlsplit(font_url).query).get("display"), ["optional"])
+        # Exactly one blocking stylesheet. An async media/onload switch
+        # arrived after first paint in production and raised CLS to 0.356.
+        self.assertEqual(len(font_links), 1, font_links)
+        self.assertEqual(parse_qs(urlsplit(font_links[0]).query).get("display"), ["optional"])
+        font_tags = re.findall(
+            r'<link\b[^>]*href="https://fonts\.googleapis\.com/css2\?[^"]+"[^>]*>',
+            markup,
+        )
+        self.assertEqual(len(font_tags), 1)
+        self.assertIn('rel="stylesheet"', font_tags[0])
+        self.assertNotIn('media="print"', font_tags[0])
+        self.assertNotIn('onload=', font_tags[0])
 
     def test_mobile_main_does_not_jump_when_font_finishes_late(self):
         for language in ("ar", "en"):
