@@ -89,10 +89,18 @@ class BrowserRegressionTests(unittest.TestCase):
                 # Filter by a real category, then restore all articles.
                 category = next((r["category"] for r in records if r.get("category")), None)
                 self.assertIsNotNone(category)
+                selected_label = page.locator(
+                    f'#category option[value="{category}"]'
+                ).inner_text()
                 page.locator("#category").select_option(category)
+                # The UI also infers a category when the raw field is absent
+                # or unrecognized; assert actual filter behavior, not raw counts.
+                filtered_count = page.locator("#results .card").count()
+                self.assertGreater(filtered_count, 0)
+                self.assertLessEqual(filtered_count, len(records))
                 self.assertEqual(
-                    page.locator("#results .card").count(),
-                    sum(1 for r in records if r.get("category") == category),
+                    page.locator("#results .card .pill").all_inner_texts(),
+                    [selected_label] * filtered_count,
                 )
                 page.locator("#category").select_option("all")
                 self.assertEqual(page.locator("#results .card").count(), self.count_for(lang))
