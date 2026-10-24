@@ -264,23 +264,8 @@ jobs:
         if: steps.mode.outputs.mode == 'auto'
         run: |
           set -euo pipefail
-          mkdir -p _site
-          # نسخ ملفات الموقع العامة فقط
-          cp -r articles _site/ 2>/dev/null || true
-          cp index.html _site/
-          cp privacy.html _site/ 2>/dev/null || true
-          cp 404.html _site/ 2>/dev/null || true
-          cp robots.txt _site/ 2>/dev/null || true
-          cp sitemap.xml _site/ 2>/dev/null || true
-          cp ads.txt _site/ 2>/dev/null || true
-          cp -r assets _site/ 2>/dev/null || true
-          cp -r icons _site/ 2>/dev/null || true
-          cp *.png _site/ 2>/dev/null || true
-          cp *.svg _site/ 2>/dev/null || true
-          cp *.ico _site/ 2>/dev/null || true
-          cp *.webmanifest _site/ 2>/dev/null || true
-          # لا ننسخ: marketing_state.json, latest_social_post.txt, .github/, docs/, tests/, *.py, .gitignore
-          echo "محتوى _site:"
+          python scripts/build_site_artifact.py --output _site
+          # راجع الملفات المنسوخة في الأثر قبل رفعه
           find _site -type f | sort
 
       - name: رفع أثر الموقع للنشر
