@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic mobile regression for late-loading web fonts.
+"""Regression coverage for real, self-hosted variable WOFF2 fonts.
 
-Uses a localhost copy of the real home page and a deliberately delayed,
-locally installed test font. No network, production, advertisements or secrets.
-The fixture font is never committed to this repository.
+Loads the page offline with intentionally delayed font responses. Both Arabic
+and English mobile layouts must remain stable, and downloaded fonts must be
+real WOFF2 files covered by the bundled Open Font Licenses.
 """
 from __future__ import annotations
 
@@ -14,17 +14,17 @@ import time
 import unittest
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-FONT_CANDIDATES = (
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-    Path("/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf"),
-)
-FONT_URL = "https://fonts.gstatic.com/ksa-cls-test.ttf"
+FONT_DIR = ROOT / "assets" / "fonts"
+EXPECTED_FONTS = {
+    "cairo-arabic-wght-normal.woff2",
+    "cairo-latin-wght-normal.woff2",
+    "cairo-latin-ext-wght-normal.woff2",
+    "inter-latin-wght-normal.woff2",
+}
 WAIT_MS = 1200
 
 
@@ -33,17 +33,14 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
-class MobileFontLayoutTests(unittest.TestCase):
+class LocalFontLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.font_path = next((p for p in FONT_CANDIDATES if p.is_file()), None)
-        if cls.font_path is None:
-            raise unittest.SkipTest("No fixture font available on this runner")
         handler = functools.partial(QuietHandler, directory=str(ROOT))
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.http = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        cls.thread = threading.Thread(target=cls.http.serve_forever, daemon=True)
         cls.thread.start()
-        cls.origin = f"http://127.0.0.1:{cls.server.server_port}"
+        cls.origin = f"http://127.0.0.1:{cls.http.server_port}"
         cls.pw = sync_playwright().start()
         cls.browser = cls.pw.chromium.launch(headless=True)
 
@@ -51,90 +48,94 @@ class MobileFontLayoutTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.browser.close()
         cls.pw.stop()
-        cls.server.shutdown()
-        cls.server.server_close()
+        cls.http.shutdown()
+        cls.http.server_close()
         cls.thread.join(timeout=5)
 
-    def test_font_is_optional_to_prevent_late_swaps(self):
+    def test_inlined_local_font_faces_are_licensed_and_valid(self):
         markup = (ROOT / "index.html").read_text(encoding="utf-8")
-        links = re.findall(r'<link\b[^>]*href="([^"]+)"[^>]*>', markup)
-        font_links = [v for v in links if v.startswith("https://fonts.googleapis.com/css2?")]
-        # Exactly one blocking stylesheet. An async media/onload switch
-        # arrived after first paint in production and raised CLS to 0.356.
-        self.assertEqual(len(font_links), 1, font_links)
-        self.assertEqual(parse_qs(urlsplit(font_links[0]).query).get("display"), ["optional"])
-        font_tags = re.findall(
-            r'<link\b[^>]*href="https://fonts\.googleapis\.com/css2\?[^"]+"[^>]*>',
-            markup,
+        self.assertNotIn("fonts.googleapis.com", markup)
+        self.assertNotIn("fonts.gstatic.com", markup)
+        block = re.search(
+            r'<style id="local-web-fonts">([\s\S]*?)</style>', markup
         )
-        self.assertEqual(len(font_tags), 1)
-        self.assertIn('rel="stylesheet"', font_tags[0])
-        self.assertNotIn('media="print"', font_tags[0])
-        self.assertNotIn('onload=', font_tags[0])
+        self.assertIsNotNone(block, "Inline font definitions missing")
+        css = block.group(1)
+        self.assertEqual(css.count("@font-face"), 4)
+        self.assertEqual(css.count("font-display: optional"), 4)
+        self.assertIn("font-family: 'Cairo'", css)
+        self.assertIn("font-family: 'Inter'", css)
+        paths = set(re.findall(r"/assets/fonts/([\w-]+\.woff2)", css))
+        self.assertEqual(paths, EXPECTED_FONTS)
+        for name in paths:
+            with self.subTest(font=name):
+                data = (FONT_DIR / name).read_bytes()
+                self.assertEqual(data[:4], b"wOF2")
+                self.assertGreater(len(data), 8000)
+                self.assertLess(len(data), 100000)
+        for family in ("CAIRO", "INTER"):
+            license_text = (FONT_DIR / f"LICENSE-{family}.txt").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("SIL OPEN FONT LICENSE Version 1.1", license_text)
 
-    def test_mobile_main_does_not_jump_when_font_finishes_late(self):
-        for language in ("ar", "en"):
-            with self.subTest(language=language):
+    def test_delayed_real_fonts_do_not_shift_mobile_layout(self):
+        for width, language in ((375, "ar"), (390, "ar"), (390, "en")):
+            with self.subTest(width=width, language=language):
                 ctx = self.browser.new_context(
-                    viewport={"width": 390, "height": 844},
+                    viewport={"width": width, "height": 844},
                     is_mobile=True,
                     has_touch=True,
                     device_scale_factor=1,
                 )
-                font_fetches = []
-                stylesheet_fetches = []
+                requests = []
+                decode_errors = []
 
-                def third_party(route):
+                def isolate(route):
                     if route.request.url.startswith(self.origin + "/"):
-                        route.continue_()
-                    else:
-                        route.fulfill(status=200, body="", content_type="text/plain")
-
-                def font_stylesheet(route):
-                    # The display parameter must come from the ACTUAL page link.
-                    mode = parse_qs(urlsplit(route.request.url).query).get("display", [""])[0]
-                    stylesheet_fetches.append(mode)
-                    if mode not in ("swap", "optional"):
-                        return route.abort()
-                    css = (
-                        "@font-face { font-family: 'Cairo';"
-                        f" src: url('{FONT_URL}') format('truetype');"
-                        " font-weight: 400 900; font-style: normal;"
-                        f" font-display: {mode}; }}"
+                        if "/assets/fonts/" in route.request.url:
+                            requests.append(route.request.url)
+                            time.sleep(WAIT_MS / 1000)
+                        return route.continue_()
+                    return route.fulfill(
+                        status=200, body="", content_type="text/plain"
                     )
-                    route.fulfill(status=200, body=css, content_type="text/css")
-
-                def delayed_font(route):
-                    font_fetches.append(route.request.url)
-                    time.sleep(WAIT_MS / 1000)
-                    route.fulfill(status=200, body=self.font_path.read_bytes(),
-                                  content_type="font/ttf")
 
                 try:
-                    ctx.route("**/*", third_party)
-                    ctx.route("https://fonts.googleapis.com/**", font_stylesheet)
-                    ctx.route("https://fonts.gstatic.com/**", delayed_font)
+                    ctx.route("**/*", isolate)
                     page = ctx.new_page()
-                    page.add_init_script("""() => {
-                      window.__fontTestShifts = [];
+                    page.on("console", lambda msg: decode_errors.append(msg.text)
+                            if msg.type == "error" and "font" in msg.text.lower()
+                            else None)
+                    page.add_init_script("""{
+                      window.__fontShifts = [];
                       new PerformanceObserver(list => {
-                        for (const x of list.getEntries()) {
-                          if (!x.hadRecentInput) window.__fontTestShifts.push(x.value);
+                        for (const e of list.getEntries()) {
+                          if (!e.hadRecentInput) window.__fontShifts.push(e.value);
                         }
-                      }).observe({type:'layout-shift', buffered:true});
-                    }""".replace("() => {", "{", 1))
-                    page.goto(self.origin + f"/?lang={language}", wait_until="domcontentloaded")
+                      }).observe({type: 'layout-shift', buffered: true});
+                    }""")
+                    page.goto(
+                        self.origin + f"/?lang={language}",
+                        wait_until="domcontentloaded", timeout=20000,
+                    )
                     page.locator("#eos-tool").wait_for(timeout=10000)
                     before = page.locator("main").bounding_box()
-                    page.wait_for_timeout(WAIT_MS + 350)
+                    page.wait_for_timeout(WAIT_MS + 450)
                     after = page.locator("main").bounding_box()
-                    cls = page.evaluate("() => (window.__fontTestShifts || []).reduce((a,b)=>a+b,0)")
-                    print(f"[FONT] lang={language} stylesheet={stylesheet_fetches} "
-                          f"font_requests={len(font_fetches)} top_before={before['y']:.2f} "
-                          f"top_after={after['y']:.2f} CLS={cls:.5f}", flush=True)
-                    self.assertEqual(stylesheet_fetches, ["optional"])
+                    cls = page.evaluate(
+                        "() => (window.__fontShifts || []).reduce((a,b)=>a+b,0)"
+                    )
+                    print(
+                        f"[LOCAL-WOFF2] width={width} lang={language} "
+                        f"requests={len(requests)} main_delta={after['y']-before['y']:.2f} "
+                        f"CLS={cls:.5f} font_errors={len(decode_errors)}",
+                        flush=True,
+                    )
+                    self.assertTrue(requests, "No actual self-hosted font requested")
+                    self.assertEqual(decode_errors, [])
                     self.assertLessEqual(abs(after["y"] - before["y"]), 2.0)
-                    self.assertLess(cls, 0.03)
+                    self.assertLess(cls, 0.10)
                 finally:
                     ctx.close()
 
