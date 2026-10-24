@@ -1,0 +1,24 @@
+# Read-only, opt-in verification of the deployed GitHub Pages site.
+# This workflow never publishes, pushes code, or receives secrets.
+name: Production Smoke (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    name: HTTP checks on live KSA Tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout tests
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify published HTML, articles, sitemap, and robots.txt
+        run: python tests/production_smoke_test.py
