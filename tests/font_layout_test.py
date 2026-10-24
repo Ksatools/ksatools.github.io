@@ -140,5 +140,48 @@ class LocalFontLayoutTests(unittest.TestCase):
                     ctx.close()
 
 
+    def test_bilingual_print_pdf_is_generated_with_local_fonts(self):
+        for language in ("ar", "en"):
+            with self.subTest(language=language):
+                ctx = self.browser.new_context(
+                    viewport={"width": 390, "height": 844},
+                    device_scale_factor=1,
+                )
+
+                def isolate(route):
+                    if route.request.url.startswith(self.origin + "/"):
+                        return route.continue_()
+                    return route.fulfill(
+                        status=200, body="", content_type="text/plain"
+                    )
+
+                try:
+                    ctx.route("**/*", isolate)
+                    page = ctx.new_page()
+                    page.goto(
+                        self.origin + f"/?lang={language}",
+                        wait_until="domcontentloaded",
+                    )
+                    page.locator("#eos-tool").wait_for(timeout=10000)
+                    page.emulate_media(media="print")
+                    self.assertTrue(page.locator(".print-head").is_visible())
+                    self.assertEqual(
+                        page.locator("html").get_attribute("dir"),
+                        "rtl" if language == "ar" else "ltr",
+                    )
+                    pdf = page.pdf(
+                        format="A4",
+                        print_background=True,
+                    )
+                    self.assertTrue(pdf.startswith(b"%PDF-"))
+                    self.assertGreater(len(pdf), 10000)
+                    print(
+                        f"[FONT-PRINT] lang={language} pdf_bytes={len(pdf)}",
+                        flush=True,
+                    )
+                finally:
+                    ctx.close()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
