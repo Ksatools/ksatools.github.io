@@ -87,6 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           python tests/repository_consistency_test.py
+          python tests/pages_artifact_test.py
 
       - name: git diff --check (فراغات وأسطر غير صحيحة)
         env:
@@ -110,6 +111,7 @@ jobs:
 
       - name: مقارنة PDF قبل/بعد عند تغيير قواعد الطباعة
         id: print_compare
+        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
