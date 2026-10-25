@@ -127,6 +127,50 @@ def main() -> int:
             records_valid = records_valid and reciprocal
     check("all article records and language pairs are consistent", records_valid)
 
+    # Every published article must have a crawlable literal HTML link in
+    # the library, even before JavaScript fetches articles.json.
+    try:
+        library = read_text("articles/index.html")
+        fallback_match = re.search(
+            r'<div id="static-articles" class="grid">(.*?)</div>', library, re.S)
+        fallback_html = fallback_match.group(1) if fallback_match else ""
+        cards = re.findall(
+            r'<article class="card" lang="(ar|en)" dir="(rtl|ltr)"><h2 class="article-title"><a href="([^"]+)">([^<]+)</a></h2>',
+            fallback_html)
+        published = {r["url"]: r for r in records
+                     if isinstance(r, dict) and r.get("status") == "published"
+                     and is_local_article_url(r.get("url"))}
+        hrefs = [url for _lang, _direction, url, _title in cards]
+        check("static library HTML links match all published article URLs",
+              len(hrefs) == len(published) and set(hrefs) == set(published),
+              f"HTML links={len(hrefs)} published={len(published)}")
+        check("static library cards have matching language, direction and title",
+              len(cards) == len(published) and all(
+                  url in published and lang == published[url]["lang"]
+                  and direction == ("rtl" if lang == "ar" else "ltr")
+                  and title == published[url]["title"]
+                  for lang, direction, url, title in cards))
+        check("interactive library fetch and render remain available",
+              "function render()" in library
+              and "fetch('/articles.json',{cache:'no-store'})" in library
+              and 'id="results"' in library)
+    except (OSError, UnicodeDecodeError) as exc:
+        check("crawlable library HTML is readable", False, str(exc))
+
+    # Keep contextual navigation relevant and matched to the article language.
+    article_edges = {
+        "articles/ar/labor-art81-ar.html": "/articles/ar/end-of-service-benefit-ar.html",
+        "articles/en/labor-art81-en.html": "/articles/en/end-of-service-benefit-en.html",
+        "articles/ar/annual-leave-ar.html": "/articles/ar/end-of-service-benefit-ar.html",
+        "articles/en/annual-leave-en.html": "/articles/en/end-of-service-benefit-en.html",
+        "articles/ar/end-of-service-benefit-ar.html": "/articles/ar/annual-leave-ar.html",
+        "articles/en/end-of-service-benefit-en.html": "/articles/en/annual-leave-en.html",
+    }
+    for src, dst in article_edges.items():
+        check(f"contextual guide link {src} -> {dst}",
+              (ROOT / dst.lstrip("/")).is_file()
+              and f'href="{dst}"' in read_text(src))
+
     sitemap_ok = False
     try:
         root = ET.fromstring(read_text("sitemap.xml"))
