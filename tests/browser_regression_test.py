@@ -65,6 +65,8 @@ class BrowserRegressionTests(unittest.TestCase):
             for lang in ("ar", "en"):
                 page.goto(self.base + f"/articles/?lang={lang}", wait_until="domcontentloaded")
                 page.locator("#results .card").first.wait_for(timeout=10000)
+                # Once JavaScript initializes, the static fallback is replaced.
+                self.assertEqual(page.locator("#static-articles").count(), 0)
                 records = [
                     r for r in self.data
                     if r.get("status") == "published" and r.get("lang") == lang
@@ -112,6 +114,30 @@ class BrowserRegressionTests(unittest.TestCase):
                 self.assertIn("<title>", response.text())
         finally:
             ctx.close()
+
+    def test_library_links_exist_without_javascript_on_mobile(self):
+        published = {r["url"]: r for r in self.data if r.get("status") == "published"}
+        for width in (375, 390):
+            with self.subTest(viewport=width):
+                ctx = self.context(java_script_enabled=False,
+                                   viewport={"width": width, "height": 844},
+                                   is_mobile=True, has_touch=True)
+                try:
+                    page = ctx.new_page()
+                    response = page.goto(self.base + "/articles/", wait_until="domcontentloaded")
+                    self.assertEqual(response.status, 200)
+                    anchors = page.locator("#static-articles .article-title a")
+                    self.assertEqual(anchors.count(), len(published))
+                    urls = [anchors.nth(i).get_attribute("href")
+                            for i in range(anchors.count())]
+                    self.assertEqual(set(urls), set(published))
+                    self.assertEqual(len(urls), len(set(urls)))
+                    self.assertTrue(anchors.first.is_visible())
+                    # HTML fallback provides usable navigation without scripts.
+                    anchors.first.click()
+                    self.assertTrue(page.url.endswith(urls[0]))
+                finally:
+                    ctx.close()
 
     def test_home_guides_fetch_real_article_index(self):
         ctx = self.context()
